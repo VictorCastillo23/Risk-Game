@@ -481,25 +481,49 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
     }
 
     /// <summary>
-    /// Ends the current player's Fortify phase: rotates to the next player,
-    /// resets both per-turn flags (<c>ConqueredThisTurn</c>, <c>FortifyUsed</c>)
-    /// for the fresh turn, and assigns that player's Reinforce troop pool.
+    /// Ends the current player's Fortify phase: awards the departing player
+    /// a card if they conquered at least one territory this turn and the
+    /// deck still has cards (classic Risk: an empty deck simply means no
+    /// draw), rotates to the next player, resets both per-turn flags
+    /// (<c>ConqueredThisTurn</c>, <c>FortifyUsed</c>) for the fresh turn,
+    /// and assigns that player's Reinforce troop pool.
     /// </summary>
     private static CommandResult<GameState, GameEvent> AdvanceToNextPlayer(GameState state)
     {
-        var currentIndex = state.Players.ToList().FindIndex(p => p.Id == state.Turn.CurrentPlayer);
+        var departingPlayerId = state.Turn.CurrentPlayer;
+        var currentIndex = state.Players.ToList().FindIndex(p => p.Id == departingPlayerId);
         var nextPlayer = NextActivePlayer(state.Players, currentIndex);
+
+        var events = new List<GameEvent>();
+        var deck = state.Deck;
+        Card? drawnCard = null;
+
+        if (state.Turn.ConqueredThisTurn && deck.Count > 0)
+        {
+            drawnCard = deck[0];
+            deck = deck.Skip(1).ToArray();
+            events.Add(new CardDrawn(departingPlayerId, drawnCard));
+        }
 
         var reinforcement = Reinforcement.Calculate(state.Territories, nextPlayer.Id);
         IReadOnlyList<PlayerState> updatedPlayers = state.Players
-            .Select(p => p.Id == nextPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .Select(p =>
+            {
+                if (p.Id == departingPlayerId && drawnCard is not null)
+                {
+                    p = p with { Hand = [.. p.Hand, drawnCard] };
+                }
+
+                return p.Id == nextPlayer.Id ? p with { TroopsRemaining = reinforcement } : p;
+            })
             .ToArray();
 
-        var events = new List<GameEvent> { new PhaseChanged(TurnPhase.Fortify, TurnPhase.Reinforce, nextPlayer.Id) };
+        events.Add(new PhaseChanged(TurnPhase.Fortify, TurnPhase.Reinforce, nextPlayer.Id));
 
         var newState = state with
         {
             Players = updatedPlayers,
+            Deck = deck,
             Turn = new TurnState(nextPlayer.Id, TurnPhase.Reinforce),
             Log = [.. state.Log, .. events]
         };

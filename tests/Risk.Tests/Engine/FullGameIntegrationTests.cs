@@ -1,9 +1,11 @@
+using Risk.Domain.Cards;
 using Risk.Domain.Map;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
 using Risk.Engine.Results;
+using Risk.Engine.Rules;
 using Risk.Engine.Setup;
 using Risk.Engine.State;
 using Risk.Tests.Fakes;
@@ -29,6 +31,11 @@ namespace Risk.Tests.Engine;
 /// owned frontier territory still borders an enemy but is too weak (1
 /// troop) to attack from, letting the army effectively walk the whole
 /// connected map turn by turn until nothing is left to conquer.
+///
+/// Card handling (PR8): the attacker draws a card at the end of any turn
+/// in which they conquered a territory, so before placing reinforcement
+/// each turn they opportunistically trade in any valid 3-card set found in
+/// their hand, keeping it below the mandatory-trade-in threshold.
 /// </summary>
 public class FullGameIntegrationTests
 {
@@ -57,9 +64,22 @@ public class FullGameIntegrationTests
 
             if (state.Turn.Phase == TurnPhase.Reinforce)
             {
-                state = actor == attacker
-                    ? PlaceReinforcementOnStrongestTerritory(engine, state)
-                    : GameStateBuilder.PlaceAllReinforcementTroops(state, engine);
+                if (actor == attacker)
+                {
+                    // The attacker is the only player who ever conquers, so
+                    // only their hand grows via the end-of-turn card draw
+                    // (PR8). Trade down any valid set before placing, both
+                    // to stay realistic and to avoid ever tripping the
+                    // mandatory-trade-in gate (>=5 cards) at the top of the
+                    // Reinforce phase.
+                    state = TradeAllAvailableSets(engine, state, actor);
+                    state = PlaceReinforcementOnStrongestTerritory(engine, state);
+                }
+                else
+                {
+                    state = GameStateBuilder.PlaceAllReinforcementTroops(state, engine);
+                }
+
                 state = EndPhase(engine, state, actor);
                 continue;
             }
@@ -125,6 +145,47 @@ public class FullGameIntegrationTests
         }
 
         return state;
+    }
+
+    /// <summary>
+    /// Repeatedly trades in any valid 3-card set found in
+    /// <paramref name="actor"/>'s hand until none remains, so a hand grown
+    /// by the end-of-turn card draw (PR8) never idles above the
+    /// mandatory-trade-in threshold.
+    /// </summary>
+    private static GameState TradeAllAvailableSets(GameEngine engine, GameState state, PlayerId actor)
+    {
+        while (TryFindValidSet(state.Players.Single(p => p.Id == actor).Hand, out var set))
+        {
+            var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+                engine.Execute(state, new TradeCardsCommand(actor, set)));
+            state = result.State;
+        }
+
+        return state;
+    }
+
+    /// <summary>Brute-force search over every 3-card combination in <paramref name="hand"/> for one that forms a valid trade-in set.</summary>
+    private static bool TryFindValidSet(IReadOnlyList<Card> hand, out IReadOnlyList<Card> set)
+    {
+        for (var i = 0; i < hand.Count; i++)
+        {
+            for (var j = i + 1; j < hand.Count; j++)
+            {
+                for (var k = j + 1; k < hand.Count; k++)
+                {
+                    var candidate = new[] { hand[i], hand[j], hand[k] };
+                    if (CardSet.IsValid(candidate))
+                    {
+                        set = candidate;
+                        return true;
+                    }
+                }
+            }
+        }
+
+        set = Array.Empty<Card>();
+        return false;
     }
 
     private static GameState EndPhase(GameEngine engine, GameState state, PlayerId actor)
