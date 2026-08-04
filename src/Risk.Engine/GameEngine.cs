@@ -42,7 +42,9 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             PlaceTroopsCommand place => ExecutePlaceTroops(state, place),
             AttackCommand attack => ExecuteAttack(state, attack),
             OccupyCommand occupy => ExecuteOccupy(state, occupy),
-            FortifyCommand or TradeCardsCommand or EndPhaseCommand =>
+            FortifyCommand fortify => ExecuteFortify(state, fortify),
+            EndPhaseCommand endPhase => ExecuteEndPhase(state, endPhase),
+            TradeCardsCommand =>
                 throw new NotImplementedException($"{command.GetType().Name} handling arrives in a later PR."),
             _ => throw new InvalidOperationException("Unreachable: unknown GameCommand type.")
         };
@@ -227,6 +229,141 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         {
             Territories = updatedTerritories,
             Turn = state.Turn with { PendingOccupation = null },
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    private static CommandResult<GameState, GameEvent> ExecuteFortify(GameState state, FortifyCommand command)
+    {
+        if (!state.Territories.TryGetValue(command.From, out var sourceTerritory) || sourceTerritory.Owner != command.Actor)
+        {
+            return Reject(GameErrorCode.NotOwner, "You do not own the source territory.");
+        }
+
+        if (!state.Territories.TryGetValue(command.To, out var destinationTerritory) || destinationTerritory.Owner != command.Actor)
+        {
+            return Reject(GameErrorCode.NotOwner, "You do not own the destination territory.");
+        }
+
+        if (state.Turn.FortifyUsed)
+        {
+            return Reject(GameErrorCode.FortifyAlreadyUsed, "Fortify has already been used this turn.");
+        }
+
+        if (command.Troops < 1 || command.Troops > sourceTerritory.Troops - 1)
+        {
+            return Reject(GameErrorCode.InvalidTroopCount, "Troop count must leave at least one troop behind at the source.");
+        }
+
+        if (!HasFriendlyPath(state.Territories, command.Actor, command.From, command.To))
+        {
+            return Reject(GameErrorCode.NoFriendlyPath, "No chain of your own territories connects these two territories.");
+        }
+
+        var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+        {
+            [command.From] = sourceTerritory with { Troops = sourceTerritory.Troops - command.Troops },
+            [command.To] = destinationTerritory with { Troops = destinationTerritory.Troops + command.Troops }
+        };
+
+        var events = new List<GameEvent> { new TroopsFortified(command.Actor, command.From, command.To, command.Troops) };
+
+        var newState = state with
+        {
+            Territories = updatedTerritories,
+            Turn = state.Turn with { FortifyUsed = true },
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Breadth-first search restricted to territories owned by <paramref name="owner"/>:
+    /// true if <paramref name="to"/> is reachable from <paramref name="from"/>
+    /// by crossing only territories that player owns (a direct edge is the
+    /// trivial 2-territory case of this chain).
+    /// </summary>
+    private static bool HasFriendlyPath(
+        IReadOnlyDictionary<TerritoryId, TerritoryState> territories, PlayerId owner, TerritoryId from, TerritoryId to)
+    {
+        var visited = new HashSet<TerritoryId> { from };
+        var queue = new Queue<TerritoryId>();
+        queue.Enqueue(from);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (current == to)
+            {
+                return true;
+            }
+
+            foreach (var neighbor in WorldMap.NeighborsOf(current))
+            {
+                if (visited.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                if (!territories.TryGetValue(neighbor, out var neighborState) || neighborState.Owner != owner)
+                {
+                    continue;
+                }
+
+                visited.Add(neighbor);
+                queue.Enqueue(neighbor);
+            }
+        }
+
+        return false;
+    }
+
+    private static CommandResult<GameState, GameEvent> ExecuteEndPhase(GameState state, EndPhaseCommand command) =>
+        state.Turn.Phase switch
+        {
+            TurnPhase.Reinforce => AdvancePhase(state, TurnPhase.Attack),
+            TurnPhase.Attack => AdvancePhase(state, TurnPhase.Fortify),
+            TurnPhase.Fortify => AdvanceToNextPlayer(state),
+            _ => Reject(GameErrorCode.WrongPhase, $"Cannot end phase during {state.Turn.Phase}.")
+        };
+
+    private static CommandResult<GameState, GameEvent> AdvancePhase(GameState state, TurnPhase nextPhase)
+    {
+        var events = new List<GameEvent> { new PhaseChanged(state.Turn.Phase, nextPhase, state.Turn.CurrentPlayer) };
+
+        var newState = state with
+        {
+            Turn = state.Turn with { Phase = nextPhase },
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Ends the current player's Fortify phase: rotates to the next player,
+    /// resets both per-turn flags (<c>ConqueredThisTurn</c>, <c>FortifyUsed</c>)
+    /// for the fresh turn, and assigns that player's Reinforce troop pool.
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> AdvanceToNextPlayer(GameState state)
+    {
+        var currentIndex = state.Players.ToList().FindIndex(p => p.Id == state.Turn.CurrentPlayer);
+        var nextPlayer = state.Players[(currentIndex + 1) % state.Players.Count];
+
+        var reinforcement = Reinforcement.Calculate(state.Territories, nextPlayer.Id);
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == nextPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .ToArray();
+
+        var events = new List<GameEvent> { new PhaseChanged(TurnPhase.Fortify, TurnPhase.Reinforce, nextPlayer.Id) };
+
+        var newState = state with
+        {
+            Players = updatedPlayers,
+            Turn = new TurnState(nextPlayer.Id, TurnPhase.Reinforce),
             Log = [.. state.Log, .. events]
         };
 
