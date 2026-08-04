@@ -18,5 +18,6 @@ public enum GameErrorCode
     NoFriendlyPath,
     GameOver,
     InvalidPlayerCount,
-    InvalidTroopCount
+    InvalidTroopCount,
+    NoPendingOccupation
 }

@@ -1,6 +1,8 @@
+using Risk.Domain.Dice;
 using Risk.Domain.Errors;
 using Risk.Domain.Map;
 using Risk.Domain.Players;
+using Risk.Engine.Combat;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
 using Risk.Engine.Results;
@@ -15,13 +17,18 @@ namespace Risk.Engine;
 /// check (turn, phase, ownership, troop counts) runs inside <see cref="Execute"/>;
 /// callers never pre-validate.
 /// </summary>
-public sealed class GameEngine : IGameEngine
+public sealed class GameEngine(IDiceRoller dice) : IGameEngine
 {
     public CommandResult<GameState, GameEvent> Execute(GameState state, GameCommand command)
     {
         if (command.Actor != state.Turn.CurrentPlayer)
         {
             return Reject(GameErrorCode.NotYourTurn, "It is not your turn.");
+        }
+
+        if (state.Turn.PendingOccupation is not null && command is not OccupyCommand)
+        {
+            return Reject(GameErrorCode.OccupationPending, "Resolve the pending occupation before issuing other commands.");
         }
 
         var requiredPhase = RequiredPhaseFor(command);
@@ -33,7 +40,9 @@ public sealed class GameEngine : IGameEngine
         return command switch
         {
             PlaceTroopsCommand place => ExecutePlaceTroops(state, place),
-            AttackCommand or OccupyCommand or FortifyCommand or TradeCardsCommand or EndPhaseCommand =>
+            AttackCommand attack => ExecuteAttack(state, attack),
+            OccupyCommand occupy => ExecuteOccupy(state, occupy),
+            FortifyCommand or TradeCardsCommand or EndPhaseCommand =>
                 throw new NotImplementedException($"{command.GetType().Name} handling arrives in a later PR."),
             _ => throw new InvalidOperationException("Unreachable: unknown GameCommand type.")
         };
@@ -107,6 +116,117 @@ public sealed class GameEngine : IGameEngine
             Territories = updatedTerritories,
             Players = updatedPlayers,
             Turn = nextTurn,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    private CommandResult<GameState, GameEvent> ExecuteAttack(GameState state, AttackCommand command)
+    {
+        if (!state.Territories.TryGetValue(command.From, out var attackerTerritory) || attackerTerritory.Owner != command.Actor)
+        {
+            return Reject(GameErrorCode.NotOwner, "You do not own the attacking territory.");
+        }
+
+        if (!state.Territories.TryGetValue(command.To, out var defenderTerritory) || defenderTerritory.Owner == command.Actor)
+        {
+            return Reject(GameErrorCode.NotOwner, "The target territory must be owned by another player.");
+        }
+
+        if (!WorldMap.AreAdjacent(command.From, command.To))
+        {
+            return Reject(GameErrorCode.NotAdjacent, "Territories are not adjacent.");
+        }
+
+        if (command.DiceCount is < 1 or > 3)
+        {
+            return Reject(GameErrorCode.InvalidDiceCount, "Dice count must be between 1 and 3.");
+        }
+
+        if (command.DiceCount > attackerTerritory.Troops - 1)
+        {
+            return Reject(GameErrorCode.InsufficientTroops, "Rolling that many dice would leave no troops behind.");
+        }
+
+        var defenderDiceCount = Math.Min(2, defenderTerritory.Troops);
+        var attackerRolls = dice.Roll(command.DiceCount);
+        var defenderRolls = dice.Roll(defenderDiceCount);
+        var outcome = BattleResolver.Resolve(attackerRolls, defenderRolls);
+
+        var updatedAttackerTerritory = attackerTerritory with { Troops = attackerTerritory.Troops - outcome.AttackerLosses };
+        var remainingDefenderTroops = defenderTerritory.Troops - outcome.DefenderLosses;
+
+        var events = new List<GameEvent>
+        {
+            new BattleResolved(command.Actor, command.From, command.To, outcome.AttackerRolls, outcome.DefenderRolls, outcome.AttackerLosses, outcome.DefenderLosses)
+        };
+
+        var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+        {
+            [command.From] = updatedAttackerTerritory
+        };
+
+        var nextTurn = state.Turn;
+
+        if (remainingDefenderTroops <= 0)
+        {
+            updatedTerritories[command.To] = new TerritoryState(command.Actor, 0);
+            events.Add(new TerritoryConquered(command.Actor, defenderTerritory.Owner, command.To));
+            nextTurn = state.Turn with
+            {
+                ConqueredThisTurn = true,
+                PendingOccupation = new PendingOccupation(command.From, command.To, command.DiceCount)
+            };
+        }
+        else
+        {
+            updatedTerritories[command.To] = defenderTerritory with { Troops = remainingDefenderTroops };
+        }
+
+        var newState = state with
+        {
+            Territories = updatedTerritories,
+            Turn = nextTurn,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    private static CommandResult<GameState, GameEvent> ExecuteOccupy(GameState state, OccupyCommand command)
+    {
+        var pending = state.Turn.PendingOccupation;
+        if (pending is null)
+        {
+            return Reject(GameErrorCode.NoPendingOccupation, "There is no conquered territory awaiting occupation.");
+        }
+
+        var sourceTerritory = state.Territories[pending.From];
+        var maxMovable = sourceTerritory.Troops - 1;
+
+        if (command.Troops < pending.MinimumTroops || command.Troops > maxMovable)
+        {
+            return Reject(
+                GameErrorCode.InvalidTroopCount,
+                $"Occupation troop count must be between {pending.MinimumTroops} and {maxMovable}.");
+        }
+
+        var updatedSourceTerritory = sourceTerritory with { Troops = sourceTerritory.Troops - command.Troops };
+        var updatedConquered = state.Territories[pending.Conquered] with { Troops = command.Troops };
+
+        var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+        {
+            [pending.From] = updatedSourceTerritory,
+            [pending.Conquered] = updatedConquered
+        };
+
+        var events = new List<GameEvent> { new TerritoryOccupied(command.Actor, pending.Conquered, command.Troops) };
+
+        var newState = state with
+        {
+            Territories = updatedTerritories,
+            Turn = state.Turn with { PendingOccupation = null },
             Log = [.. state.Log, .. events]
         };
 

@@ -3,6 +3,7 @@ using Risk.Domain.Map;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.State;
+using Risk.Tests.Fakes;
 
 namespace Risk.Tests.Engine;
 
@@ -12,7 +13,7 @@ public class GameEngineObserveTests
     public void Observe_reveals_the_viewers_own_hand()
     {
         var state = BuildTwoPlayerState();
-        var engine = new GameEngine();
+        var engine = new GameEngine(new QueuedDiceRoller());
 
         var view = engine.Observe(state, new PlayerId(0));
 
@@ -23,7 +24,7 @@ public class GameEngineObserveTests
     public void Observe_redacts_other_players_hands_to_card_counts()
     {
         var state = BuildTwoPlayerState();
-        var engine = new GameEngine();
+        var engine = new GameEngine(new QueuedDiceRoller());
 
         var view = engine.Observe(state, new PlayerId(0));
 
@@ -35,7 +36,7 @@ public class GameEngineObserveTests
     public void Observe_is_symmetric_for_a_different_viewer()
     {
         var state = BuildTwoPlayerState();
-        var engine = new GameEngine();
+        var engine = new GameEngine(new QueuedDiceRoller());
 
         var view = engine.Observe(state, new PlayerId(1));
 

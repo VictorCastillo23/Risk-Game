@@ -66,7 +66,7 @@ public class GameSetupTests
     {
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(2));
         var state = ok.State;
-        var engine = new Risk.Engine.GameEngine();
+        var engine = new Risk.Engine.GameEngine(new Risk.Tests.Fakes.QueuedDiceRoller());
 
         while (state.Players.Any(p => p.TroopsRemaining > 0))
         {

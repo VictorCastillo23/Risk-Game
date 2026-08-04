@@ -18,7 +18,7 @@ internal static class GameStateBuilder
     {
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(playerCount));
         var state = ok.State;
-        var engine = new GameEngine();
+        var engine = new GameEngine(new QueuedDiceRoller());
 
         while (state.Players.Any(p => p.TroopsRemaining > 0))
         {
