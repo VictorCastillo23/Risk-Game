@@ -16,5 +16,7 @@ public enum GameErrorCode
     OccupationPending,
     FortifyAlreadyUsed,
     NoFriendlyPath,
-    GameOver
+    GameOver,
+    InvalidPlayerCount,
+    InvalidTroopCount
 }
