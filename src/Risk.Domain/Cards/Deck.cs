@@ -3,34 +3,21 @@ using Risk.Domain.Map;
 namespace Risk.Domain.Cards;
 
 /// <summary>
-/// Builds the standard 44-card Risk deck: 14 infantry, 14 cavalry,
-/// 14 artillery territory cards, plus 2 wildcards.
+/// Builds the standard 44-card Risk deck: one territory card per real
+/// <see cref="WorldMap"/> territory (14 infantry, 14 cavalry, 14 artillery,
+/// per WorldMap's even symbol assignment), plus 2 wildcards.
 /// </summary>
-/// <remarks>
-/// The exact classic per-territory symbol assignment is an open design
-/// question (see design.md); the real 42 territory names are seeded later
-/// by <c>WorldMap</c> (PR3). Until then, territory cards are keyed by
-/// placeholder identifiers so this deck can be built and tested by symbol
-/// distribution alone, independent of the board data.
-/// </remarks>
 public static class Deck
 {
-    private const int TerritoriesPerSymbol = 14;
     private const int WildcardCount = 2;
 
     public static IReadOnlyList<Card> CreateStandard()
     {
-        var cards = new List<Card>();
-        var territoryNumber = 1;
+        var cards = new List<Card>(WorldMap.Territories.Count + WildcardCount);
 
-        foreach (var symbol in new[] { CardSymbol.Infantry, CardSymbol.Cavalry, CardSymbol.Artillery })
+        foreach (var territory in WorldMap.Territories)
         {
-            for (var i = 0; i < TerritoriesPerSymbol; i++)
-            {
-                var territoryId = new TerritoryId($"Territory{territoryNumber:D2}");
-                cards.Add(new TerritoryCard(territoryId, symbol));
-                territoryNumber++;
-            }
+            cards.Add(new TerritoryCard(territory.Id, territory.Symbol));
         }
 
         for (var i = 0; i < WildcardCount; i++)
