@@ -14,10 +14,25 @@ namespace Risk.Tests.Engine;
 public class EndPhaseCommandTests
 {
     [Fact]
-    public void Execute_advances_from_reinforce_to_attack_for_the_same_player()
+    public void Execute_rejects_leaving_reinforce_while_the_actor_still_has_unplaced_troops()
     {
-        var state = GameStateBuilder.CompleteSetup(2);
-        var actor = state.Turn.CurrentPlayer;
+        var actor = new PlayerId(0);
+        var other = new PlayerId(1);
+        var state = BuildReinforceReadyState(actor, other, troopsRemaining: 3);
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var result = engine.Execute(state, new EndPhaseCommand(actor));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.ReinforcementIncomplete, rejection.Error.Code);
+    }
+
+    [Fact]
+    public void Execute_advances_from_reinforce_to_attack_once_all_reinforcement_troops_are_placed()
+    {
+        var actor = new PlayerId(0);
+        var other = new PlayerId(1);
+        var state = BuildReinforceReadyState(actor, other, troopsRemaining: 0);
         var engine = new GameEngine(new QueuedDiceRoller());
 
         var result = engine.Execute(state, new EndPhaseCommand(actor));
@@ -25,6 +40,23 @@ public class EndPhaseCommandTests
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         Assert.Equal(TurnPhase.Attack, ok.State.Turn.Phase);
         Assert.Equal(actor, ok.State.Turn.CurrentPlayer);
+    }
+
+    [Fact]
+    public void Execute_advances_from_reinforce_to_attack_for_the_same_player_via_the_full_setup_flow()
+    {
+        // GameStateBuilder.CompleteSetup places starting troops AND the
+        // resulting first-Reinforce-phase reinforcement, so the returned
+        // state is already fully placed and ready to end the phase.
+        var state = GameStateBuilder.CompleteSetup(2);
+        var actor = state.Turn.CurrentPlayer;
+        Assert.Equal(0, state.Players.Single(p => p.Id == actor).TroopsRemaining);
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var result = engine.Execute(state, new EndPhaseCommand(actor));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.Equal(TurnPhase.Attack, ok.State.Turn.Phase);
     }
 
     [Fact]
@@ -89,6 +121,21 @@ public class EndPhaseCommandTests
 
         var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
         Assert.Equal(GameErrorCode.NotYourTurn, rejection.Error.Code);
+    }
+
+    /// <summary>Builds a minimal 2-player Reinforce-phase state for <paramref name="actor"/> with the given troop pool.</summary>
+    private static GameState BuildReinforceReadyState(PlayerId actor, PlayerId other, int troopsRemaining)
+    {
+        var territories = WorldMap.Territories.ToDictionary(t => t.Id, t => new TerritoryState(actor, 1));
+
+        IReadOnlyList<PlayerState> players =
+        [
+            new PlayerState(actor, [], false, troopsRemaining),
+            new PlayerState(other, [], false, 0)
+        ];
+
+        return new GameState(
+            territories, players, new TurnState(actor, TurnPhase.Reinforce), Deck.CreateStandard(), [], new GameStatus.InProgress());
     }
 
     /// <summary>

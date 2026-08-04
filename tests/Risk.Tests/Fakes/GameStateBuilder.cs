@@ -31,4 +31,26 @@ internal static class GameStateBuilder
 
         return state;
     }
+
+    /// <summary>
+    /// Places all of the current player's Reinforce-phase troops (one at a
+    /// time, onto whichever territory they own first in enumeration order)
+    /// using <paramref name="engine"/>. Reusable across turns in a scripted
+    /// full-game test, unlike <see cref="CompleteSetup"/> which only drives
+    /// the very first Setup-to-Reinforce transition.
+    /// </summary>
+    public static GameState PlaceAllReinforcementTroops(GameState state, GameEngine engine)
+    {
+        var actor = state.Turn.CurrentPlayer;
+
+        while (state.Players.Single(p => p.Id == actor).TroopsRemaining > 0)
+        {
+            var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+            var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+                engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1)));
+            state = result.State;
+        }
+
+        return state;
+    }
 }

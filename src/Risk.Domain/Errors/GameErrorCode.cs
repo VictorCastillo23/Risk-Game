@@ -19,5 +19,6 @@ public enum GameErrorCode
     GameOver,
     InvalidPlayerCount,
     InvalidTroopCount,
-    NoPendingOccupation
+    NoPendingOccupation,
+    ReinforcementIncomplete
 }
