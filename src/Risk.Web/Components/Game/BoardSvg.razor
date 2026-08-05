@@ -1,0 +1,37 @@
+@using Risk.Domain.Players
+@using Risk.Engine.State
+@using Risk.Web.Models
+
+<svg class="board-svg" viewBox="0 0 @TerritoryLayout.CanvasWidth @TerritoryLayout.CanvasHeight" xmlns="http://www.w3.org/2000/svg">
+    <g class="board-edges">
+        @foreach (var edge in BoardEdges.UniqueEdges())
+        {
+            var from = TerritoryLayout.Coordinates[edge.A];
+            var to = TerritoryLayout.Coordinates[edge.B];
+            <line class="board-edge" x1="@from.X" y1="@from.Y" x2="@to.X" y2="@to.Y" />
+        }
+    </g>
+
+    <g class="board-territories">
+        @foreach (var (id, position) in TerritoryLayout.Coordinates)
+        {
+            var territory = State.Territories[id];
+            var color = BoardColors.OwnerColor(territory.Owner, Players);
+
+            <g class="board-territory" transform="translate(@position.X, @position.Y)">
+                <circle class="board-territory-marker" r="18" fill="@color" />
+                <text class="board-territory-troops" text-anchor="middle" dy="4">@territory.Troops</text>
+            </g>
+        }
+    </g>
+</svg>
+
+@code {
+    /// <summary>The state to render — territory ownership and troop counts (design D5: read straight off <c>GameState</c>).</summary>
+    [Parameter, EditorRequired]
+    public GameState State { get; set; } = null!;
+
+    /// <summary>Owner-to-color/name lookup for the active session's players.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyDictionary<PlayerId, PlayerConfig> Players { get; set; } = null!;
+}

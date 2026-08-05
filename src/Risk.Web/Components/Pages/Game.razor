@@ -1,23 +1,38 @@
 @page "/game"
 @rendermode InteractiveServer
+@implements IDisposable
+@using Risk.Web.Components.Game
 @using Risk.Web.Services
 @inject GameSessionService Session
 @inject NavigationManager Navigation
 
 <PageTitle>Risk — Partida</PageTitle>
 
-<p>Partida iniciada. El tablero se implementa en una próxima entrega.</p>
+@if (Session.IsStarted)
+{
+    <PhaseIndicator State="Session.State!" Players="Session.Players" />
+    <BoardSvg State="Session.State!" Players="Session.Players" />
+}
 
 @code {
-    // Board rendering, phase panels, and all interaction are out of scope for
-    // this PR (design/tasks slice 3b onward). This is the navigation target
-    // Setup.razor routes to on a successful GameSessionService.Start, guarded
-    // so a direct hit to "/game" without an active session doesn't null-ref.
+    // Design's read convention (D5): board/turn/phase come straight off
+    // Session.State (GameState), never Observe() — only the hand-of-cards
+    // panel (a later PR) needs the redacted PlayerView seam.
     protected override void OnInitialized()
     {
         if (!Session.IsStarted)
         {
             Navigation.NavigateTo("/");
+            return;
         }
+
+        Session.Changed += OnSessionChanged;
+    }
+
+    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
     }
 }

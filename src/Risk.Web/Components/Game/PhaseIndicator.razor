@@ -1,0 +1,28 @@
+@using Risk.Domain.Players
+@using Risk.Engine.State
+@using Risk.Web.Models
+
+<div class="phase-indicator">
+    <span class="phase-indicator-swatch" style="background-color:@CurrentPlayerConfig.ColorHex"></span>
+    <span class="phase-indicator-player">@CurrentPlayerConfig.Name</span>
+    <span class="phase-indicator-phase">@PhaseDisplay.Label(State.Turn.Phase)</span>
+    @if (CurrentPlayerState.TroopsRemaining > 0)
+    {
+        <span class="phase-indicator-troops-remaining">Tropas por colocar: @CurrentPlayerState.TroopsRemaining</span>
+    }
+</div>
+
+@code {
+    /// <summary>The state to render — whose turn/phase it is (design D5: read straight off <c>GameState</c>).</summary>
+    [Parameter, EditorRequired]
+    public GameState State { get; set; } = null!;
+
+    /// <summary>Player identity/color lookup for the active session's players.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyDictionary<PlayerId, PlayerConfig> Players { get; set; } = null!;
+
+    private PlayerConfig CurrentPlayerConfig => Players[State.Turn.CurrentPlayer];
+
+    private PlayerState CurrentPlayerState =>
+        State.Players.Single(p => p.Id == State.Turn.CurrentPlayer);
+}
