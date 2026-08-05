@@ -1,7 +1,10 @@
 @page "/game"
 @rendermode InteractiveServer
 @implements IDisposable
+@using Risk.Domain.Map
+@using Risk.Engine.State
 @using Risk.Web.Components.Game
+@using Risk.Web.Models
 @using Risk.Web.Services
 @inject GameSessionService Session
 @inject NavigationManager Navigation
@@ -10,14 +13,23 @@
 
 @if (Session.IsStarted)
 {
-    <PhaseIndicator State="Session.State!" Players="Session.Players" />
-    <BoardSvg State="Session.State!" Players="Session.Players" />
+    var state = Session.State!;
+
+    <PhaseIndicator State="state" Players="Session.Players" />
+    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" />
+
+    @if (state.Turn.Phase == TurnPhase.Reinforce)
+    {
+        <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" SelectedTerritory="_selection.Origin" />
+    }
 }
 
 @code {
     // Design's read convention (D5): board/turn/phase come straight off
     // Session.State (GameState), never Observe() — only the hand-of-cards
     // panel (a later PR) needs the redacted PlayerView seam.
+    private BoardSelection _selection = BoardSelection.Empty;
+
     protected override void OnInitialized()
     {
         if (!Session.IsStarted)
@@ -29,7 +41,29 @@
         Session.Changed += OnSessionChanged;
     }
 
-    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+    // PR4 scope: only the Reinforce phase reacts to board clicks. Attack/Fortify
+    // click wiring (PR5/PR6) reuse BoardSelection.Click unchanged — it is already
+    // phase-aware — they just need to stop being gated out here.
+    private void OnTerritoryClick(TerritoryId territory)
+    {
+        var state = Session.State;
+
+        if (state is null || state.Turn.Phase != TurnPhase.Reinforce)
+        {
+            return;
+        }
+
+        _selection = _selection.Click(territory, state, state.Turn.CurrentPlayer, state.Turn.Phase);
+    }
+
+    // Any successful command re-renders from new state, so the previous
+    // selection no longer applies — clearing it here (rather than per-panel)
+    // keeps every future phase panel's dispatch code free of this concern.
+    private void OnSessionChanged()
+    {
+        _selection = BoardSelection.Empty;
+        InvokeAsync(StateHasChanged);
+    }
 
     public void Dispose()
     {

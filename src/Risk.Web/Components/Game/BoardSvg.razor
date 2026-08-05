@@ -1,3 +1,4 @@
+@using Risk.Domain.Map
 @using Risk.Domain.Players
 @using Risk.Engine.State
 @using Risk.Web.Models
@@ -17,8 +18,11 @@
         {
             var territory = State.Territories[id];
             var color = BoardColors.OwnerColor(territory.Owner, Players);
+            var isSelected = Selected == id;
 
-            <g class="board-territory" transform="translate(@position.X, @position.Y)">
+            <g class="board-territory @(isSelected ? "board-territory-selected" : "")"
+               transform="translate(@position.X, @position.Y)"
+               @onclick="() => OnTerritoryClick.InvokeAsync(id)">
                 <circle class="board-territory-marker" r="18" fill="@color" />
                 <text class="board-territory-troops" text-anchor="middle" dy="4">@territory.Troops</text>
             </g>
@@ -34,4 +38,12 @@
     /// <summary>Owner-to-color/name lookup for the active session's players.</summary>
     [Parameter, EditorRequired]
     public IReadOnlyDictionary<PlayerId, PlayerConfig> Players { get; set; } = null!;
+
+    /// <summary>The currently selected territory (if any) — highlighted with a CSS class; selection semantics live in <see cref="BoardSelection"/>, not here.</summary>
+    [Parameter]
+    public TerritoryId? Selected { get; set; }
+
+    /// <summary>Raised with the clicked territory's id; the host page decides what a click means for the active phase.</summary>
+    [Parameter]
+    public EventCallback<TerritoryId> OnTerritoryClick { get; set; }
 }
