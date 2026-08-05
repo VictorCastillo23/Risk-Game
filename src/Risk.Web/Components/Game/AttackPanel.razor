@@ -1,0 +1,102 @@
+@using Risk.Domain.Errors
+@using Risk.Domain.Map
+@using Risk.Domain.Players
+@using Risk.Engine.Commands
+@using Risk.Engine.Events
+@using Risk.Engine.Results
+@using Risk.Engine.State
+@using Risk.Web.Components.Shared
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+
+<div class="attack-panel">
+    @if (Origin is null || Destination is null)
+    {
+        <p class="attack-panel-hint">Elegí un territorio propio y luego un territorio enemigo adyacente para atacar.</p>
+    }
+    else
+    {
+        var maxDice = AttackDiceOptions.MaxDice(State.Territories[Origin.Value].Troops);
+
+        if (maxDice < 1)
+        {
+            <p class="attack-panel-hint">Necesitás al menos 2 tropas en el territorio de origen para atacar.</p>
+        }
+        else
+        {
+            var effectiveDice = Math.Min(_diceCount, maxDice);
+
+            <p class="attack-panel-hint">Atacando desde @Origin.Value.Value hacia @Destination.Value.Value.</p>
+
+            <select value="@effectiveDice" @onchange="OnDiceCountChanged">
+                @foreach (var count in AttackDiceOptions.AvailableDiceCounts(State.Territories[Origin.Value].Troops))
+                {
+                    <option value="@count">@count</option>
+                }
+            </select>
+
+            <button type="button" @onclick="() => OnAttackClicked(effectiveDice)">Atacar</button>
+        }
+    }
+
+    <RejectionMessage Error="_error" />
+</div>
+
+@code {
+    /// <summary>Always the acting player for this panel's commands (design's dispatch contract: <c>Actor = Turn.CurrentPlayer</c>).</summary>
+    [Parameter, EditorRequired]
+    public PlayerId CurrentPlayer { get; set; }
+
+    /// <summary>The state to read attacker troops from (design D5: read straight off <c>GameState</c>).</summary>
+    [Parameter, EditorRequired]
+    public GameState State { get; set; } = null!;
+
+    /// <summary>The attacking territory, if selected — owned by the host page's <c>BoardSelection</c>.</summary>
+    [Parameter]
+    public TerritoryId? Origin { get; set; }
+
+    /// <summary>The adjacent enemy territory being attacked, if selected — owned by the host page's <c>BoardSelection</c>.</summary>
+    [Parameter]
+    public TerritoryId? Destination { get; set; }
+
+    private int _diceCount = 1;
+    private GameError? _error;
+
+    private void OnDiceCountChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse((string?)e.Value, out var count) && count > 0)
+        {
+            _diceCount = count;
+        }
+    }
+
+    private void OnAttackClicked(int diceCount)
+    {
+        if (Origin is null || Destination is null)
+        {
+            return;
+        }
+
+        Dispatch(new AttackCommand(CurrentPlayer, Origin.Value, Destination.Value, diceCount));
+    }
+
+    /// <summary>
+    /// Shared dispatch idiom (design's command-dispatch contract): call
+    /// <see cref="GameSessionService.Execute"/>, pattern-match the result —
+    /// <c>Ok</c> clears the inline error (the board/session re-renders via
+    /// <c>Session.Changed</c>), <c>Rejected</c> renders it inline without
+    /// altering displayed state.
+    /// </summary>
+    private void Dispatch(GameCommand command)
+    {
+        var result = Session.Execute(command);
+
+        _error = result switch
+        {
+            CommandResult<GameState, GameEvent>.Ok => null,
+            CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+            _ => _error
+        };
+    }
+}

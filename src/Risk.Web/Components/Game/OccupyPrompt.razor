@@ -1,0 +1,84 @@
+@using Risk.Domain.Errors
+@using Risk.Domain.Players
+@using Risk.Engine.Commands
+@using Risk.Engine.Events
+@using Risk.Engine.Results
+@using Risk.Engine.State
+@using Risk.Web.Components.Shared
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+
+<div class="occupy-prompt">
+    <p class="occupy-prompt-hint">
+        Conquistaste @Pending.Conquered.Value. Elegí cuántas tropas mover desde @Pending.From.Value
+        (mínimo @_min, máximo @_max).
+    </p>
+
+    <input type="number" min="@_min" max="@_max" value="@_troops" readonly="@_isFixed" @oninput="OnTroopsChanged" />
+
+    <button type="button" @onclick="OnConfirmClicked">Confirmar</button>
+
+    <RejectionMessage Error="_error" />
+</div>
+
+@code {
+    /// <summary>Always the acting player for this panel's command (design's dispatch contract: <c>Actor = Turn.CurrentPlayer</c>).</summary>
+    [Parameter, EditorRequired]
+    public PlayerId CurrentPlayer { get; set; }
+
+    /// <summary>The conquest awaiting a troop-count decision (design's PendingOccupation flow).</summary>
+    [Parameter, EditorRequired]
+    public PendingOccupation Pending { get; set; } = null!;
+
+    /// <summary>Current troop count of the attacking (<c>Pending.From</c>) territory — used to derive the upper bound.</summary>
+    [Parameter, EditorRequired]
+    public int SourceTerritoryTroops { get; set; }
+
+    private int _min;
+    private int _max;
+    private bool _isFixed;
+    private int _troops;
+    private GameError? _error;
+
+    /// <summary>
+    /// Bounds are derived from state on every render (design: <c>[PendingOccupation.MinimumTroops, sourceTerritory.Troops - 1]</c>),
+    /// never re-derived rules — the engine independently enforces them regardless.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        _min = Pending.MinimumTroops;
+        _max = SourceTerritoryTroops - 1;
+        _isFixed = OccupyBounds.IsFixed(_min, _max);
+        _troops = OccupyBounds.Clamp(_troops == 0 ? _min : _troops, _min, _max);
+    }
+
+    private void OnTroopsChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse((string?)e.Value, out var troops))
+        {
+            _troops = OccupyBounds.Clamp(troops, _min, _max);
+        }
+    }
+
+    private void OnConfirmClicked() => Dispatch(new OccupyCommand(CurrentPlayer, _troops));
+
+    /// <summary>
+    /// Shared dispatch idiom (design's command-dispatch contract): call
+    /// <see cref="GameSessionService.Execute"/>, pattern-match the result —
+    /// <c>Ok</c> clears the inline error (the board/session re-renders via
+    /// <c>Session.Changed</c>, lifting this gate), <c>Rejected</c> renders it
+    /// inline without altering displayed state.
+    /// </summary>
+    private void Dispatch(GameCommand command)
+    {
+        var result = Session.Execute(command);
+
+        _error = result switch
+        {
+            CommandResult<GameState, GameEvent>.Ok => null,
+            CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+            _ => _error
+        };
+    }
+}

@@ -14,13 +14,22 @@
 @if (Session.IsStarted)
 {
     var state = Session.State!;
+    var pendingOccupation = state.Turn.PendingOccupation;
 
     <PhaseIndicator State="state" Players="Session.Players" />
-    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" />
+    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" Locked="pendingOccupation is not null" />
 
-    @if (state.Turn.Phase == TurnPhase.Reinforce)
+    @if (pendingOccupation is not null)
+    {
+        <OccupyPrompt CurrentPlayer="state.Turn.CurrentPlayer" Pending="pendingOccupation" SourceTerritoryTroops="state.Territories[pendingOccupation.From].Troops" />
+    }
+    else if (state.Turn.Phase == TurnPhase.Reinforce)
     {
         <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" SelectedTerritory="_selection.Origin" />
+    }
+    else if (state.Turn.Phase == TurnPhase.Attack)
+    {
+        <AttackPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
     }
 }
 
@@ -41,14 +50,20 @@
         Session.Changed += OnSessionChanged;
     }
 
-    // PR4 scope: only the Reinforce phase reacts to board clicks. Attack/Fortify
-    // click wiring (PR5/PR6) reuse BoardSelection.Click unchanged — it is already
-    // phase-aware — they just need to stop being gated out here.
+    // PR5 scope: Reinforce and Attack both react to board clicks now. Fortify
+    // click wiring (PR7) reuses BoardSelection.Click unchanged — it is already
+    // phase-aware — it just needs to stop being gated out here.
+    //
+    // While a PendingOccupation gate is active, all board clicks are ignored —
+    // mirroring the engine's own OccupationPending rejection as a UX nicety
+    // (the engine remains authoritative regardless of what the UI blocks).
+    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Reinforce, TurnPhase.Attack];
+
     private void OnTerritoryClick(TerritoryId territory)
     {
         var state = Session.State;
 
-        if (state is null || state.Turn.Phase != TurnPhase.Reinforce)
+        if (state is null || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
         {
             return;
         }

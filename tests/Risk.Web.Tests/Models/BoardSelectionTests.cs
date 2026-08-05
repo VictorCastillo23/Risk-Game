@@ -101,6 +101,30 @@ public class BoardSelectionTests
         Assert.Null(result.Destination);
     }
 
+    /// <summary>
+    /// Regression/approval test for a near-miss caught during PR4 TDD: an
+    /// earlier draft of Attack's <c>isValidDestination</c> checked only
+    /// <c>WorldMap.AreAdjacent</c> without an explicit <c>!isOwn</c> guard,
+    /// which would have let an adjacent *own* territory silently complete as
+    /// a bogus attack pair. The PR4 fixture (Alaska/Ontario) happened to be
+    /// non-adjacent, so it could not have caught that bug — this uses
+    /// Alaska/Alberta, which ARE adjacent, to close that gap. Currently
+    /// passing because the fix already shipped in PR4; kept as a standing
+    /// guard against the bug being reintroduced.
+    /// </summary>
+    [Fact]
+    public void Click_DuringAttack_OwnThenAdjacentOwnTerritory_ReselectsOriginInsteadOfCompletingAttack()
+    {
+        var owners = new Dictionary<TerritoryId, PlayerId> { [Alaska] = Player0, [Alberta] = Player0 };
+        var state = BuildState(TurnPhase.Attack, Player0, owners, Player1);
+
+        var afterOrigin = BoardSelection.Empty.Click(Alaska, state, Player0, TurnPhase.Attack);
+        var result = afterOrigin.Click(Alberta, state, Player0, TurnPhase.Attack);
+
+        Assert.Equal(Alberta, result.Origin);
+        Assert.Null(result.Destination);
+    }
+
     // --- Fortify: own then friendly-connected own (real BFS, not direct adjacency) ---
 
     [Fact]

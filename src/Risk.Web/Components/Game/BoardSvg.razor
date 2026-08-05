@@ -3,7 +3,7 @@
 @using Risk.Engine.State
 @using Risk.Web.Models
 
-<svg class="board-svg" viewBox="0 0 @TerritoryLayout.CanvasWidth @TerritoryLayout.CanvasHeight" xmlns="http://www.w3.org/2000/svg">
+<svg class="board-svg" style="@(Locked ? "pointer-events: none;" : null)" viewBox="0 0 @TerritoryLayout.CanvasWidth @TerritoryLayout.CanvasHeight" xmlns="http://www.w3.org/2000/svg">
     <g class="board-edges">
         @foreach (var edge in BoardEdges.UniqueEdges())
         {
@@ -42,6 +42,16 @@
     /// <summary>The currently selected territory (if any) — highlighted with a CSS class; selection semantics live in <see cref="BoardSelection"/>, not here.</summary>
     [Parameter]
     public TerritoryId? Selected { get; set; }
+
+    /// <summary>
+    /// True while a <c>PendingOccupation</c> gate is active (design's
+    /// PendingOccupation flow): the board becomes visually non-interactive
+    /// via <c>pointer-events: none</c>. Purely a UX affordance — the host
+    /// page's click handler already ignores clicks in this state, and the
+    /// engine independently rejects everything else with <c>OccupationPending</c>.
+    /// </summary>
+    [Parameter]
+    public bool Locked { get; set; }
 
     /// <summary>Raised with the clicked territory's id; the host page decides what a click means for the active phase.</summary>
     [Parameter]
