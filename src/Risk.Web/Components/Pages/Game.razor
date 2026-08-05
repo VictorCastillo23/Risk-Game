@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @using Risk.Domain.Map
+@using Risk.Engine.Events
 @using Risk.Engine.State
 @using Risk.Web.Components.Game
 @using Risk.Web.Models
@@ -18,6 +19,7 @@
 
     <PhaseIndicator State="state" Players="Session.Players" />
     <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" Locked="pendingOccupation is not null" />
+    <DicePanel Battle="_lastBattle" />
 
     @if (pendingOccupation is not null)
     {
@@ -38,6 +40,15 @@
     // Session.State (GameState), never Observe() — only the hand-of-cards
     // panel (a later PR) needs the redacted PlayerView seam.
     private BoardSelection _selection = BoardSelection.Empty;
+
+    // Session.LastEvents only ever holds the delta from the most recent Ok
+    // (design's own contract), so a non-attack command (e.g. Fortify,
+    // EndPhase) would otherwise make the last battle's result vanish from
+    // LastEvents even though it's still the most recent battle that
+    // happened. Tracked locally here so DicePanel keeps showing it across
+    // subsequent unrelated commands, updating only when a new
+    // BattleResolved actually occurs.
+    private BattleResolved? _lastBattle;
 
     protected override void OnInitialized()
     {
@@ -77,6 +88,7 @@
     private void OnSessionChanged()
     {
         _selection = BoardSelection.Empty;
+        _lastBattle = BattleEventSelector.MostRecent(Session.LastEvents) ?? _lastBattle;
         InvokeAsync(StateHasChanged);
     }
 

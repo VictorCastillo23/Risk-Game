@@ -1,0 +1,29 @@
+@using Risk.Engine.Events
+
+@if (Battle is not null)
+{
+    <div class="dice-panel">
+        <p class="dice-panel-title">Resultado del combate</p>
+        <div class="dice-panel-side">
+            <span class="dice-panel-label">Atacante</span>
+            <span class="dice-panel-rolls">@string.Join(" ", Battle.AttackerRolls)</span>
+            <span class="dice-panel-losses">Bajas: @Battle.AttackerLosses</span>
+        </div>
+        <div class="dice-panel-side">
+            <span class="dice-panel-label">Defensor</span>
+            <span class="dice-panel-rolls">@string.Join(" ", Battle.DefenderRolls)</span>
+            <span class="dice-panel-losses">Bajas: @Battle.DefenderLosses</span>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The most recent battle result to render, or <c>null</c> to render
+    /// nothing (no battle has happened yet this session). Static display —
+    /// dice animation is a deliberately deferred MVP scope cut (design's
+    /// open questions, PR 10 polish), not an oversight.
+    /// </summary>
+    [Parameter]
+    public BattleResolved? Battle { get; set; }
+}
