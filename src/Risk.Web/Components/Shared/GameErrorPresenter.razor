@@ -1,0 +1,12 @@
+@using Risk.Domain.Errors
+
+@if (Error is not null)
+{
+    <p class="game-error" role="alert" aria-live="polite">@Risk.Web.Services.GameErrorPresenter.Describe(Error)</p>
+}
+
+@code {
+    /// <summary>The rejection to render inline, or <c>null</c> to render nothing (zero-height).</summary>
+    [Parameter]
+    public GameError? Error { get; set; }
+}

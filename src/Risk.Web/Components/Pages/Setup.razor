@@ -1,0 +1,122 @@
+@page "/"
+@rendermode InteractiveServer
+@using Risk.Domain.Errors
+@using Risk.Engine.Events
+@using Risk.Engine.Results
+@using Risk.Engine.State
+@using Risk.Web.Components.Shared
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+@inject NavigationManager Navigation
+
+<PageTitle>Risk — Configurar partida</PageTitle>
+
+<h1>Configurar partida</h1>
+
+<div class="setup-player-count">
+    <label for="player-count">Cantidad de jugadores</label>
+    <select id="player-count" @onchange="OnPlayerCountChanged">
+        @for (var count = MinPlayers; count <= MaxPlayers; count++)
+        {
+            <option value="@count" selected="@(count == _rows.Count)">@count</option>
+        }
+    </select>
+</div>
+
+@for (var i = 0; i < _rows.Count; i++)
+{
+    var index = i;
+    var row = _rows[index];
+    var selectedColors = _rows.Select(r => (string?)r.ColorHex).ToArray();
+
+    <div class="setup-row">
+        <input type="text"
+               value="@row.Name"
+               placeholder="Jugador @(index + 1)"
+               @oninput="e => OnNameChanged(index, (string?)e.Value)" />
+
+        <div class="setup-swatches" role="group" aria-label="@($"Color jugador {index + 1}")">
+            @foreach (var swatch in PlayerPalette.Swatches)
+            {
+                var available = PlayerPalette.IsAvailable(swatch, index, selectedColors);
+                var selected = row.ColorHex == swatch;
+
+                <button type="button"
+                        class="setup-swatch @(selected ? "selected" : "")"
+                        style="background-color:@swatch"
+                        disabled="@(!available)"
+                        aria-pressed="@selected"
+                        @onclick="() => OnColorSelected(index, swatch)">
+                </button>
+            }
+        </div>
+
+        <div class="setup-ai-toggle">
+            <label>
+                <input type="radio" name="@($"ai-toggle-{index}")" checked="@(!row.IsAi)" disabled />
+                Humano
+            </label>
+            <label class="disabled" title="Próximamente">
+                <input type="radio" name="@($"ai-toggle-{index}")" checked="@row.IsAi" disabled />
+                IA (próximamente)
+            </label>
+        </div>
+    </div>
+}
+
+<button type="button" @onclick="OnStart">Comenzar partida</button>
+
+<GameErrorPresenter Error="_error" />
+
+@code {
+    private const int MinPlayers = 2;
+    private const int MaxPlayers = 6;
+
+    private List<PlayerSetupRow> _rows = BuildRows(MinPlayers);
+    private GameError? _error;
+
+    private static List<PlayerSetupRow> BuildRows(int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => new PlayerSetupRow($"Jugador {i + 1}", PlayerPalette.Swatches[i], false))
+            .ToList();
+
+    private void OnPlayerCountChanged(ChangeEventArgs e)
+    {
+        var count = int.Parse((string)e.Value!);
+        _rows = BuildRows(count);
+        _error = null;
+    }
+
+    private void OnNameChanged(int index, string? name)
+    {
+        _rows[index] = _rows[index] with { Name = name ?? string.Empty };
+    }
+
+    private void OnColorSelected(int index, string swatch)
+    {
+        var selectedColors = _rows.Select(r => (string?)r.ColorHex).ToArray();
+        if (!PlayerPalette.IsAvailable(swatch, index, selectedColors))
+        {
+            return;
+        }
+
+        _rows[index] = _rows[index] with { ColorHex = swatch };
+    }
+
+    private void OnStart()
+    {
+        var result = Session.Start(_rows);
+
+        switch (result)
+        {
+            case CommandResult<GameState, GameEvent>.Ok:
+                _error = null;
+                Navigation.NavigateTo("/game");
+                break;
+            case CommandResult<GameState, GameEvent>.Rejected rejected:
+                _error = rejected.Error;
+                break;
+        }
+    }
+}

@@ -103,4 +103,31 @@ public class GameSessionServiceTests
         Assert.Null(session.State);
         Assert.Empty(session.Players);
     }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void Start_ZipsRowsToPlayerIdInOrder_ForEveryValidPlayerCount(int playerCount)
+    {
+        var rows = Enumerable.Range(0, playerCount)
+            .Select(i => new PlayerSetupRow(
+                $"Player{i}",
+                PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
+                false))
+            .ToArray();
+        var session = new GameSessionService(new FakeGameEngine());
+
+        var result = session.Start(rows);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        for (var i = 0; i < playerCount; i++)
+        {
+            var config = session.ConfigFor(new PlayerId(i));
+            Assert.Equal(rows[i].Name, config.Name);
+            Assert.Equal(rows[i].ColorHex, config.ColorHex);
+        }
+    }
 }

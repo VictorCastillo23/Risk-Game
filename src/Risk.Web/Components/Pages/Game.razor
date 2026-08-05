@@ -1,0 +1,23 @@
+@page "/game"
+@rendermode InteractiveServer
+@using Risk.Web.Services
+@inject GameSessionService Session
+@inject NavigationManager Navigation
+
+<PageTitle>Risk — Partida</PageTitle>
+
+<p>Partida iniciada. El tablero se implementa en una próxima entrega.</p>
+
+@code {
+    // Board rendering, phase panels, and all interaction are out of scope for
+    // this PR (design/tasks slice 3b onward). This is the navigation target
+    // Setup.razor routes to on a successful GameSessionService.Start, guarded
+    // so a direct hit to "/game" without an active session doesn't null-ref.
+    protected override void OnInitialized()
+    {
+        if (!Session.IsStarted)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+}
