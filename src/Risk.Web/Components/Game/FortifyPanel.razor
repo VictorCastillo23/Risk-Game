@@ -1,0 +1,106 @@
+@using Risk.Domain.Errors
+@using Risk.Domain.Map
+@using Risk.Domain.Players
+@using Risk.Engine.Commands
+@using Risk.Engine.Events
+@using Risk.Engine.Results
+@using Risk.Engine.State
+@using Risk.Web.Components.Shared
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+
+<div class="fortify-panel">
+    @if (State.Turn.FortifyUsed)
+    {
+        <p class="fortify-panel-hint">Ya moviste tropas este turno.</p>
+    }
+    else if (Origin is null || Destination is null)
+    {
+        <p class="fortify-panel-hint">Elegí un territorio propio y luego otro territorio propio conectado para mover tropas.</p>
+    }
+    else
+    {
+        var maxTroops = State.Territories[Origin.Value].Troops - 1;
+
+        if (maxTroops < 1)
+        {
+            <p class="fortify-panel-hint">Necesitás al menos 2 tropas en el territorio de origen para mover.</p>
+        }
+        else
+        {
+            var effectiveTroops = OccupyBounds.Clamp(_troops, 1, maxTroops);
+            var isFixed = OccupyBounds.IsFixed(1, maxTroops);
+
+            <p class="fortify-panel-hint">Moviendo desde @Origin.Value.Value hacia @Destination.Value.Value.</p>
+
+            <input type="number" min="1" max="@maxTroops" value="@effectiveTroops" readonly="@isFixed" @oninput="OnTroopsChanged" />
+
+            <button type="button" @onclick="() => OnFortifyClicked(effectiveTroops)">Mover</button>
+        }
+    }
+
+    <button type="button" @onclick="OnEndPhaseClicked">Terminar turno</button>
+
+    <RejectionMessage Error="_error" />
+</div>
+
+@code {
+    /// <summary>Always the acting player for this panel's commands (design's dispatch contract: <c>Actor = Turn.CurrentPlayer</c>).</summary>
+    [Parameter, EditorRequired]
+    public PlayerId CurrentPlayer { get; set; }
+
+    /// <summary>The state to read source-territory troops and <c>FortifyUsed</c> from (design D5: read straight off <c>GameState</c>).</summary>
+    [Parameter, EditorRequired]
+    public GameState State { get; set; } = null!;
+
+    /// <summary>The source territory, if selected — owned by the host page's <c>BoardSelection</c> (already Fortify-aware since PR4).</summary>
+    [Parameter]
+    public TerritoryId? Origin { get; set; }
+
+    /// <summary>The friendly-connected destination territory, if selected — owned by the host page's <c>BoardSelection</c>.</summary>
+    [Parameter]
+    public TerritoryId? Destination { get; set; }
+
+    private int _troops = 1;
+    private GameError? _error;
+
+    private void OnTroopsChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse((string?)e.Value, out var troops) && troops > 0)
+        {
+            _troops = troops;
+        }
+    }
+
+    private void OnFortifyClicked(int troops)
+    {
+        if (Origin is null || Destination is null)
+        {
+            return;
+        }
+
+        Dispatch(new FortifyCommand(CurrentPlayer, Origin.Value, Destination.Value, troops));
+    }
+
+    private void OnEndPhaseClicked() => Dispatch(new EndPhaseCommand(CurrentPlayer));
+
+    /// <summary>
+    /// Shared dispatch idiom (design's command-dispatch contract): call
+    /// <see cref="GameSessionService.Execute"/>, pattern-match the result —
+    /// <c>Ok</c> clears the inline error (the board/session re-renders via
+    /// <c>Session.Changed</c>), <c>Rejected</c> renders it inline without
+    /// altering displayed state.
+    /// </summary>
+    private void Dispatch(GameCommand command)
+    {
+        var result = Session.Execute(command);
+
+        _error = result switch
+        {
+            CommandResult<GameState, GameEvent>.Ok => null,
+            CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+            _ => _error
+        };
+    }
+}

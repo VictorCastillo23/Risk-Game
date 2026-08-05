@@ -33,6 +33,10 @@
     {
         <AttackPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
     }
+    else if (state.Turn.Phase == TurnPhase.Fortify)
+    {
+        <FortifyPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
+    }
 }
 
 @code {
@@ -61,14 +65,15 @@
         Session.Changed += OnSessionChanged;
     }
 
-    // PR5 scope: Reinforce and Attack both react to board clicks now. Fortify
-    // click wiring (PR7) reuses BoardSelection.Click unchanged — it is already
-    // phase-aware — it just needs to stop being gated out here.
+    // Reinforce, Attack, and Fortify all react to board clicks. Fortify click
+    // wiring (PR7) reuses BoardSelection.Click unchanged — it was already
+    // phase-aware since PR4 (friendly-path BFS included) — it just needed to
+    // stop being gated out here.
     //
     // While a PendingOccupation gate is active, all board clicks are ignored —
     // mirroring the engine's own OccupationPending rejection as a UX nicety
     // (the engine remains authoritative regardless of what the UI blocks).
-    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Reinforce, TurnPhase.Attack];
+    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
 
     private void OnTerritoryClick(TerritoryId territory)
     {
