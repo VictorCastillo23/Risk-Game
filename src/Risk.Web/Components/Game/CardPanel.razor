@@ -1,0 +1,117 @@
+@using Risk.Domain.Cards
+@using Risk.Domain.Errors
+@using Risk.Domain.Players
+@using Risk.Engine.Commands
+@using Risk.Engine.Events
+@using Risk.Engine.Results
+@using Risk.Engine.State
+@using Risk.Web.Components.Shared
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+
+<div class="card-panel">
+    @{
+        // Design's read convention (D5): the ONE place hidden information
+        // matters — OwnHand comes from Observe(), never from raw
+        // GameState.Players[x].Hand, so this panel structurally cannot
+        // leak another player's cards.
+        var hand = Session.ObserveCurrentPlayer().OwnHand;
+    }
+
+    @if (hand.Count >= MandatoryTradeThreshold)
+    {
+        <p class="card-panel-warning" role="alert">Tenés @hand.Count cartas: debés canjear un conjunto válido.</p>
+    }
+
+    @if (hand.Count == 0)
+    {
+        <p class="card-panel-hint">No tenés cartas.</p>
+    }
+    else
+    {
+        <ul class="card-panel-hand">
+            @for (var i = 0; i < hand.Count; i++)
+            {
+                var index = i;
+
+                <li>
+                    <label>
+                        <input type="checkbox"
+                               checked="@_selection.IsSelected(index)"
+                               disabled="@(!_selection.IsSelected(index) && _selection.SelectedIndices.Count >= 3)"
+                               @onchange="() => OnToggle(index)" />
+                        @Describe(hand[index])
+                    </label>
+                </li>
+            }
+        </ul>
+
+        <button type="button" disabled="@(!CanTrade(hand))" @onclick="() => OnTradeClicked(hand)">Canjear</button>
+    }
+
+    <RejectionMessage Error="_error" />
+</div>
+
+@code {
+    private const int MandatoryTradeThreshold = 5;
+
+    /// <summary>Always the acting player for this panel's command (design's dispatch contract: <c>Actor = Turn.CurrentPlayer</c>).</summary>
+    [Parameter, EditorRequired]
+    public PlayerId CurrentPlayer { get; set; }
+
+    /// <summary>
+    /// True while a conquest is pending occupation — the design's
+    /// PendingOccupation flow disables the Card action alongside
+    /// Attack/Fortify/EndPhase ("BoardSvg pointer-events:none ·
+    /// Attack/Fortify/EndPhase/Card buttons disabled").
+    /// </summary>
+    [Parameter]
+    public bool Locked { get; set; }
+
+    private CardSelection _selection = CardSelection.Empty;
+    private GameError? _error;
+
+    private void OnToggle(int index)
+    {
+        _selection = _selection.Toggle(index);
+    }
+
+    private bool CanTrade(IReadOnlyList<Card> hand) => !Locked && _selection.IsValidTrade(hand);
+
+    private void OnTradeClicked(IReadOnlyList<Card> hand)
+    {
+        var cards = _selection.SelectedIndices.Select(i => hand[i]).ToArray();
+        var result = Session.Execute(new TradeCardsCommand(CurrentPlayer, cards));
+
+        _error = result switch
+        {
+            CommandResult<GameState, GameEvent>.Ok => null,
+            CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+            _ => _error
+        };
+
+        // Only clear the selection on success — the hand's indices shift
+        // once the traded cards are removed. On rejection, keep the
+        // selection so the player can see what they picked and retry.
+        if (result is CommandResult<GameState, GameEvent>.Ok)
+        {
+            _selection = CardSelection.Empty;
+        }
+    }
+
+    private static string Describe(Card card) => card switch
+    {
+        TerritoryCard territoryCard => $"{territoryCard.Territory.Value} — {SymbolLabel(territoryCard.Symbol)}",
+        WildCard => "Comodín",
+        _ => "Carta"
+    };
+
+    private static string SymbolLabel(CardSymbol symbol) => symbol switch
+    {
+        CardSymbol.Infantry => "Infantería",
+        CardSymbol.Cavalry => "Caballería",
+        CardSymbol.Artillery => "Artillería",
+        _ => symbol.ToString()
+    };
+}
