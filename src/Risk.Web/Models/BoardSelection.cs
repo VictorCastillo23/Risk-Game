@@ -1,5 +1,6 @@
 using Risk.Domain.Map;
 using Risk.Domain.Players;
+using Risk.Engine.Rules;
 using Risk.Engine.State;
 
 namespace Risk.Web.Models;
@@ -36,9 +37,9 @@ public sealed record BoardSelection(TerritoryId? Origin, TerritoryId? Destinatio
 
         return phase switch
         {
-            TurnPhase.Reinforce => isOwn ? new BoardSelection(clicked, null) : this,
+            TurnPhase.Setup or TurnPhase.Reinforce => isOwn ? new BoardSelection(clicked, null) : this,
             TurnPhase.Attack => ClickTwoStep(clicked, isOwn, isValidDestination: () => !isOwn && WorldMap.AreAdjacent(Origin!.Value, clicked)),
-            TurnPhase.Fortify => ClickTwoStep(clicked, isOwn, isValidDestination: () => isOwn && HasFriendlyPath(state, Origin!.Value, clicked)),
+            TurnPhase.Fortify => ClickTwoStep(clicked, isOwn, isValidDestination: () => isOwn && ConnectivityRules.HasFriendlyPath(state.Territories, state.Territories[Origin!.Value].Owner, Origin!.Value, clicked)),
             _ => this
         };
     }
@@ -64,42 +65,5 @@ public sealed record BoardSelection(TerritoryId? Origin, TerritoryId? Destinatio
         }
 
         return isOwn ? new BoardSelection(clicked, null) : this;
-    }
-
-    /// <summary>
-    /// Breadth-first search restricted to territories owned by whoever owns
-    /// <paramref name="from"/> — mirrors <c>GameEngine.HasFriendlyPath</c>
-    /// (private to the engine) so Fortify selection previews the same
-    /// connectivity rule the engine will independently enforce.
-    /// </summary>
-    private static bool HasFriendlyPath(GameState state, TerritoryId from, TerritoryId to)
-    {
-        var owner = state.Territories[from].Owner;
-        var visited = new HashSet<TerritoryId> { from };
-        var queue = new Queue<TerritoryId>();
-        queue.Enqueue(from);
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-
-            if (current == to)
-            {
-                return true;
-            }
-
-            foreach (var neighbor in WorldMap.NeighborsOf(current))
-            {
-                if (visited.Contains(neighbor) || state.Territories[neighbor].Owner != owner)
-                {
-                    continue;
-                }
-
-                visited.Add(neighbor);
-                queue.Enqueue(neighbor);
-            }
-        }
-
-        return false;
     }
 }

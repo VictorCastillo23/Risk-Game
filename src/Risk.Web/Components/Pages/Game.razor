@@ -1,5 +1,4 @@
 @page "/game"
-@rendermode InteractiveServer
 @implements IDisposable
 @using Risk.Domain.Map
 @using Risk.Engine.Events
@@ -25,7 +24,7 @@
     var isWon = state.Status is GameStatus.Won;
 
     <PhaseIndicator State="state" Players="Session.Players" />
-    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" Locked="isWon || pendingOccupation is not null" />
+    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" OnTerritoryRightClick="OnTerritoryRightClick" Pending="_staging.Pending" Locked="isWon || pendingOccupation is not null" />
     <DicePanel Battle="_lastBattle" />
     <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
     <LogPanel Log="state.Log" />
@@ -38,9 +37,13 @@
     {
         <OccupyPrompt CurrentPlayer="state.Turn.CurrentPlayer" Pending="pendingOccupation" SourceTerritoryTroops="state.Territories[pendingOccupation.From].Troops" />
     }
+    else if (state.Turn.Phase == TurnPhase.Setup)
+    {
+        <SetupPanel CurrentPlayer="state.Turn.CurrentPlayer" SelectedTerritory="_selection.Origin" />
+    }
     else if (state.Turn.Phase == TurnPhase.Reinforce)
     {
-        <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" SelectedTerritory="_selection.Origin" />
+        <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Staging="_staging" OnStagingChanged="staging => _staging = staging" />
     }
     else if (state.Turn.Phase == TurnPhase.Attack)
     {
@@ -57,6 +60,12 @@
     // Session.State (GameState), never Observe() — only the hand-of-cards
     // panel (a later PR) needs the redacted PlayerView seam.
     private BoardSelection _selection = BoardSelection.Empty;
+
+    // Reinforce is staged client-side only (left-click stages +1, right-click
+    // -1, "Confirmar" dispatches) — never routed through BoardSelection,
+    // since PlaceTroopsCommand has no undo and this needs to preview several
+    // territories at once before committing any of them.
+    private TroopStaging _staging = TroopStaging.Empty;
 
     // Session.LastEvents only ever holds the delta from the most recent Ok
     // (design's own contract), so a non-attack command (e.g. Fortify,
@@ -86,7 +95,7 @@
     // While a PendingOccupation gate is active, all board clicks are ignored —
     // mirroring the engine's own OccupationPending rejection as a UX nicety
     // (the engine remains authoritative regardless of what the UI blocks).
-    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
+    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Setup, TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
 
     private void OnTerritoryClick(TerritoryId territory)
     {
@@ -97,7 +106,33 @@
             return;
         }
 
+        if (state.Turn.Phase == TurnPhase.Reinforce)
+        {
+            if (state.Territories[territory].Owner != state.Turn.CurrentPlayer)
+            {
+                return;
+            }
+
+            var remainingPool = state.Players.Single(p => p.Id == state.Turn.CurrentPlayer).TroopsRemaining;
+            _staging = _staging.Add(territory, remainingPool);
+            return;
+        }
+
         _selection = _selection.Click(territory, state, state.Turn.CurrentPlayer, state.Turn.Phase);
+    }
+
+    // Right-click only ever un-stages a Reinforce placement — every other
+    // clickable phase has no staging concept, so it's a no-op there.
+    private void OnTerritoryRightClick(TerritoryId territory)
+    {
+        var state = Session.State;
+
+        if (state is null || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || state.Turn.Phase != TurnPhase.Reinforce)
+        {
+            return;
+        }
+
+        _staging = _staging.Remove(territory);
     }
 
     // Any successful command re-renders from new state, so the previous
@@ -106,6 +141,20 @@
     private void OnSessionChanged()
     {
         _selection = BoardSelection.Empty;
+
+        // Staging is a multi-dispatch batch owned by ReinforcePanel's own
+        // Confirmar loop (cleared/reduced there via OnStagingChanged) — NOT
+        // reset on every single command success, since one successful
+        // placement inside that loop must not wipe out other territories'
+        // still-not-yet-dispatched staged troops. Only reset once the turn
+        // actually leaves Reinforce, so stray un-confirmed clicks (the
+        // player left-clicked a territory but ended the phase without
+        // confirming) never leak a phantom "+N" badge into a later turn.
+        if (Session.State?.Turn.Phase != TurnPhase.Reinforce)
+        {
+            _staging = TroopStaging.Empty;
+        }
+
         _lastBattle = BattleEventSelector.MostRecent(Session.LastEvents) ?? _lastBattle;
         InvokeAsync(StateHasChanged);
     }

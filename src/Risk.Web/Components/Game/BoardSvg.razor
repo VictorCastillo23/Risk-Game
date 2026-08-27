@@ -19,12 +19,15 @@
             var territory = State.Territories[id];
             var color = BoardColors.OwnerColor(territory.Owner, Players);
             var isSelected = Selected == id;
+            var pending = Pending?.GetValueOrDefault(id) ?? 0;
 
             <g class="board-territory @(isSelected ? "board-territory-selected" : "")"
                transform="translate(@position.X, @position.Y)"
-               @onclick="() => OnTerritoryClick.InvokeAsync(id)">
+               @onclick="() => OnTerritoryClick.InvokeAsync(id)"
+               @oncontextmenu="() => OnTerritoryRightClick.InvokeAsync(id)" @oncontextmenu:preventDefault="true">
                 <circle class="board-territory-marker" r="18" fill="@color" />
                 <text class="board-territory-troops" text-anchor="middle" dy="4">@territory.Troops</text>
+                <text class="board-territory-pending" text-anchor="middle" dy="30" style="@(pending > 0 ? null : "display:none")">+@pending</text>
             </g>
         }
     </g>
@@ -56,4 +59,12 @@
     /// <summary>Raised with the clicked territory's id; the host page decides what a click means for the active phase.</summary>
     [Parameter]
     public EventCallback<TerritoryId> OnTerritoryClick { get; set; }
+
+    /// <summary>Raised with the right-clicked territory's id (native context menu suppressed); only meaningful during Reinforce staging.</summary>
+    [Parameter]
+    public EventCallback<TerritoryId> OnTerritoryRightClick { get; set; }
+
+    /// <summary>Staged-but-not-yet-dispatched troop counts per territory (Reinforce only); null/empty elsewhere.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<TerritoryId, int>? Pending { get; set; }
 }

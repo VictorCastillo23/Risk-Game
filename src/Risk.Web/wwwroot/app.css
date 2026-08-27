@@ -27,3 +27,9 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+.board-territory-pending {
+    fill: #1a7f37;
+    font-weight: bold;
+    font-size: 0.85em;
+}

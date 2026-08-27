@@ -36,6 +36,30 @@ public class BoardSelectionTests
             new GameStatus.InProgress());
     }
 
+    // --- Setup: single-territory selection, same shape as Reinforce ---
+
+    [Fact]
+    public void Click_DuringSetup_OnOwnTerritory_SetsOriginAsSelection()
+    {
+        var state = BuildState(TurnPhase.Setup, Player0, new Dictionary<TerritoryId, PlayerId> { [Alaska] = Player0 }, Player1);
+
+        var selection = BoardSelection.Empty.Click(Alaska, state, Player0, TurnPhase.Setup);
+
+        Assert.Equal(Alaska, selection.Origin);
+        Assert.Null(selection.Destination);
+    }
+
+    [Fact]
+    public void Click_DuringSetup_OnEnemyTerritory_LeavesSelectionUnchanged()
+    {
+        var state = BuildState(TurnPhase.Setup, Player0, new Dictionary<TerritoryId, PlayerId> { [Alberta] = Player0 }, Player1);
+        var selected = BoardSelection.Empty.Click(Alberta, state, Player0, TurnPhase.Setup);
+
+        var result = selected.Click(Alaska, state, Player0, TurnPhase.Setup);
+
+        Assert.Equal(selected, result);
+    }
+
     // --- Reinforce: single-territory selection ---
 
     [Fact]

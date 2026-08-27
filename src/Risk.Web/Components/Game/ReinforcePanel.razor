@@ -6,22 +6,27 @@
 @using Risk.Engine.Results
 @using Risk.Engine.State
 @using Risk.Web.Components.Shared
+@using Risk.Web.Models
 @using Risk.Web.Services
 @inject GameSessionService Session
 
 <div class="reinforce-panel">
-    @if (SelectedTerritory is null)
+    @if (Staging.TotalStaged == 0)
     {
-        <p class="reinforce-panel-hint">Elegí un territorio propio para reforzar.</p>
+        <p class="reinforce-panel-hint">Click izquierdo en un país propio para sumarle una tropa; click derecho para sacarla. Tropas por colocar: @RemainingPool</p>
     }
     else
     {
-        <p class="reinforce-panel-hint">Territorio seleccionado: @SelectedTerritory.Value.Value</p>
+        <p class="reinforce-panel-hint">Tropas por colocar: @RemainingPool</p>
+        <ul class="reinforce-panel-staged">
+            @foreach (var (territory, count) in Staging.Pending)
+            {
+                <li>@territory.Value: +@count</li>
+            }
+        </ul>
     }
 
-    <input type="number" min="1" value="@_troops" disabled="@(SelectedTerritory is null)" @oninput="OnTroopsChanged" />
-
-    <button type="button" disabled="@(SelectedTerritory is null)" @onclick="OnPlaceClicked">Colocar</button>
+    <button type="button" disabled="@(Staging.TotalStaged == 0)" @onclick="OnConfirmClicked">Confirmar</button>
     <button type="button" @onclick="OnEndPhaseClicked">Terminar refuerzo</button>
 
     <RejectionMessage Error="_error" />
@@ -32,29 +37,49 @@
     [Parameter, EditorRequired]
     public PlayerId CurrentPlayer { get; set; }
 
-    /// <summary>The territory currently selected on the board, if any — owned by the host page's <c>BoardSelection</c>.</summary>
-    [Parameter]
-    public TerritoryId? SelectedTerritory { get; set; }
+    /// <summary>The state to read the live troop pool from (design D5: read straight off <c>GameState</c>).</summary>
+    [Parameter, EditorRequired]
+    public GameState State { get; set; } = null!;
 
-    private int _troops = 1;
+    /// <summary>Client-side-only staged placements — owned by the host page, mutated there via board left/right clicks.</summary>
+    [Parameter, EditorRequired]
+    public TroopStaging Staging { get; set; } = null!;
+
+    /// <summary>Raised after a Confirmar attempt with the remaining (possibly reduced) staging — the host page owns the field this updates.</summary>
+    [Parameter]
+    public EventCallback<TroopStaging> OnStagingChanged { get; set; }
+
     private GameError? _error;
 
-    private void OnTroopsChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse((string?)e.Value, out var troops) && troops > 0)
-        {
-            _troops = troops;
-        }
-    }
+    /// <summary>The engine's live pool minus whatever's already staged locally but not yet dispatched.</summary>
+    private int RemainingPool => State.Players.Single(p => p.Id == CurrentPlayer).TroopsRemaining - Staging.TotalStaged;
 
-    private void OnPlaceClicked()
+    /// <summary>
+    /// Dispatches one <see cref="PlaceTroopsCommand"/> per staged territory.
+    /// Stops at the first rejection (leaving it and everything after it
+    /// staged, since they were never actually placed) — only territories
+    /// that dispatched successfully are dropped from what's reported back.
+    /// </summary>
+    private async Task OnConfirmClicked()
     {
-        if (SelectedTerritory is null)
+        var remaining = new Dictionary<TerritoryId, int>(Staging.Pending);
+
+        foreach (var (territory, count) in Staging.Pending)
         {
-            return;
+            var result = Session.Execute(new PlaceTroopsCommand(CurrentPlayer, territory, count));
+
+            if (result is CommandResult<GameState, GameEvent>.Rejected rejected)
+            {
+                _error = rejected.Error;
+                await OnStagingChanged.InvokeAsync(new TroopStaging(remaining));
+                return;
+            }
+
+            _error = null;
+            remaining.Remove(territory);
         }
 
-        Dispatch(new PlaceTroopsCommand(CurrentPlayer, SelectedTerritory.Value, _troops));
+        await OnStagingChanged.InvokeAsync(new TroopStaging(remaining));
     }
 
     private void OnEndPhaseClicked() => Dispatch(new EndPhaseCommand(CurrentPlayer));
