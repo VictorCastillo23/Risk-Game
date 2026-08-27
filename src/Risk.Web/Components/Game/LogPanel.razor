@@ -1,0 +1,29 @@
+@using Risk.Engine.Events
+@using Risk.Web.Services
+
+<div class="log-panel" style="overflow-y:auto;max-height:200px;">
+    <p class="log-panel-title">Historial</p>
+    @if (Log.Count == 0)
+    {
+        <p class="log-panel-hint">Todavía no pasó nada.</p>
+    }
+    else
+    {
+        <ul class="log-panel-entries">
+            @* Design's read convention (D5): read straight off GameState.Log,
+               which the engine only ever appends to (Log = [.. state.Log, ..
+               events]) — so iterating it in order is already oldest-first,
+               no reversal needed (scenario "Log grows with events"). *@
+            @foreach (var entry in Log)
+            {
+                <li>@GameEventPresenter.Describe(entry)</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    /// <summary>The full accumulated event log to render, oldest first (design D5: read straight off <c>GameState.Log</c>).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<GameEvent> Log { get; set; } = [];
+}

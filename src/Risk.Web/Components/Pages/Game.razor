@@ -21,6 +21,7 @@
     <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" Locked="pendingOccupation is not null" />
     <DicePanel Battle="_lastBattle" />
     <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="pendingOccupation is not null" />
+    <LogPanel Log="state.Log" />
 
     @if (pendingOccupation is not null)
     {
