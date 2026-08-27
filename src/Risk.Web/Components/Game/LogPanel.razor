@@ -9,7 +9,7 @@
     }
     else
     {
-        <ul class="log-panel-entries">
+        <ul class="log-panel-entries" role="log" aria-live="polite">
             @* Design's read convention (D5): read straight off GameState.Log,
                which the engine only ever appends to (Log = [.. state.Log, ..
                events]) — so iterating it in order is already oldest-first,

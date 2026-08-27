@@ -1,0 +1,38 @@
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+@inject NavigationManager Navigation
+
+<div class="victory-screen" role="alert" aria-live="assertive">
+    <h2>@Winner.Name ganó la partida</h2>
+    <button type="button" @onclick="OnRestart">Nueva partida</button>
+</div>
+
+@code {
+    /// <summary>
+    /// The winning player's config (name/color), resolved by the host page
+    /// from <c>GameStatus.Won.Winner</c> via <c>Session.ConfigFor</c>.
+    /// Rendering this alone satisfies scenario "Win ends interaction"'s
+    /// "controls are disabled" half too: <c>Game.razor</c> stops rendering
+    /// every phase-action panel (Reinforce/Attack/Fortify/Occupy) once
+    /// <c>Status</c> is <c>Won</c>, and locks the always-visible
+    /// <c>BoardSvg</c>/<c>CardPanel</c> via their existing <c>Locked</c>
+    /// flag — no new per-control "disabled" prop is threaded through every
+    /// panel just for this terminal state.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public PlayerConfig Winner { get; set; } = null!;
+
+    /// <summary>
+    /// "Nueva partida" (scenario "Restart clears session"): clears the
+    /// circuit-scoped session via <see cref="GameSessionService.Reset"/>
+    /// (already TDD-covered since PR1's <c>Reset_ClearsState</c>) and
+    /// navigates back to <c>/</c>, which renders the setup screen empty
+    /// because <c>Reset</c> clears both <c>State</c> and <c>Players</c>.
+    /// </summary>
+    private void OnRestart()
+    {
+        Session.Reset();
+        Navigation.NavigateTo("/");
+    }
+}

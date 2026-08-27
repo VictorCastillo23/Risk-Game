@@ -16,14 +16,25 @@
 {
     var state = Session.State!;
     var pendingOccupation = state.Turn.PendingOccupation;
+    // Once GameStatus.Won, GameEngine.Execute rejects *every* command
+    // (including OccupyCommand — see the first check in GameEngine.Execute),
+    // so a lingering PendingOccupation from the winning attack can never be
+    // resolved. VictoryScreen must therefore take priority over the
+    // occupation gate below, or OccupyPrompt would render a "Confirmar"
+    // button that always fails with GameOver.
+    var isWon = state.Status is GameStatus.Won;
 
     <PhaseIndicator State="state" Players="Session.Players" />
-    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" Locked="pendingOccupation is not null" />
+    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" Locked="isWon || pendingOccupation is not null" />
     <DicePanel Battle="_lastBattle" />
-    <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="pendingOccupation is not null" />
+    <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
     <LogPanel Log="state.Log" />
 
-    @if (pendingOccupation is not null)
+    @if (state.Status is GameStatus.Won won)
+    {
+        <VictoryScreen Winner="Session.ConfigFor(won.Winner)" />
+    }
+    else if (pendingOccupation is not null)
     {
         <OccupyPrompt CurrentPlayer="state.Turn.CurrentPlayer" Pending="pendingOccupation" SourceTerritoryTroops="state.Territories[pendingOccupation.From].Troops" />
     }
@@ -81,7 +92,7 @@
     {
         var state = Session.State;
 
-        if (state is null || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
+        if (state is null || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
         {
             return;
         }
