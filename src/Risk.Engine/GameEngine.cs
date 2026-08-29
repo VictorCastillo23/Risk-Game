@@ -420,7 +420,7 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         return state.Turn.Phase switch
         {
             TurnPhase.Reinforce => AdvancePhase(state, TurnPhase.Attack),
-            TurnPhase.Attack => AdvancePhase(state, TurnPhase.Fortify),
+            TurnPhase.Attack => AdvanceFromAttackToFortify(state),
             TurnPhase.Fortify => AdvanceToNextPlayer(state),
             _ => Reject(GameErrorCode.WrongPhase, $"Cannot end phase during {state.Turn.Phase}.")
         };
@@ -440,19 +440,19 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
     }
 
     /// <summary>
-    /// Ends the current player's Fortify phase: awards the departing player
-    /// a card if they conquered at least one territory this turn and the
-    /// deck still has cards (classic Risk: an empty deck simply means no
-    /// draw), rotates to the next player, resets both per-turn flags
-    /// (<c>ConqueredThisTurn</c>, <c>FortifyUsed</c>) for the fresh turn,
-    /// and assigns that player's Reinforce troop pool.
+    /// Ends the current player's Attack phase: awards the acting player a
+    /// card if they conquered at least one territory this turn and the deck
+    /// still has cards (classic Risk: an empty deck simply means no draw),
+    /// emitting <c>CardDrawn</c> before <c>PhaseChanged</c> so the draw is
+    /// always announced before the transition to Fortify. Explicitly clears
+    /// <c>ConqueredThisTurn</c> at this transition — Fortify's
+    /// <c>TurnState</c> is a mutation of the existing one (via <c>with</c>),
+    /// not a freshly constructed one, so the flag would otherwise persist
+    /// stale through the acting player's entire Fortify phase.
     /// </summary>
-    private static CommandResult<GameState, GameEvent> AdvanceToNextPlayer(GameState state)
+    private static CommandResult<GameState, GameEvent> AdvanceFromAttackToFortify(GameState state)
     {
-        var departingPlayerId = state.Turn.CurrentPlayer;
-        var currentIndex = state.Players.ToList().FindIndex(p => p.Id == departingPlayerId);
-        var nextPlayer = NextActivePlayer(state.Players, currentIndex);
-
+        var actor = state.Turn.CurrentPlayer;
         var events = new List<GameEvent>();
         var deck = state.Deck;
         Card? drawnCard = null;
@@ -461,28 +461,53 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         {
             drawnCard = deck[0];
             deck = deck.Skip(1).ToArray();
-            events.Add(new CardDrawn(departingPlayerId, drawnCard));
+            events.Add(new CardDrawn(actor, drawnCard));
         }
 
-        var reinforcement = Reinforcement.Calculate(state.Territories, nextPlayer.Id);
-        IReadOnlyList<PlayerState> updatedPlayers = state.Players
-            .Select(p =>
-            {
-                if (p.Id == departingPlayerId && drawnCard is not null)
-                {
-                    p = p with { Hand = [.. p.Hand, drawnCard] };
-                }
+        events.Add(new PhaseChanged(TurnPhase.Attack, TurnPhase.Fortify, actor));
 
-                return p.Id == nextPlayer.Id ? p with { TroopsRemaining = reinforcement } : p;
-            })
-            .ToArray();
-
-        events.Add(new PhaseChanged(TurnPhase.Fortify, TurnPhase.Reinforce, nextPlayer.Id));
+        IReadOnlyList<PlayerState> updatedPlayers = drawnCard is null
+            ? state.Players
+            : state.Players
+                .Select(p => p.Id == actor ? p with { Hand = [.. p.Hand, drawnCard] } : p)
+                .ToArray();
 
         var newState = state with
         {
             Players = updatedPlayers,
             Deck = deck,
+            Turn = state.Turn with { Phase = TurnPhase.Fortify, ConqueredThisTurn = false },
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Ends the current player's Fortify phase: rotates to the next player,
+    /// resets both per-turn flags (<c>ConqueredThisTurn</c>,
+    /// <c>FortifyUsed</c>) for the fresh turn via a newly constructed
+    /// <c>TurnState</c>, and assigns that player's Reinforce troop pool.
+    /// The conquest card draw no longer happens here — see
+    /// <see cref="AdvanceFromAttackToFortify"/> for the Attack → Fortify
+    /// transition where it is now awarded.
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> AdvanceToNextPlayer(GameState state)
+    {
+        var departingPlayerId = state.Turn.CurrentPlayer;
+        var currentIndex = state.Players.ToList().FindIndex(p => p.Id == departingPlayerId);
+        var nextPlayer = NextActivePlayer(state.Players, currentIndex);
+
+        var reinforcement = Reinforcement.Calculate(state.Territories, nextPlayer.Id);
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == nextPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .ToArray();
+
+        var events = new List<GameEvent> { new PhaseChanged(TurnPhase.Fortify, TurnPhase.Reinforce, nextPlayer.Id) };
+
+        var newState = state with
+        {
+            Players = updatedPlayers,
             Turn = new TurnState(nextPlayer.Id, TurnPhase.Reinforce),
             Log = [.. state.Log, .. events]
         };

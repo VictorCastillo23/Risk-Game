@@ -111,6 +111,23 @@ public class EndPhaseCommandTests
     }
 
     [Fact]
+    public void Execute_does_not_draw_at_Fortify_to_next_player_transition_even_if_ConqueredThisTurn_is_true()
+    {
+        var actor = new PlayerId(0);
+        var next = new PlayerId(1);
+        var state = BuildFortifyPhaseState(actor, next, conqueredThisTurn: true, fortifyUsed: false);
+        var deckCountBefore = state.Deck.Count;
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var result = engine.Execute(state, new EndPhaseCommand(actor));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.Empty(ok.Events.OfType<CardDrawn>());
+        Assert.Equal(deckCountBefore, ok.State.Deck.Count);
+        Assert.Empty(ok.State.Players.Single(p => p.Id == actor).Hand);
+    }
+
+    [Fact]
     public void Execute_rejects_end_phase_from_a_player_who_is_not_the_active_player()
     {
         var state = GameStateBuilder.CompleteSetup(2);

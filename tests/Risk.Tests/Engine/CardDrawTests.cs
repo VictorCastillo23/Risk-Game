@@ -11,19 +11,20 @@ using Risk.Tests.Fakes;
 namespace Risk.Tests.Engine;
 
 /// <summary>
-/// Covers the end-of-turn card draw: a player who conquered at least one
-/// territory this turn draws one card from the deck when their turn ends,
-/// unless the deck has already been exhausted.
+/// Covers the conquest card draw at the Attack → Fortify transition: a
+/// player who conquered at least one territory this turn draws one card
+/// from the deck when they end their Attack phase, unless the deck has
+/// already been exhausted.
 /// </summary>
 public class CardDrawTests
 {
     [Fact]
-    public void Execute_draws_a_card_and_raises_CardDrawn_when_the_departing_player_conquered_this_turn()
+    public void Execute_draws_a_card_and_raises_CardDrawn_when_the_actor_conquered_this_turn()
     {
         var actor = new PlayerId(0);
         var next = new PlayerId(1);
         var deck = Deck.CreateStandard();
-        var state = BuildFortifyPhaseState(actor, next, conqueredThisTurn: true, deck: deck);
+        var state = BuildAttackPhaseState(actor, next, conqueredThisTurn: true, deck: deck);
         var engine = new GameEngine(new QueuedDiceRoller());
 
         var result = engine.Execute(state, new EndPhaseCommand(actor));
@@ -35,15 +36,16 @@ public class CardDrawTests
         var drawnEvent = Assert.Single(ok.Events.OfType<CardDrawn>());
         Assert.Equal(actor, drawnEvent.Actor);
         Assert.Equal(actorHand[0], drawnEvent.Card);
+        Assert.False(ok.State.Turn.ConqueredThisTurn);
     }
 
     [Fact]
-    public void Execute_does_not_draw_a_card_when_the_departing_player_did_not_conquer_this_turn()
+    public void Execute_does_not_draw_a_card_when_the_actor_did_not_conquer_this_turn()
     {
         var actor = new PlayerId(0);
         var next = new PlayerId(1);
         var deck = Deck.CreateStandard();
-        var state = BuildFortifyPhaseState(actor, next, conqueredThisTurn: false, deck: deck);
+        var state = BuildAttackPhaseState(actor, next, conqueredThisTurn: false, deck: deck);
         var engine = new GameEngine(new QueuedDiceRoller());
 
         var result = engine.Execute(state, new EndPhaseCommand(actor));
@@ -56,11 +58,11 @@ public class CardDrawTests
     }
 
     [Fact]
-    public void Execute_does_not_draw_a_card_when_the_deck_is_empty_even_if_the_departing_player_conquered()
+    public void Execute_does_not_draw_a_card_when_the_deck_is_empty_even_if_the_actor_conquered()
     {
         var actor = new PlayerId(0);
         var next = new PlayerId(1);
-        var state = BuildFortifyPhaseState(actor, next, conqueredThisTurn: true, deck: []);
+        var state = BuildAttackPhaseState(actor, next, conqueredThisTurn: true, deck: []);
         var engine = new GameEngine(new QueuedDiceRoller());
 
         var result = engine.Execute(state, new EndPhaseCommand(actor));
@@ -72,12 +74,33 @@ public class CardDrawTests
         Assert.Empty(ok.Events.OfType<CardDrawn>());
     }
 
+    [Fact]
+    public void Execute_emits_CardDrawn_before_PhaseChanged_when_conquered()
+    {
+        var actor = new PlayerId(0);
+        var next = new PlayerId(1);
+        var deck = Deck.CreateStandard();
+        var state = BuildAttackPhaseState(actor, next, conqueredThisTurn: true, deck: deck);
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var result = engine.Execute(state, new EndPhaseCommand(actor));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        var cardDrawnIndex = ok.Events.ToList().FindIndex(e => e is CardDrawn);
+        var phaseChangedIndex = ok.Events.ToList().FindIndex(e =>
+            e is PhaseChanged { From: TurnPhase.Attack, To: TurnPhase.Fortify } phaseChanged
+            && phaseChanged.CurrentPlayer == actor);
+        Assert.True(cardDrawnIndex >= 0, "Expected a CardDrawn event.");
+        Assert.True(phaseChangedIndex >= 0, "Expected a PhaseChanged(Attack, Fortify) event for the actor.");
+        Assert.True(cardDrawnIndex < phaseChangedIndex, "CardDrawn must be emitted before PhaseChanged.");
+    }
+
     /// <summary>
     /// Builds a minimal 2-player state where <paramref name="actor"/> is in
-    /// the Fortify phase and owns every territory except the 6 North
+    /// the Attack phase and owns every territory except the 6 North
     /// American territories, which belong to <paramref name="next"/>.
     /// </summary>
-    private static GameState BuildFortifyPhaseState(PlayerId actor, PlayerId next, bool conqueredThisTurn, IReadOnlyList<Card> deck)
+    private static GameState BuildAttackPhaseState(PlayerId actor, PlayerId next, bool conqueredThisTurn, IReadOnlyList<Card> deck)
     {
         TerritoryId[] nextTerritories =
         [
@@ -98,7 +121,7 @@ public class CardDrawTests
             new PlayerState(next, [], false, 0)
         ];
 
-        var turn = new TurnState(actor, TurnPhase.Fortify, ConqueredThisTurn: conqueredThisTurn, FortifyUsed: false);
+        var turn = new TurnState(actor, TurnPhase.Attack, ConqueredThisTurn: conqueredThisTurn, FortifyUsed: false);
 
         return new GameState(territories, players, turn, deck, [], new GameStatus.InProgress());
     }
