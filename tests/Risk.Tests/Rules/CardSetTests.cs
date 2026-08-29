@@ -39,15 +39,21 @@ public class CardSetTests
     }
 
     [Fact]
-    public void IsValid_accepts_two_different_symbols_plus_a_wildcard_as_one_of_each()
+    public void IsValid_rejects_two_different_symbols_plus_a_wildcard()
     {
-        Assert.True(CardSet.IsValid([Infantry1, Cavalry1, Wild1]));
+        Assert.False(CardSet.IsValid([Infantry1, Cavalry1, Wild1]));
     }
 
     [Fact]
-    public void IsValid_accepts_three_wildcards()
+    public void IsValid_rejects_three_wildcards()
     {
-        Assert.True(CardSet.IsValid([Wild1, Wild2, new WildCard()]));
+        Assert.False(CardSet.IsValid([Wild1, Wild2, new WildCard()]));
+    }
+
+    [Fact]
+    public void IsValid_rejects_one_symbol_plus_two_wildcards()
+    {
+        Assert.False(CardSet.IsValid([Infantry1, Wild1, Wild2]));
     }
 
     [Fact]
