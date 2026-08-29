@@ -164,6 +164,31 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             return Reject(GameErrorCode.InvalidCardSet, "The selected cards do not form a valid trade-in set.");
         }
 
+        var matches = TerritoryTradeBonus.ResolveMatches(command.Cards, state.Territories, command.Actor);
+        TerritoryId? bonusTerritory;
+
+        switch (matches.Count)
+        {
+            case 0 when command.BonusTerritory is not null:
+                return Reject(GameErrorCode.InvalidBonusTerritory, "No traded card names a territory you own; a bonus territory cannot be supplied.");
+            case 0:
+                bonusTerritory = null;
+                break;
+            case 1 when command.BonusTerritory is not null && command.BonusTerritory != matches[0]:
+                return Reject(GameErrorCode.InvalidBonusTerritory, "The bonus territory must be the one owned territory named by a traded card.");
+            case 1:
+                bonusTerritory = matches[0];
+                break;
+            default:
+                if (command.BonusTerritory is null || !matches.Contains(command.BonusTerritory.Value))
+                {
+                    return Reject(GameErrorCode.InvalidBonusTerritory, "Multiple traded cards name territories you own; choose one of them as the bonus territory.");
+                }
+
+                bonusTerritory = command.BonusTerritory;
+                break;
+        }
+
         var tradeNumber = state.TradesCompleted + 1;
         var bonus = CardTradeBonus.ForTradeNumber(tradeNumber);
         var updatedPlayer = player with { Hand = remainingHand, TroopsRemaining = player.TroopsRemaining + bonus };
@@ -172,10 +197,21 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             .Select(p => p.Id == updatedPlayer.Id ? updatedPlayer : p)
             .ToArray();
 
-        var events = new List<GameEvent> { new CardsTraded(command.Actor, command.Cards, bonus) };
+        var updatedTerritories = state.Territories;
+        if (bonusTerritory is { } territoryId)
+        {
+            var territory = state.Territories[territoryId];
+            updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+            {
+                [territoryId] = territory with { Troops = territory.Troops + TerritoryTradeBonus.Troops }
+            };
+        }
+
+        var events = new List<GameEvent> { new CardsTraded(command.Actor, command.Cards, bonus, bonusTerritory) };
 
         var newState = state with
         {
+            Territories = updatedTerritories,
             Players = updatedPlayers,
             TradesCompleted = tradeNumber,
             Log = [.. state.Log, .. events]

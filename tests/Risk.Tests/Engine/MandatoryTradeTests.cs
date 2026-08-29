@@ -42,7 +42,9 @@ public class MandatoryTradeTests
         var state = BuildReinforceReadyState(actor, hand, troopsRemaining: 3);
         var engine = new GameEngine(new QueuedDiceRoller());
 
-        var result = engine.Execute(state, new TradeCardsCommand(actor, [Infantry1, Infantry2, Infantry3]));
+        // Actor owns every territory in this fixture, so all 3 traded cards
+        // name owned territories: the bonus territory choice is required.
+        var result = engine.Execute(state, new TradeCardsCommand(actor, [Infantry1, Infantry2, Infantry3], Infantry1.Territory));
 
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
     }
@@ -55,7 +57,7 @@ public class MandatoryTradeTests
         var state = BuildReinforceReadyState(actor, hand, troopsRemaining: 3);
         var engine = new GameEngine(new QueuedDiceRoller());
         var traded = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-            engine.Execute(state, new TradeCardsCommand(actor, [Infantry1, Infantry2, Infantry3])));
+            engine.Execute(state, new TradeCardsCommand(actor, [Infantry1, Infantry2, Infantry3], Infantry1.Territory)));
         var territory = traded.State.Territories.First(kv => kv.Value.Owner == actor).Key;
 
         var result = engine.Execute(traded.State, new PlaceTroopsCommand(actor, territory, 1));

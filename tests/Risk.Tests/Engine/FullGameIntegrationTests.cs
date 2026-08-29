@@ -157,8 +157,14 @@ public class FullGameIntegrationTests
     {
         while (TryFindValidSet(state.Players.Single(p => p.Id == actor).Hand, out var set))
         {
+            // Any owned-territory match is an acceptable pick here: the test
+            // only cares that the mandatory trade-in succeeds, not which
+            // territory receives the occupied-territory bonus.
+            var matches = TerritoryTradeBonus.ResolveMatches(set, state.Territories, actor);
+            TerritoryId? bonusTerritory = matches.Count > 0 ? matches[0] : null;
+
             var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-                engine.Execute(state, new TradeCardsCommand(actor, set)));
+                engine.Execute(state, new TradeCardsCommand(actor, set, bonusTerritory)));
             state = result.State;
         }
 
