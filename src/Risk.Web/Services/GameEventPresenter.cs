@@ -27,7 +27,9 @@ public static class GameEventPresenter
     {
         TerritoriesAssigned => "Los territorios fueron repartidos entre los jugadores.",
         TroopsPlaced e => $"{PlayerLabel(e.Player)} colocó {e.Troops} tropas en {e.Territory.Value}.",
-        CardsTraded e => $"{PlayerLabel(e.Actor)} canjeó {e.Cards.Count} cartas por {e.Bonus} tropas.",
+        CardsTraded e => e.BonusTerritory is { } bonusTerritory
+            ? $"{PlayerLabel(e.Actor)} canjeó {e.Cards.Count} cartas por {e.Bonus} tropas y +2 tropas extra en {bonusTerritory.Value}."
+            : $"{PlayerLabel(e.Actor)} canjeó {e.Cards.Count} cartas por {e.Bonus} tropas.",
         BattleResolved e =>
             $"{PlayerLabel(e.Attacker)} atacó {e.To.Value} desde {e.From.Value}: perdió {e.AttackerLosses} tropas, el defensor perdió {e.DefenderLosses}.",
         TerritoryConquered e => $"{PlayerLabel(e.Conqueror)} conquistó {e.Territory.Value}.",

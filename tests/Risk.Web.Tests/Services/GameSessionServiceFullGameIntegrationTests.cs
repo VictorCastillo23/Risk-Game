@@ -164,7 +164,13 @@ public class GameSessionServiceFullGameIntegrationTests
     {
         while (TryFindValidSet(session.State!.Players.Single(p => p.Id == actor).Hand, out var set))
         {
-            var result = session.Execute(new TradeCardsCommand(actor, set));
+            // Any owned-territory match is an acceptable pick here: the test
+            // only cares that the mandatory trade-in succeeds, not which
+            // territory receives the occupied-territory bonus.
+            var matches = TerritoryTradeBonus.ResolveMatches(set, session.State!.Territories, actor);
+            TerritoryId? bonusTerritory = matches.Count > 0 ? matches[0] : null;
+
+            var result = session.Execute(new TradeCardsCommand(actor, set, bonusTerritory));
             Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         }
     }

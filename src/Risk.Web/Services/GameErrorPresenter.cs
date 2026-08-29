@@ -30,6 +30,7 @@ public static class GameErrorPresenter
         GameErrorCode.InvalidTroopCount => "La cantidad de tropas indicada no es válida.",
         GameErrorCode.NoPendingOccupation => "No hay ninguna ocupación pendiente de confirmar.",
         GameErrorCode.ReinforcementIncomplete => "Todavía te quedan tropas de refuerzo por colocar.",
+        GameErrorCode.InvalidBonusTerritory => "Elegí un territorio propio válido para la bonificación del canje.",
         _ => error.Message
     };
 }
