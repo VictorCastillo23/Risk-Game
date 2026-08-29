@@ -1,7 +1,11 @@
 ## .NET build artifacts
 bin/
 obj/
+.atl/
 
+.gga
+
+bash.exe.stackdump
 ## User-specific files
 *.user
 *.suo
