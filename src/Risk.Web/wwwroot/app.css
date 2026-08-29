@@ -1,5 +1,96 @@
+:root {
+    --parchment: #ecdcb0;
+    --parchment-light: #f5ead0;
+    --parchment-dark: #d9c496;
+    --ink: #2b2118;
+    --ink-soft: #4a392a;
+    --wood: #6b4423;
+    --wood-dark: #4a2f18;
+    --gold: #b8860b;
+    --gold-bright: #d4a017;
+    --danger: #8c1f1f;
+    --danger-bg: #f4dede;
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-body: Georgia, "Times New Roman", serif;
+    --shadow-panel: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+html, body {
+    margin: 0;
+    min-height: 100%;
+}
+
+body {
+    font-family: var(--font-body);
+    color: var(--ink);
+    background-color: var(--parchment);
+    background-image:
+        radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.18), transparent 60%),
+        radial-gradient(circle at 80% 85%, rgba(0, 0, 0, 0.1), transparent 55%),
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/></svg>");
+    background-attachment: fixed;
+    padding: 1.5rem;
+    line-height: 1.5;
+}
+
+h1, h2, h3 {
+    font-family: var(--font-display);
+    color: var(--wood-dark);
+    letter-spacing: 0.03em;
+}
+
 h1:focus {
     outline: none;
+}
+
+button {
+    font-family: var(--font-body);
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+    color: var(--ink);
+    border: 2px solid var(--wood-dark);
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+    button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
+    }
+
+    button:active:not(:disabled) {
+        transform: translateY(0);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        filter: grayscale(0.4);
+    }
+
+input[type="text"], input[type="number"], select {
+    font-family: var(--font-body);
+    background: var(--parchment-light);
+    border: 1px solid var(--wood);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    color: var(--ink);
+}
+
+/* Shared "panel chrome" — every game panel's own scoped CSS opts its root
+   class into this look, so the visual language stays consistent without
+   duplicating it per component. */
+.panel-frame {
+    background: var(--parchment-light);
+    border: 3px double var(--wood-dark);
+    border-radius: 8px;
+    box-shadow: var(--shadow-panel);
+    padding: 0.85rem 1rem;
+    margin-bottom: 0.85rem;
 }
 
 .valid.modified:not([type=checkbox]) {
@@ -26,10 +117,4 @@ h1:focus {
 
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
-}
-
-.board-territory-pending {
-    fill: #1a7f37;
-    font-weight: bold;
-    font-size: 0.85em;
 }

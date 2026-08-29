@@ -1,0 +1,26 @@
+.reinforce-panel-hint {
+    margin: 0 0 0.6rem;
+    color: var(--ink-soft);
+    font-style: italic;
+}
+
+.reinforce-panel-staged {
+    list-style: none;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+    .reinforce-panel-staged li {
+        background: var(--parchment);
+        border: 1px solid var(--wood);
+        border-radius: 4px;
+        padding: 0.2rem 0.5rem;
+        font-weight: 600;
+    }
+
+.reinforce-panel button {
+    margin-right: 0.5rem;
+}

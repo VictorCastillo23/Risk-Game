@@ -33,6 +33,22 @@ public static class BoardEdges
         return edges;
     }
 
+    // The 5 classic non-contiguous sea routes, per WorldMap.EdgeSeed's own
+    // "// sea route" comments. Hardcoded rather than derived from "different
+    // ContinentId", since several land borders also cross continents
+    // (Ukraine-Ural, Ukraine-Afghanistan, Egypt-MiddleEast, etc.).
+    private static readonly IReadOnlySet<(TerritoryId A, TerritoryId B)> SeaRoutes = new HashSet<(TerritoryId, TerritoryId)>
+    {
+        Normalize(new TerritoryId("Alaska"), new TerritoryId("Kamchatka")),
+        Normalize(new TerritoryId("Greenland"), new TerritoryId("Iceland")),
+        Normalize(new TerritoryId("Brazil"), new TerritoryId("NorthAfrica")),
+        Normalize(new TerritoryId("WesternEurope"), new TerritoryId("NorthAfrica")),
+        Normalize(new TerritoryId("Siam"), new TerritoryId("Indonesia"))
+    };
+
+    /// <summary>True if the edge between <paramref name="a"/> and <paramref name="b"/> is one of the classic non-contiguous sea routes.</summary>
+    public static bool IsSeaRoute(TerritoryId a, TerritoryId b) => SeaRoutes.Contains(Normalize(a, b));
+
     private static (TerritoryId A, TerritoryId B) Normalize(TerritoryId a, TerritoryId b) =>
         string.CompareOrdinal(a.Value, b.Value) <= 0 ? (a, b) : (b, a);
 }

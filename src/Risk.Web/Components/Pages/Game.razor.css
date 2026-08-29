@@ -1,0 +1,27 @@
+.game-shell {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.game-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 1rem;
+    align-items: start;
+}
+
+.game-board-column {
+    min-width: 0;
+}
+
+.game-side-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .game-columns {
+        grid-template-columns: 1fr;
+    }
+}

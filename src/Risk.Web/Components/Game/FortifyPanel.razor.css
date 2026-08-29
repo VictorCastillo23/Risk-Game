@@ -1,0 +1,10 @@
+.fortify-panel-hint {
+    margin: 0 0 0.6rem;
+    color: var(--ink-soft);
+    font-style: italic;
+}
+
+.fortify-panel input[type="number"] {
+    width: 4rem;
+    margin-right: 0.5rem;
+}

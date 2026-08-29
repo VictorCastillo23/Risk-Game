@@ -30,4 +30,29 @@ public class BoardEdgesTests
 
         Assert.Equal(directedCount / 2, edges.Count);
     }
+
+    [Fact]
+    public void IsSeaRoute_ForAllFiveClassicSeaRoutes_ReturnsTrueRegardlessOfArgumentOrder()
+    {
+        (string A, string B)[] seaRoutes =
+        [
+            ("Alaska", "Kamchatka"),
+            ("Greenland", "Iceland"),
+            ("Brazil", "NorthAfrica"),
+            ("WesternEurope", "NorthAfrica"),
+            ("Siam", "Indonesia")
+        ];
+
+        foreach (var (a, b) in seaRoutes)
+        {
+            Assert.True(BoardEdges.IsSeaRoute(new TerritoryId(a), new TerritoryId(b)));
+            Assert.True(BoardEdges.IsSeaRoute(new TerritoryId(b), new TerritoryId(a)));
+        }
+    }
+
+    [Fact]
+    public void IsSeaRoute_ForALandBorder_ReturnsFalse()
+    {
+        Assert.False(BoardEdges.IsSeaRoute(new TerritoryId("Alaska"), new TerritoryId("Alberta")));
+    }
 }

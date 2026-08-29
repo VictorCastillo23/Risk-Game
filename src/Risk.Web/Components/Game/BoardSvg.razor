@@ -4,12 +4,27 @@
 @using Risk.Web.Models
 
 <svg class="board-svg" style="@(Locked ? "pointer-events: none;" : null)" viewBox="0 0 @TerritoryLayout.CanvasWidth @TerritoryLayout.CanvasHeight" xmlns="http://www.w3.org/2000/svg">
+    <g class="board-continents">
+        @foreach (var continent in Continents.All)
+        {
+            var bounds = TerritoryLayout.ContinentBounds[continent.Id];
+            var haloColor = ContinentPalette.ColorOf(continent.Id);
+
+            <rect class="board-continent-halo" x="@bounds.X" y="@bounds.Y" width="@bounds.Width" height="@bounds.Height" rx="28" fill="@haloColor" stroke="@haloColor" />
+            <g transform="translate(@(bounds.X + 14), @(bounds.Y + 24))">
+                <text class="board-continent-label">@ContinentDisplay.Label(continent.Id)</text>
+            </g>
+        }
+    </g>
+
     <g class="board-edges">
         @foreach (var edge in BoardEdges.UniqueEdges())
         {
             var from = TerritoryLayout.Coordinates[edge.A];
             var to = TerritoryLayout.Coordinates[edge.B];
-            <line class="board-edge" x1="@from.X" y1="@from.Y" x2="@to.X" y2="@to.Y" />
+            var isSeaRoute = BoardEdges.IsSeaRoute(edge.A, edge.B);
+
+            <line class="board-edge @(isSeaRoute ? "board-edge-sea" : "")" x1="@from.X" y1="@from.Y" x2="@to.X" y2="@to.Y" />
         }
     </g>
 
@@ -18,16 +33,18 @@
         {
             var territory = State.Territories[id];
             var color = BoardColors.OwnerColor(territory.Owner, Players);
+            var continentColor = ContinentPalette.ColorOf(TerritoryLayout.ContinentOf[id]);
             var isSelected = Selected == id;
             var pending = Pending?.GetValueOrDefault(id) ?? 0;
 
             <g class="board-territory @(isSelected ? "board-territory-selected" : "")"
-               transform="translate(@position.X, @position.Y)"
                @onclick="() => OnTerritoryClick.InvokeAsync(id)"
                @oncontextmenu="() => OnTerritoryRightClick.InvokeAsync(id)" @oncontextmenu:preventDefault="true">
-                <circle class="board-territory-marker" r="18" fill="@color" />
-                <text class="board-territory-troops" text-anchor="middle" dy="4">@territory.Troops</text>
-                <text class="board-territory-pending" text-anchor="middle" dy="30" style="@(pending > 0 ? null : "display:none")">+@pending</text>
+                <polygon class="board-territory-marker" points="@TerritoryLayout.PolygonPointsAttr[id]" fill="@color" stroke="@continentColor" />
+                <g transform="translate(@position.X, @position.Y)">
+                    <text class="board-territory-troops" text-anchor="middle" dy="4">@territory.Troops</text>
+                    <text class="board-territory-pending" text-anchor="middle" dy="28" style="@(pending > 0 ? null : "display:none")">+@pending</text>
+                </g>
             </g>
         }
     </g>

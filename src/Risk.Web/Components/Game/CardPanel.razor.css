@@ -1,0 +1,27 @@
+.card-panel-warning {
+    color: var(--danger);
+    font-weight: 700;
+    margin: 0 0 0.6rem;
+}
+
+.card-panel-hint {
+    margin: 0;
+    color: var(--ink-soft);
+    font-style: italic;
+}
+
+.card-panel-hand {
+    list-style: none;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+    .card-panel-hand li {
+        background: var(--parchment);
+        border: 1px solid var(--wood);
+        border-radius: 4px;
+        padding: 0.3rem 0.5rem;
+    }

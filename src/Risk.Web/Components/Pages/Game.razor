@@ -1,7 +1,10 @@
 @page "/game"
 @implements IDisposable
+@using Risk.Domain.Errors
 @using Risk.Domain.Map
+@using Risk.Engine.Commands
 @using Risk.Engine.Events
+@using Risk.Engine.Results
 @using Risk.Engine.State
 @using Risk.Web.Components.Game
 @using Risk.Web.Models
@@ -23,36 +26,46 @@
     // button that always fails with GameOver.
     var isWon = state.Status is GameStatus.Won;
 
-    <PhaseIndicator State="state" Players="Session.Players" />
-    <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" OnTerritoryRightClick="OnTerritoryRightClick" Pending="_staging.Pending" Locked="isWon || pendingOccupation is not null" />
-    <DicePanel Battle="_lastBattle" />
-    <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
-    <LogPanel Log="state.Log" />
+    <div class="game-shell">
+        <PhaseIndicator State="state" Players="Session.Players" />
 
-    @if (state.Status is GameStatus.Won won)
-    {
-        <VictoryScreen Winner="Session.ConfigFor(won.Winner)" />
-    }
-    else if (pendingOccupation is not null)
-    {
-        <OccupyPrompt CurrentPlayer="state.Turn.CurrentPlayer" Pending="pendingOccupation" SourceTerritoryTroops="state.Territories[pendingOccupation.From].Troops" />
-    }
-    else if (state.Turn.Phase == TurnPhase.Setup)
-    {
-        <SetupPanel CurrentPlayer="state.Turn.CurrentPlayer" SelectedTerritory="_selection.Origin" />
-    }
-    else if (state.Turn.Phase == TurnPhase.Reinforce)
-    {
-        <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Staging="_staging" OnStagingChanged="staging => _staging = staging" />
-    }
-    else if (state.Turn.Phase == TurnPhase.Attack)
-    {
-        <AttackPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
-    }
-    else if (state.Turn.Phase == TurnPhase.Fortify)
-    {
-        <FortifyPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
-    }
+        <div class="game-columns">
+            <div class="game-board-column">
+                <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" OnTerritoryRightClick="OnTerritoryRightClick" Pending="_staging.Pending" Locked="isWon || pendingOccupation is not null" />
+            </div>
+
+            <div class="game-side-column">
+                @if (state.Status is GameStatus.Won won)
+                {
+                    <VictoryScreen Winner="Session.ConfigFor(won.Winner)" />
+                }
+                else if (pendingOccupation is not null)
+                {
+                    <OccupyPrompt CurrentPlayer="state.Turn.CurrentPlayer" Pending="pendingOccupation" SourceTerritoryTroops="state.Territories[pendingOccupation.From].Troops" />
+                }
+                else if (state.Turn.Phase == TurnPhase.Setup)
+                {
+                    <SetupPanel Error="_setupError" />
+                }
+                else if (state.Turn.Phase == TurnPhase.Reinforce)
+                {
+                    <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Staging="_staging" OnStagingChanged="staging => _staging = staging" />
+                }
+                else if (state.Turn.Phase == TurnPhase.Attack)
+                {
+                    <AttackPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
+                }
+                else if (state.Turn.Phase == TurnPhase.Fortify)
+                {
+                    <FortifyPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
+                }
+
+                <DicePanel Battle="_lastBattle" />
+                <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
+                <LogPanel Log="state.Log" />
+            </div>
+        </div>
+    </div>
 }
 
 @code {
@@ -75,6 +88,12 @@
     // subsequent unrelated commands, updating only when a new
     // BattleResolved actually occurs.
     private BattleResolved? _lastBattle;
+
+    // Setup places 1 troop per click directly (no select-then-confirm step,
+    // unlike Reinforce which stages several before dispatching) — the
+    // rejection from that direct dispatch is tracked here since SetupPanel
+    // no longer owns any dispatch of its own.
+    private GameError? _setupError;
 
     protected override void OnInitialized()
     {
@@ -103,6 +122,23 @@
 
         if (state is null || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
         {
+            return;
+        }
+
+        if (state.Turn.Phase == TurnPhase.Setup)
+        {
+            if (state.Territories[territory].Owner != state.Turn.CurrentPlayer)
+            {
+                return;
+            }
+
+            var result = Session.Execute(new PlaceTroopsCommand(state.Turn.CurrentPlayer, territory, 1));
+            _setupError = result switch
+            {
+                CommandResult<GameState, GameEvent>.Ok => null,
+                CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+                _ => _setupError
+            };
             return;
         }
 

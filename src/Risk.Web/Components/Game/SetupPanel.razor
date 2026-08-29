@@ -1,60 +1,19 @@
 @using Risk.Domain.Errors
-@using Risk.Domain.Map
-@using Risk.Domain.Players
-@using Risk.Engine.Commands
-@using Risk.Engine.Events
-@using Risk.Engine.Results
-@using Risk.Engine.State
 @using Risk.Web.Components.Shared
-@using Risk.Web.Services
-@inject GameSessionService Session
 
-<div class="setup-panel">
-    @if (SelectedTerritory is null)
-    {
-        <p class="setup-panel-hint">Elegí un territorio propio para colocar una tropa.</p>
-    }
-    else
-    {
-        <p class="setup-panel-hint">Territorio seleccionado: @SelectedTerritory.Value.Value</p>
-    }
+<div class="setup-panel panel-frame">
+    <p class="setup-panel-hint">Hacé click en un territorio propio para colocar una tropa.</p>
 
-    <button type="button" disabled="@(SelectedTerritory is null)" @onclick="OnPlaceClicked">Colocar</button>
-
-    <RejectionMessage Error="_error" />
+    <RejectionMessage Error="Error" />
 </div>
 
 @code {
-    /// <summary>Always the acting player for this panel's commands (design's dispatch contract: <c>Actor = Turn.CurrentPlayer</c>).</summary>
-    [Parameter, EditorRequired]
-    public PlayerId CurrentPlayer { get; set; }
-
-    /// <summary>The territory currently selected on the board, if any — owned by the host page's <c>BoardSelection</c>.</summary>
+    /// <summary>
+    /// The most recent rejection from a Setup-phase board click, if any —
+    /// dispatch happens directly from the host page's click handler (a
+    /// single click places 1 troop, no select-then-confirm step), so this
+    /// panel is display-only.
+    /// </summary>
     [Parameter]
-    public TerritoryId? SelectedTerritory { get; set; }
-
-    private GameError? _error;
-
-    private void OnPlaceClicked()
-    {
-        if (SelectedTerritory is null)
-        {
-            return;
-        }
-
-        Dispatch(new PlaceTroopsCommand(CurrentPlayer, SelectedTerritory.Value, 1));
-    }
-
-    /// <summary>Shared dispatch idiom (design's command-dispatch contract) — see <c>ReinforcePanel</c>.</summary>
-    private void Dispatch(GameCommand command)
-    {
-        var result = Session.Execute(command);
-
-        _error = result switch
-        {
-            CommandResult<GameState, GameEvent>.Ok => null,
-            CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
-            _ => _error
-        };
-    }
+    public GameError? Error { get; set; }
 }

@@ -1,0 +1,5 @@
+.setup-panel-hint {
+    margin: 0 0 0.6rem;
+    color: var(--ink-soft);
+    font-style: italic;
+}

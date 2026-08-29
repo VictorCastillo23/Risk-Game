@@ -1,0 +1,12 @@
+.victory-screen {
+    text-align: center;
+    border-color: var(--gold);
+    background: linear-gradient(180deg, var(--parchment-light), var(--parchment));
+}
+
+    .victory-screen h2 {
+        margin-top: 0;
+        font-size: 1.8rem;
+        color: var(--gold);
+        text-shadow: 1px 1px 0 var(--wood-dark);
+    }

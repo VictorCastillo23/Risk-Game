@@ -10,7 +10,7 @@
 @using Risk.Web.Services
 @inject GameSessionService Session
 
-<div class="attack-panel">
+<div class="attack-panel panel-frame">
     @if (Origin is null || Destination is null)
     {
         <p class="attack-panel-hint">Elegí un territorio propio y luego un territorio enemigo adyacente para atacar.</p>
@@ -39,6 +39,8 @@
             <button type="button" @onclick="() => OnAttackClicked(effectiveDice)">Atacar</button>
         }
     }
+
+    <button type="button" @onclick="OnEndPhaseClicked">Terminar ataque</button>
 
     <RejectionMessage Error="_error" />
 </div>
@@ -80,6 +82,8 @@
 
         Dispatch(new AttackCommand(CurrentPlayer, Origin.Value, Destination.Value, diceCount));
     }
+
+    private void OnEndPhaseClicked() => Dispatch(new EndPhaseCommand(CurrentPlayer));
 
     /// <summary>
     /// Shared dispatch idiom (design's command-dispatch contract): call
