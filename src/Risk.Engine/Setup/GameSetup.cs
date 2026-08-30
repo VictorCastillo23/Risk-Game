@@ -42,7 +42,7 @@ public static class GameSetup
     /// returning a wrong range, and adding a 5th mode without updating this
     /// switch produces a CS8524 exhaustiveness warning at compile time.
     /// </summary>
-    private static (int Min, int Max) PlayerCountRange(GameMode mode) => mode switch
+    public static (int Min, int Max) PlayerCountRange(GameMode mode) => mode switch
     {
         GameMode.TwoPlayer => (2, 2),
         GameMode.Classic or GameMode.SecretMission or GameMode.Capital => (3, 5)

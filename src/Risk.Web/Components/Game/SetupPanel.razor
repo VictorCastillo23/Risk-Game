@@ -1,19 +1,33 @@
 @using Risk.Domain.Errors
+@using Risk.Engine.State
 @using Risk.Web.Components.Shared
 
 <div class="setup-panel panel-frame">
-    <p class="setup-panel-hint">Hacé click en un territorio propio para colocar una tropa.</p>
+    <p class="setup-panel-hint">@Hint</p>
 
     <RejectionMessage Error="Error" />
 </div>
 
 @code {
     /// <summary>
-    /// The most recent rejection from a Setup-phase board click, if any —
-    /// dispatch happens directly from the host page's click handler (a
-    /// single click places 1 troop, no select-then-confirm step), so this
-    /// panel is display-only.
+    /// Which of the two directly-dispatched, single-click phases this panel
+    /// is currently showing a hint for — drives <see cref="Hint"/>. Passed
+    /// as a parameter (not read from <c>Session</c>) so this panel stays
+    /// pure/parameter-driven like every other phase panel.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public TurnPhase Phase { get; set; }
+
+    /// <summary>
+    /// The most recent rejection from a Claim- or Setup-phase board click,
+    /// if any — dispatch happens directly from the host page's click handler
+    /// (a single click claims a territory or places 1 troop, no
+    /// select-then-confirm step), so this panel is display-only.
     /// </summary>
     [Parameter]
     public GameError? Error { get; set; }
+
+    private string Hint => Phase == TurnPhase.Claim
+        ? "Hacé click en un territorio libre para reclamarlo."
+        : "Hacé click en un territorio propio para colocar una tropa.";
 }

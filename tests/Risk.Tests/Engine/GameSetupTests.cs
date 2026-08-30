@@ -178,6 +178,19 @@ public class GameSetupTests
         Assert.All(ok.State.Players, p => Assert.Equal(startingTroops, p.TroopsRemaining));
     }
 
+    [Theory]
+    [InlineData(GameMode.TwoPlayer, 2, 2)]
+    [InlineData(GameMode.Classic, 3, 5)]
+    [InlineData(GameMode.SecretMission, 3, 5)]
+    [InlineData(GameMode.Capital, 3, 5)]
+    public void PlayerCountRange_returns_the_documented_range_per_mode(GameMode mode, int expectedMin, int expectedMax)
+    {
+        var (min, max) = GameSetup.PlayerCountRange(mode);
+
+        Assert.Equal(expectedMin, min);
+        Assert.Equal(expectedMax, max);
+    }
+
     [Fact]
     public void Turn_based_placement_ends_only_when_all_players_reach_zero_remaining_troops()
     {

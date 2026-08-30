@@ -40,10 +40,9 @@ public sealed class GameSessionService(IGameEngine engine, IDiceRoller dice)
     /// </summary>
     /// <param name="rows">The configured players, in seating order.</param>
     /// <param name="mode">
-    /// Defaults to <see cref="GameMode.Classic"/> as a placeholder until a
-    /// mode-selector UI ships (roadmap item 2.2). This is a known, accepted
-    /// temporary regression: Risk.Web currently cannot start a 2-player game,
-    /// since <see cref="GameMode.Classic"/> requires 3-5 players.
+    /// Which <see cref="GameMode"/> to start. Defaults to
+    /// <see cref="GameMode.Classic"/>, matching <c>Setup.razor</c>'s mode
+    /// dropdown default (roadmap item 2.2).
     /// </param>
     public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic)
     {

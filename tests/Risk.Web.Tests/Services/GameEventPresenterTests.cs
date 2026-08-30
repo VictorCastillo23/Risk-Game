@@ -61,6 +61,17 @@ public class GameEventPresenterTests
     }
 
     [Fact]
+    public void Describe_TerritoryClaimed_MentionsPlayerAndTerritory()
+    {
+        var e = new TerritoryClaimed(PlayerOne, Alaska, 1);
+
+        var described = GameEventPresenter.Describe(e);
+
+        Assert.Contains("Alaska", described);
+        Assert.DoesNotContain("Ocurrió un evento.", described);
+    }
+
+    [Fact]
     public void Describe_TerritoryConquered_MentionsConquerorAndTerritory()
     {
         var e = new TerritoryConquered(PlayerOne, PlayerTwo, Alberta);
@@ -137,11 +148,12 @@ public class GameEventPresenterTests
     }
 
     [Fact]
-    public void Describe_AllElevenEventTypes_ProduceNonEmptyDistinctMessages()
+    public void Describe_AllTwelveEventTypes_ProduceNonEmptyDistinctMessages()
     {
         var events = new GameEvent[]
         {
             new TerritoriesAssigned(new Dictionary<TerritoryId, PlayerId> { [Alaska] = PlayerOne }),
+            new TerritoryClaimed(PlayerOne, Alaska, 1),
             new TroopsPlaced(PlayerOne, Alaska, 3),
             new CardsTraded(PlayerOne, [new TerritoryCard(Alaska, CardSymbol.Infantry)], 4),
             new BattleResolved(PlayerOne, Alaska, Alberta, [6, 4], [3], 0, 1),
@@ -156,8 +168,8 @@ public class GameEventPresenterTests
 
         var messages = events.Select(GameEventPresenter.Describe).ToList();
 
-        Assert.Equal(11, messages.Count);
+        Assert.Equal(12, messages.Count);
         Assert.All(messages, m => Assert.False(string.IsNullOrWhiteSpace(m)));
-        Assert.Equal(11, messages.Distinct().Count());
+        Assert.Equal(12, messages.Distinct().Count());
     }
 }

@@ -133,6 +133,23 @@ public class GameSessionServiceTests
     }
 
     [Fact]
+    public void Start_WithClassicMode_StartsInClaimPhase()
+    {
+        var rows = Enumerable.Range(0, 3)
+            .Select(i => new PlayerSetupRow(
+                $"Player{i}",
+                PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
+                false))
+            .ToArray();
+        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(3));
+
+        var result = session.Start(rows, GameMode.Classic);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.Equal(TurnPhase.Claim, session.State!.Turn.Phase);
+    }
+
+    [Fact]
     public void Start_RejectsSixPlayersUnderClassicMode()
     {
         var rows = Enumerable.Range(0, 6)
