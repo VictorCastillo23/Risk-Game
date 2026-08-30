@@ -21,7 +21,7 @@ public class SecretMissionSetupStrategyTests
         var state = Strategy.Create(players, startingTroops);
 
         var counts = state.Territories.Values
-            .GroupBy(t => t.Owner)
+            .GroupBy(t => t.Owner!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
 
         Assert.Equal(playerCount, counts.Count);

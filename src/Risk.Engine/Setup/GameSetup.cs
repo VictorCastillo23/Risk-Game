@@ -70,6 +70,15 @@ public static class GameSetup
             return new CommandResult<GameState, GameEvent>.Ok(s, s.Log);
         }
 
+        // Classic/TwoPlayer/Capital fall through to this same random-equitable
+        // deal as SecretMission today — deliberately NOT routed through
+        // SecretMissionSetup, and deliberately not de-duplicated against it.
+        // Each of these three modes gets its own real ISetupStrategy in a
+        // later roadmap item (2.1/4.1/5.1) with genuinely different setup
+        // rules (Classic/Capital claim territories one at a time instead of
+        // an upfront random deal; TwoPlayer splits into a 3-way deal with a
+        // neutral army) — extracting a shared helper now would tie this
+        // temporary duplication to logic that's about to diverge per mode.
         var shuffledTerritoryIds = WorldMap.Territories
             .Select(t => t.Id)
             .OrderBy(_ => Random.Shared.Next())
@@ -90,7 +99,7 @@ public static class GameSetup
             .ToArray();
 
         var turn = new TurnState(players[0], TurnPhase.Setup);
-        IReadOnlyDictionary<TerritoryId, PlayerId> assignments = territories.ToDictionary(kv => kv.Key, kv => kv.Value.Owner);
+        IReadOnlyDictionary<TerritoryId, PlayerId> assignments = territories.ToDictionary(kv => kv.Key, kv => kv.Value.Owner!.Value);
         var events = new List<GameEvent> { new TerritoriesAssigned(assignments) };
 
         var state = new GameState(territories, playerStates, turn, Deck.CreateStandard(), events,

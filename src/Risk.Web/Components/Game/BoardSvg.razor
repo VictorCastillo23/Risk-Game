@@ -32,7 +32,7 @@
         @foreach (var (id, position) in TerritoryLayout.Coordinates)
         {
             var territory = State.Territories[id];
-            var color = BoardColors.OwnerColor(territory.Owner, Players);
+            var color = territory.Owner is { } owner ? BoardColors.OwnerColor(owner, Players) : BoardColors.UnclaimedColor;
             var continentColor = ContinentPalette.ColorOf(TerritoryLayout.ContinentOf[id]);
             var isSelected = Selected == id;
             var pending = Pending?.GetValueOrDefault(id) ?? 0;

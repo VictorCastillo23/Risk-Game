@@ -32,4 +32,22 @@ public class BoardColorsTests
 
         Assert.Equal(BoardColors.UnknownOwnerColor, color);
     }
+
+    [Fact]
+    public void UnclaimedColor_DiffersFromUnknownOwnerColor()
+    {
+        Assert.NotEqual(BoardColors.UnknownOwnerColor, BoardColors.UnclaimedColor);
+    }
+
+    [Fact]
+    public void UnclaimedColor_DiffersFromEveryConfiguredPlayerColor()
+    {
+        var players = new Dictionary<PlayerId, PlayerConfig>
+        {
+            [new PlayerId(0)] = new PlayerConfig(new PlayerId(0), "Ana", "#FF0000", false),
+            [new PlayerId(1)] = new PlayerConfig(new PlayerId(1), "Beto", "#00FF00", false)
+        };
+
+        Assert.DoesNotContain(BoardColors.UnclaimedColor, players.Values.Select(p => p.ColorHex));
+    }
 }

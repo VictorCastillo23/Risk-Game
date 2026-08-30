@@ -99,7 +99,7 @@ public class GameSetupTests
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(4, GameMode.Classic));
 
         var counts = ok.State.Territories.Values
-            .GroupBy(t => t.Owner)
+            .GroupBy(t => t.Owner!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
 
         Assert.Equal(4, counts.Count);

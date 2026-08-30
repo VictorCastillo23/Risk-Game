@@ -39,7 +39,7 @@ public sealed record BoardSelection(TerritoryId? Origin, TerritoryId? Destinatio
         {
             TurnPhase.Setup or TurnPhase.Reinforce => isOwn ? new BoardSelection(clicked, null) : this,
             TurnPhase.Attack => ClickTwoStep(clicked, isOwn, isValidDestination: () => !isOwn && WorldMap.AreAdjacent(Origin!.Value, clicked)),
-            TurnPhase.Fortify => ClickTwoStep(clicked, isOwn, isValidDestination: () => isOwn && ConnectivityRules.HasFriendlyPath(state.Territories, state.Territories[Origin!.Value].Owner, Origin!.Value, clicked)),
+            TurnPhase.Fortify => ClickTwoStep(clicked, isOwn, isValidDestination: () => isOwn && ConnectivityRules.HasFriendlyPath(state.Territories, state.Territories[Origin!.Value].Owner!.Value, Origin!.Value, clicked)),
             _ => this
         };
     }

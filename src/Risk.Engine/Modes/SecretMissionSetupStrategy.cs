@@ -39,7 +39,7 @@ public sealed class SecretMissionSetupStrategy : ISetupStrategy
             .ToArray();
 
         var turn = new TurnState(players[0], TurnPhase.Setup);
-        IReadOnlyDictionary<TerritoryId, PlayerId> assignments = territories.ToDictionary(kv => kv.Key, kv => kv.Value.Owner);
+        IReadOnlyDictionary<TerritoryId, PlayerId> assignments = territories.ToDictionary(kv => kv.Key, kv => kv.Value.Owner!.Value);
         var events = new List<GameEvent> { new TerritoriesAssigned(assignments) };
 
         return new GameState(territories, playerStates, turn, Deck.CreateStandard(), events,

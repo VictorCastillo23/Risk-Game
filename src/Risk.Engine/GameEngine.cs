@@ -82,6 +82,7 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         {
             PlaceTroopsCommand place => ExecutePlaceTroops(state, place),
             TradeCardsCommand trade => ExecuteTradeCards(state, trade),
+            ClaimTerritoryCommand claim => ExecuteClaimTerritory(state, claim),
             AttackCommand attack => ExecuteAttack(state, attack),
             OccupyCommand occupy => ExecuteOccupy(state, occupy),
             FortifyCommand fortify => ExecuteFortify(state, fortify),
@@ -109,6 +110,7 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         // (see the mandatory-trade gate in Execute and PR7's resolution of
         // design's open gate-ordering question).
         TradeCardsCommand => null,
+        ClaimTerritoryCommand => TurnPhase.Claim,
         AttackCommand => TurnPhase.Attack,
         OccupyCommand => TurnPhase.Attack,
         FortifyCommand => TurnPhase.Fortify,
@@ -214,6 +216,56 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
     }
 
     /// <summary>
+    /// Claims a previously unowned territory during <see cref="TurnPhase.Claim"/>.
+    /// Deliberately unreachable via any built-in flow today (nothing
+    /// constructs a <see cref="TurnPhase.Claim"/> state yet — see roadmap
+    /// item 2.1) but fully implemented and tested per design D2, so 2.1 only
+    /// has to wire setup/rotation around this handler. Mirrors
+    /// <see cref="ExecutePlaceTroops"/>'s troop-pool accounting (design D3)
+    /// but never advances <c>Turn</c> (design D4).
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> ExecuteClaimTerritory(GameState state, ClaimTerritoryCommand command)
+    {
+        if (!state.Territories.TryGetValue(command.Territory, out var territory))
+        {
+            return Reject(GameErrorCode.NotOwner, "That territory does not exist.");
+        }
+
+        if (territory.Owner is not null)
+        {
+            return Reject(GameErrorCode.NotOwner, "That territory has already been claimed.");
+        }
+
+        var player = state.Players.Single(p => p.Id == command.Actor);
+
+        if (command.Troops < 1 || command.Troops > player.TroopsRemaining)
+        {
+            return Reject(GameErrorCode.InvalidTroopCount, "Troop count must be between 1 and the troops you have remaining.");
+        }
+
+        var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+        {
+            [command.Territory] = territory with { Owner = command.Actor, Troops = command.Troops }
+        };
+
+        var updatedPlayer = player with { TroopsRemaining = player.TroopsRemaining - command.Troops };
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == updatedPlayer.Id ? updatedPlayer : p)
+            .ToArray();
+
+        var events = new List<GameEvent> { new TerritoryClaimed(command.Actor, command.Territory, command.Troops) };
+
+        var newState = state with
+        {
+            Territories = updatedTerritories,
+            Players = updatedPlayers,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
     /// Attempts to remove every card in <paramref name="cards"/> from
     /// <paramref name="hand"/> (by value, one instance per match). Returns
     /// false without mutating anything meaningful if the hand doesn't
@@ -246,6 +298,17 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         if (!state.Territories.TryGetValue(command.To, out var defenderTerritory) || defenderTerritory.Owner == command.Actor)
         {
             return Reject(GameErrorCode.NotOwner, "The target territory must be owned by another player.");
+        }
+
+        // Defensive: no built-in flow reaches this today (see roadmap 1.3),
+        // since GameSetup still deals every territory immediately. Kept
+        // separate from the guard above (design D6) so the two rejection
+        // messages stay distinct, and so the `.Value` unwraps below become
+        // provably unreachable-by-construction rather than a latent
+        // InvalidOperationException once item 2.1 makes Owner: null reachable.
+        if (defenderTerritory.Owner is null)
+        {
+            return Reject(GameErrorCode.NotOwner, "The target territory has not been claimed by anyone yet.");
         }
 
         if (!WorldMap.AreAdjacent(command.From, command.To))
@@ -288,7 +351,7 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         if (remainingDefenderTroops <= 0)
         {
             updatedTerritories[command.To] = new TerritoryState(command.Actor, 0);
-            events.Add(new TerritoryConquered(command.Actor, defenderTerritory.Owner, command.To));
+            events.Add(new TerritoryConquered(command.Actor, defenderTerritory.Owner!.Value, command.To));
             nextTurn = state.Turn with
             {
                 ConqueredThisTurn = true,
@@ -298,7 +361,7 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             var defenderOwnsAnyTerritory = updatedTerritories.Values.Any(t => t.Owner == defenderTerritory.Owner);
             if (!defenderOwnsAnyTerritory)
             {
-                updatedPlayers = EliminatePlayer(state.Players, defenderTerritory.Owner, command.Actor, events);
+                updatedPlayers = EliminatePlayer(state.Players, defenderTerritory.Owner!.Value, command.Actor, events);
 
                 // Arm the overflow mandatory-trade flag immediately if the
                 // transferred cards push the eliminator to 6+ (landing at
