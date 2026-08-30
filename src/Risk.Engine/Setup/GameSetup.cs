@@ -3,6 +3,7 @@ using Risk.Domain.Errors;
 using Risk.Domain.Map;
 using Risk.Domain.Players;
 using Risk.Engine.Events;
+using Risk.Engine.Modes;
 using Risk.Engine.Results;
 using Risk.Engine.State;
 
@@ -16,6 +17,13 @@ namespace Risk.Engine.Setup;
 /// </summary>
 public static class GameSetup
 {
+    /// <summary>
+    /// <see cref="GameMode.SecretMission"/>'s <see cref="ISetupStrategy"/>.
+    /// Static, not constructor-injected, per design D3 — a full mode
+    /// resolver is deferred until a second mode is wired.
+    /// </summary>
+    private static readonly ISetupStrategy SecretMissionSetup = new SecretMissionSetupStrategy();
+
     private static readonly IReadOnlyDictionary<int, int> StartingTroopsByPlayerCount = new Dictionary<int, int>
     {
         [2] = 40,
@@ -54,6 +62,14 @@ public static class GameSetup
         }
 
         var players = Enumerable.Range(0, playerCount).Select(i => new PlayerId(i)).ToArray();
+        var startingTroops = StartingTroopsByPlayerCount[playerCount];
+
+        if (mode == GameMode.SecretMission)
+        {
+            var s = SecretMissionSetup.Create(players, startingTroops);
+            return new CommandResult<GameState, GameEvent>.Ok(s, s.Log);
+        }
+
         var shuffledTerritoryIds = WorldMap.Territories
             .Select(t => t.Id)
             .OrderBy(_ => Random.Shared.Next())
@@ -69,7 +85,6 @@ public static class GameSetup
             ownedCounts[owner.Value]++;
         }
 
-        var startingTroops = StartingTroopsByPlayerCount[playerCount];
         var playerStates = players
             .Select((p, i) => new PlayerState(p, [], false, startingTroops - ownedCounts[i]))
             .ToArray();

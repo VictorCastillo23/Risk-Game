@@ -6,6 +6,7 @@ using Risk.Domain.Players;
 using Risk.Engine.Combat;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
+using Risk.Engine.Modes;
 using Risk.Engine.Results;
 using Risk.Engine.Rules;
 using Risk.Engine.State;
@@ -21,6 +22,13 @@ namespace Risk.Engine;
 public sealed class GameEngine(IDiceRoller dice) : IGameEngine
 {
     private const int MandatoryTradeThreshold = 5;
+
+    /// <summary>
+    /// <see cref="GameMode.SecretMission"/>'s <see cref="IVictoryRule"/>.
+    /// Static, not constructor-injected, per design D3 — a full mode
+    /// resolver is deferred until a second mode is wired.
+    /// </summary>
+    private static readonly IVictoryRule SecretMissionVictory = new SecretMissionVictoryRule();
 
     public CommandResult<GameState, GameEvent> Execute(GameState state, GameCommand command)
     {
@@ -303,11 +311,24 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
                 }
             }
 
-            var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
-            if (attackerOwnsEveryTerritory)
+            if (state.Mode == GameMode.SecretMission)
             {
-                newStatus = new GameStatus.Won(command.Actor);
-                events.Add(new GameWon(command.Actor));
+                var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
+                if (SecretMissionVictory.CheckVictory(postConquest) is { } winner)
+                {
+                    newStatus = new GameStatus.Won(winner);
+                    events.Add(new GameWon(winner));
+                }
+            }
+            else
+            {
+                // Pre-refactor inline check, byte-identical (Classic / TwoPlayer / Capital).
+                var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
+                if (attackerOwnsEveryTerritory)
+                {
+                    newStatus = new GameStatus.Won(command.Actor);
+                    events.Add(new GameWon(command.Actor));
+                }
             }
         }
         else
