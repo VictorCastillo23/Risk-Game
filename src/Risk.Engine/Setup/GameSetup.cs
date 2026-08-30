@@ -31,7 +31,7 @@ public static class GameSetup
     /// unhandled <see cref="GameMode"/> value throws <see cref="SwitchExpressionException"/>
     /// (a programmer error, per this repo's convention) instead of silently
     /// returning a wrong range, and adding a 5th mode without updating this
-    /// switch produces a CS8509 exhaustiveness warning at compile time.
+    /// switch produces a CS8524 exhaustiveness warning at compile time.
     /// </summary>
     private static (int Min, int Max) PlayerCountRange(GameMode mode) => mode switch
     {
