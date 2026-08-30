@@ -19,7 +19,7 @@ namespace Risk.Engine;
 /// check (turn, phase, ownership, troop counts) runs inside <see cref="Execute"/>;
 /// callers never pre-validate.
 /// </summary>
-public sealed class GameEngine(IDiceRoller dice) : IGameEngine
+public sealed class GameEngine : IGameEngine
 {
     private const int MandatoryTradeThreshold = 5;
 
@@ -29,6 +29,30 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
     /// resolver is deferred until a second mode is wired.
     /// </summary>
     private static readonly IVictoryRule SecretMissionVictory = new SecretMissionVictoryRule();
+
+    private readonly IDiceRoller dice;
+    private readonly Func<GameMode, IVictoryRule?> victoryRuleFor;
+
+    public GameEngine(IDiceRoller dice) : this(dice, VictoryRules.For)
+    {
+    }
+
+    /// <summary>
+    /// Test-only seam (item 2.1, design D5): lets <c>Risk.Tests</c> inject an
+    /// instrumented <see cref="IVictoryRule"/> resolver to positively prove
+    /// which <see cref="GameMode"/>s actually route through
+    /// <see cref="ExecuteAttack"/>'s <see cref="IVictoryRule"/> dispatch,
+    /// instead of inferring it from assertions a byte-identical inline
+    /// fallback could also satisfy. The public constructor always delegates
+    /// here with the real <see cref="VictoryRules.For"/> resolver, so
+    /// production/DI callers (<c>GameEngine(IDiceRoller)</c>) see no
+    /// behavior change.
+    /// </summary>
+    internal GameEngine(IDiceRoller dice, Func<GameMode, IVictoryRule?> victoryRuleFor)
+    {
+        this.dice = dice;
+        this.victoryRuleFor = victoryRuleFor;
+    }
 
     public CommandResult<GameState, GameEvent> Execute(GameState state, GameCommand command)
     {
@@ -383,9 +407,22 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
                     events.Add(new GameWon(winner));
                 }
             }
+            else if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
+            {
+                // Classic, via ConquestVictoryRule (item 2.1) — resolved through
+                // VictoryRules.For, not hardcoded, so the test seam (design D5)
+                // can prove this branch is actually reached.
+                var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
+                if (modeVictoryRule.CheckVictory(postConquest) is { } winner)
+                {
+                    newStatus = new GameStatus.Won(winner);
+                    events.Add(new GameWon(winner));
+                }
+            }
             else
             {
-                // Pre-refactor inline check, byte-identical (Classic / TwoPlayer / Capital).
+                // Pre-refactor inline check, byte-identical (TwoPlayer / Capital —
+                // neither has an IVictoryRule yet; VictoryRules.For returns null).
                 var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
                 if (attackerOwnsEveryTerritory)
                 {
