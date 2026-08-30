@@ -21,12 +21,40 @@ internal static class GameStateBuilder
         var state = ok.State;
         var engine = new GameEngine(new QueuedDiceRoller());
 
+        if (state.Turn.Phase == TurnPhase.Claim)
+        {
+            state = CompleteClaimPhase(state, engine);
+        }
+
         while (state.Players.Any(p => p.TroopsRemaining > 0))
         {
             var actor = state.Turn.CurrentPlayer;
             var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
             var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
                 engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1)));
+            state = result.State;
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// Fast-forwards a <see cref="TurnPhase.Claim"/> state through the full
+    /// round-robin claim sequence — one unowned territory per
+    /// <see cref="ClaimTerritoryCommand"/>, in whatever enumeration order
+    /// <see cref="GameState.Territories"/> yields — until every territory is
+    /// owned and the engine transitions to <see cref="TurnPhase.Setup"/>. A
+    /// no-op if <paramref name="state"/> is not currently in
+    /// <see cref="TurnPhase.Claim"/>.
+    /// </summary>
+    public static GameState CompleteClaimPhase(GameState state, GameEngine engine)
+    {
+        while (state.Turn.Phase == TurnPhase.Claim)
+        {
+            var actor = state.Turn.CurrentPlayer;
+            var territory = state.Territories.First(kv => kv.Value.Owner is null).Key;
+            var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+                engine.Execute(state, new ClaimTerritoryCommand(actor, territory, 1)));
             state = result.State;
         }
 
