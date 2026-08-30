@@ -63,6 +63,35 @@ public class MandatoryTradeTests
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
     }
 
+    [Fact]
+    public void Execute_allows_OccupyCommand_even_while_the_mandatory_trade_flag_is_armed()
+    {
+        var actor = new PlayerId(0);
+        var other = new PlayerId(1);
+        IReadOnlyList<Card> hand = [Infantry1, Infantry2, Infantry3, Infantry4, Infantry5];
+        var territories = WorldMap.Territories.ToDictionary(t => t.Id, t => new TerritoryState(actor, 1));
+        var from = new TerritoryId("Alaska");
+        var conquered = new TerritoryId("NorthwestTerritory");
+        territories[from] = new TerritoryState(actor, 3);
+        territories[conquered] = new TerritoryState(actor, 0);
+
+        var pending = new PendingOccupation(from, conquered, 1);
+        var turn = new TurnState(actor, TurnPhase.Attack, PendingOccupation: pending, MandatoryTradeDown: true);
+
+        IReadOnlyList<PlayerState> players =
+        [
+            new PlayerState(actor, hand, false, 0),
+            new PlayerState(other, [], false, 0)
+        ];
+
+        var state = new GameState(territories, players, turn, Deck.CreateStandard(), [], new GameStatus.InProgress());
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var result = engine.Execute(state, new OccupyCommand(actor, 1));
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+    }
+
     private static GameState BuildReinforceReadyState(PlayerId actor, IReadOnlyList<Card> hand, int troopsRemaining)
     {
         var other = new PlayerId(actor.Value + 1);

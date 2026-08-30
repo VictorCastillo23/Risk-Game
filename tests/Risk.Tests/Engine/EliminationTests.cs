@@ -74,6 +74,107 @@ public class EliminationTests
     }
 
     [Fact]
+    public void Execute_does_not_arm_the_mandatory_trade_flag_when_elimination_lands_the_eliminator_at_exactly_five_cards()
+    {
+        var attacker = new PlayerId(0);
+        var defender = new PlayerId(1);
+        IReadOnlyList<Card> attackerHand = [Card(1), Card(2)];
+        IReadOnlyList<Card> defenderHand = [Card(5), Card(6), Card(7)];
+        var state = BuildLastTerritoryAttackState(attacker, defender, attackerHand, defenderHand);
+        var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
+        var engine = new GameEngine(dice);
+
+        var attackResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1)));
+        Assert.Equal(5, attackResult.State.Players.Single(p => p.Id == attacker).Hand.Count); // 2 + 3 transferred
+        Assert.False(attackResult.State.Turn.MandatoryTradeDown);
+
+        var occupyResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(attackResult.State, new OccupyCommand(attacker, 1)));
+
+        // Landing at exactly 5 does not force an immediate trade: a
+        // non-trade command must succeed right away.
+        var next = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(occupyResult.State, new EndPhaseCommand(attacker)));
+        Assert.False(next.State.Turn.MandatoryTradeDown);
+    }
+
+    [Fact]
+    public void Execute_keeps_blocking_through_a_partial_trade_down_until_the_hand_reaches_four_or_fewer_cards()
+    {
+        var attacker = new PlayerId(0);
+        var defender = new PlayerId(1);
+
+        var a1 = new TerritoryCard(new TerritoryId("OverflowA1"), CardSymbol.Infantry);
+        var a2 = new TerritoryCard(new TerritoryId("OverflowA2"), CardSymbol.Cavalry);
+        var a3 = new TerritoryCard(new TerritoryId("OverflowA3"), CardSymbol.Artillery);
+        var a4 = new TerritoryCard(new TerritoryId("OverflowA4"), CardSymbol.Infantry);
+        var a5 = new TerritoryCard(new TerritoryId("OverflowA5"), CardSymbol.Cavalry);
+        var d1 = new TerritoryCard(new TerritoryId("OverflowD1"), CardSymbol.Infantry);
+        var d2 = new TerritoryCard(new TerritoryId("OverflowD2"), CardSymbol.Cavalry);
+        var d3 = new TerritoryCard(new TerritoryId("OverflowD3"), CardSymbol.Artillery);
+
+        IReadOnlyList<Card> attackerHand = [a1, a2, a3, a4, a5];
+        IReadOnlyList<Card> defenderHand = [d1, d2, d3];
+        var state = BuildLastTerritoryAttackState(attacker, defender, attackerHand, defenderHand);
+        var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
+        var engine = new GameEngine(dice);
+
+        var attackResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1)));
+        Assert.Equal(8, attackResult.State.Players.Single(p => p.Id == attacker).Hand.Count); // 5 + 3 transferred
+        Assert.True(attackResult.State.Turn.MandatoryTradeDown);
+
+        var occupyResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(attackResult.State, new OccupyCommand(attacker, 1)));
+
+        var firstTrade = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(occupyResult.State, new TradeCardsCommand(attacker, [a1, a2, a3])));
+        Assert.Equal(5, firstTrade.State.Players.Single(p => p.Id == attacker).Hand.Count);
+        Assert.True(firstTrade.State.Turn.MandatoryTradeDown, "A partial trade-down that still leaves 5 cards must not clear the flag.");
+
+        var stillBlocked = engine.Execute(firstTrade.State, new EndPhaseCommand(attacker));
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(stillBlocked);
+        Assert.Equal(GameErrorCode.MandatoryTradeRequired, rejection.Error.Code);
+
+        var secondTrade = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(firstTrade.State, new TradeCardsCommand(attacker, [a4, a5, d3])));
+        Assert.Equal(2, secondTrade.State.Players.Single(p => p.Id == attacker).Hand.Count);
+        Assert.False(secondTrade.State.Turn.MandatoryTradeDown);
+
+        var unblocked = engine.Execute(secondTrade.State, new EndPhaseCommand(attacker));
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(unblocked);
+    }
+
+    [Fact]
+    public void AdvanceToNextPlayer_clears_the_mandatory_trade_flag_when_rotating_the_turn()
+    {
+        var actor = new PlayerId(0);
+        var other = new PlayerId(1);
+        var territories = WorldMap.Territories.ToDictionary(t => t.Id, t => new TerritoryState(actor, 1));
+
+        IReadOnlyList<PlayerState> players =
+        [
+            new PlayerState(actor, [], false, 0),
+            new PlayerState(other, [], false, 0)
+        ];
+
+        var state = new GameState(
+            territories,
+            players,
+            new TurnState(actor, TurnPhase.Fortify, MandatoryTradeDown: true),
+            Deck.CreateStandard(),
+            [],
+            new GameStatus.InProgress());
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(state, new EndPhaseCommand(actor)));
+
+        Assert.False(result.State.Turn.MandatoryTradeDown);
+    }
+
+    [Fact]
     public void AdvanceToNextPlayer_skips_an_eliminated_player_when_rotating_the_turn()
     {
         var actor = new PlayerId(0);

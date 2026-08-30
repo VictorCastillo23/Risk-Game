@@ -42,13 +42,24 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
         // Mandatory trade-in gate (checked after PendingOccupation so a
         // conquest's occupation is always resolved first, even if the
         // elimination that created it also pushed the actor's hand over the
-        // threshold): merges the "5+ cards at turn start" rule and the
-        // "elimination pushes the eliminator to 6+ cards mid-turn" overflow
-        // rule into one check, since both share the same stop condition
-        // ("until below 5"). OccupyCommand is exempt for the same reason
+        // threshold): two distinct rulebook rules, kept separate because a
+        // single unconditional `count >= threshold` check cannot distinguish
+        // "elimination landed at exactly 5" (never blocks) from "elimination
+        // landed at 8, partially traded down to 5" (must keep blocking) —
+        // both are `count == 5` but require opposite outcomes. The
+        // Reinforce clause only fires at turn start (a hand cannot grow
+        // during Reinforce itself — growth only happens via an elimination
+        // or the Attack→Fortify conquest draw, both in Attack — so `count`
+        // at Reinforce always equals the count carried in at turn start;
+        // this breaks if a future mode grants cards mid-Reinforce or
+        // re-enters Reinforce mid-turn). The overflow clause is driven by
+        // `Turn.MandatoryTradeDown`, armed/cleared in `ExecuteAttack`/
+        // `ExecuteTradeCards`. OccupyCommand is exempt for the same reason
         // the PendingOccupation gate above exempts it.
         var actorHand = state.Players.Single(p => p.Id == command.Actor).Hand;
-        if (actorHand.Count >= MandatoryTradeThreshold && command is not (TradeCardsCommand or OccupyCommand))
+        var mandatoryTradeAtTurnStart = state.Turn.Phase == TurnPhase.Reinforce && actorHand.Count >= MandatoryTradeThreshold;
+        var mandatoryTradeOverflow = state.Turn.MandatoryTradeDown && actorHand.Count >= MandatoryTradeThreshold;
+        if ((mandatoryTradeAtTurnStart || mandatoryTradeOverflow) && command is not (TradeCardsCommand or OccupyCommand))
         {
             return Reject(GameErrorCode.MandatoryTradeRequired, "You must trade in a valid card set before taking further actions.");
         }
@@ -174,10 +185,20 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
 
         var events = new List<GameEvent> { new CardsTraded(command.Actor, command.Cards, bonus) };
 
+        // Clear the overflow mandatory-trade flag only once the trade
+        // leaves the actor at or below the floor (4 cards): a partial
+        // trade-down that still leaves 5+ cards must keep the flag armed so
+        // the gate in Execute keeps blocking non-trade commands through a
+        // multi-trade overflow sequence.
+        var nextTurn = state.Turn.MandatoryTradeDown && remainingHand.Count < MandatoryTradeThreshold
+            ? state.Turn with { MandatoryTradeDown = false }
+            : state.Turn;
+
         var newState = state with
         {
             Players = updatedPlayers,
             TradesCompleted = tradeNumber,
+            Turn = nextTurn,
             Log = [.. state.Log, .. events]
         };
 
@@ -270,6 +291,16 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             if (!defenderOwnsAnyTerritory)
             {
                 updatedPlayers = EliminatePlayer(state.Players, defenderTerritory.Owner, command.Actor, events);
+
+                // Arm the overflow mandatory-trade flag immediately if the
+                // transferred cards push the eliminator to 6+ (landing at
+                // exactly 5 defers to the eliminator's next Reinforce phase
+                // instead — see the invariant comment on TurnState).
+                var eliminatorHandCount = updatedPlayers.Single(p => p.Id == command.Actor).Hand.Count;
+                if (eliminatorHandCount >= MandatoryTradeThreshold + 1)
+                {
+                    nextTurn = nextTurn with { MandatoryTradeDown = true };
+                }
             }
 
             var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;

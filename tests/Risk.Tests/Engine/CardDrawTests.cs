@@ -95,12 +95,52 @@ public class CardDrawTests
         Assert.True(cardDrawnIndex < phaseChangedIndex, "CardDrawn must be emitted before PhaseChanged.");
     }
 
+    [Fact]
+    public void Execute_does_not_arm_the_mandatory_trade_flag_when_a_non_elimination_conquest_draw_reaches_five_cards()
+    {
+        var actor = new PlayerId(0);
+        var next = new PlayerId(1);
+        var deck = Deck.CreateStandard();
+        IReadOnlyList<Card> actorHand =
+        [
+            new TerritoryCard(new TerritoryId("DrawHand1"), CardSymbol.Infantry),
+            new TerritoryCard(new TerritoryId("DrawHand2"), CardSymbol.Cavalry),
+            new TerritoryCard(new TerritoryId("DrawHand3"), CardSymbol.Artillery),
+            new TerritoryCard(new TerritoryId("DrawHand4"), CardSymbol.Infantry)
+        ];
+        var state = BuildAttackPhaseState(actor, next, conqueredThisTurn: true, deck: deck, actorHand: actorHand);
+        var fortifySource = new TerritoryId("Brazil");
+        var fortifyDestination = new TerritoryId("Argentina");
+        state = state with
+        {
+            Territories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+            {
+                [fortifySource] = state.Territories[fortifySource] with { Troops = 2 }
+            }
+        };
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        var endAttack = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(state, new EndPhaseCommand(actor)));
+        Assert.Equal(5, endAttack.State.Players.Single(p => p.Id == actor).Hand.Count);
+        Assert.Equal(TurnPhase.Fortify, endAttack.State.Turn.Phase);
+        Assert.False(endAttack.State.Turn.MandatoryTradeDown);
+
+        var fortify = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(endAttack.State, new FortifyCommand(actor, fortifySource, fortifyDestination, 1)));
+        Assert.False(fortify.State.Turn.MandatoryTradeDown);
+
+        var endFortify = engine.Execute(fortify.State, new EndPhaseCommand(actor));
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(endFortify);
+    }
+
     /// <summary>
     /// Builds a minimal 2-player state where <paramref name="actor"/> is in
     /// the Attack phase and owns every territory except the 6 North
     /// American territories, which belong to <paramref name="next"/>.
     /// </summary>
-    private static GameState BuildAttackPhaseState(PlayerId actor, PlayerId next, bool conqueredThisTurn, IReadOnlyList<Card> deck)
+    private static GameState BuildAttackPhaseState(
+        PlayerId actor, PlayerId next, bool conqueredThisTurn, IReadOnlyList<Card> deck, IReadOnlyList<Card>? actorHand = null)
     {
         TerritoryId[] nextTerritories =
         [
@@ -117,7 +157,7 @@ public class CardDrawTests
 
         IReadOnlyList<PlayerState> players =
         [
-            new PlayerState(actor, [], false, 0),
+            new PlayerState(actor, actorHand ?? [], false, 0),
             new PlayerState(next, [], false, 0)
         ];
 
