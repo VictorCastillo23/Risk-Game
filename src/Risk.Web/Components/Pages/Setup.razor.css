@@ -3,6 +3,7 @@ h1 {
     margin: 0 auto 1rem;
 }
 
+.setup-game-mode,
 .setup-player-count {
     max-width: 700px;
     margin: 0 auto 1rem;

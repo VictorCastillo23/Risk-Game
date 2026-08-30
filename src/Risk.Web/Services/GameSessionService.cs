@@ -1,3 +1,4 @@
+using Risk.Domain.Dice;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
@@ -18,7 +19,7 @@ namespace Risk.Web.Services;
 /// success, and leaves both untouched on rejection so components can
 /// pattern-match one dispatch idiom throughout the UI.
 /// </summary>
-public sealed class GameSessionService(IGameEngine engine)
+public sealed class GameSessionService(IGameEngine engine, IDiceRoller dice)
 {
     public GameState? State { get; private set; }
 
@@ -39,14 +40,13 @@ public sealed class GameSessionService(IGameEngine engine)
     /// </summary>
     /// <param name="rows">The configured players, in seating order.</param>
     /// <param name="mode">
-    /// Defaults to <see cref="GameMode.Classic"/> as a placeholder until a
-    /// mode-selector UI ships (roadmap item 2.2). This is a known, accepted
-    /// temporary regression: Risk.Web currently cannot start a 2-player game,
-    /// since <see cref="GameMode.Classic"/> requires 3-5 players.
+    /// Which <see cref="GameMode"/> to start. Defaults to
+    /// <see cref="GameMode.Classic"/>, matching <c>Setup.razor</c>'s mode
+    /// dropdown default (roadmap item 2.2).
     /// </param>
     public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic)
     {
-        var result = GameSetup.Create(rows.Count, mode);
+        var result = GameSetup.Create(rows.Count, mode, dice);
 
         if (result is CommandResult<GameState, GameEvent>.Ok ok)
         {

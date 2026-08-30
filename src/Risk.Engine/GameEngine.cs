@@ -19,7 +19,7 @@ namespace Risk.Engine;
 /// check (turn, phase, ownership, troop counts) runs inside <see cref="Execute"/>;
 /// callers never pre-validate.
 /// </summary>
-public sealed class GameEngine(IDiceRoller dice) : IGameEngine
+public sealed class GameEngine : IGameEngine
 {
     private const int MandatoryTradeThreshold = 5;
 
@@ -29,6 +29,30 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
     /// resolver is deferred until a second mode is wired.
     /// </summary>
     private static readonly IVictoryRule SecretMissionVictory = new SecretMissionVictoryRule();
+
+    private readonly IDiceRoller dice;
+    private readonly Func<GameMode, IVictoryRule?> victoryRuleFor;
+
+    public GameEngine(IDiceRoller dice) : this(dice, VictoryRules.For)
+    {
+    }
+
+    /// <summary>
+    /// Test-only seam (item 2.1, design D5): lets <c>Risk.Tests</c> inject an
+    /// instrumented <see cref="IVictoryRule"/> resolver to positively prove
+    /// which <see cref="GameMode"/>s actually route through
+    /// <see cref="ExecuteAttack"/>'s <see cref="IVictoryRule"/> dispatch,
+    /// instead of inferring it from assertions a byte-identical inline
+    /// fallback could also satisfy. The public constructor always delegates
+    /// here with the real <see cref="VictoryRules.For"/> resolver, so
+    /// production/DI callers (<c>GameEngine(IDiceRoller)</c>) see no
+    /// behavior change.
+    /// </summary>
+    internal GameEngine(IDiceRoller dice, Func<GameMode, IVictoryRule?> victoryRuleFor)
+    {
+        this.dice = dice;
+        this.victoryRuleFor = victoryRuleFor;
+    }
 
     public CommandResult<GameState, GameEvent> Execute(GameState state, GameCommand command)
     {
@@ -217,12 +241,16 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
 
     /// <summary>
     /// Claims a previously unowned territory during <see cref="TurnPhase.Claim"/>.
-    /// Deliberately unreachable via any built-in flow today (nothing
-    /// constructs a <see cref="TurnPhase.Claim"/> state yet — see roadmap
-    /// item 2.1) but fully implemented and tested per design D2, so 2.1 only
-    /// has to wire setup/rotation around this handler. Mirrors
-    /// <see cref="ExecutePlaceTroops"/>'s troop-pool accounting (design D3)
-    /// but never advances <c>Turn</c> (design D4).
+    /// Mirrors <see cref="ExecutePlaceTroops"/>'s troop-pool accounting
+    /// (design D3), enforces exactly one troop per claim (design D2 — closes
+    /// a deadlock where a player could otherwise exhaust their entire troop
+    /// pool on a single claim and be left with no legal command on their
+    /// next Claim-phase turn), and — reversing item 1.3's design D4 —
+    /// advances <c>Turn</c> via <see cref="AdvanceAfterClaim"/>: round-robin
+    /// rotation while territories remain unclaimed, or a
+    /// <see cref="TurnPhase.Claim"/> → <see cref="TurnPhase.Setup"/>
+    /// transition (at the rotated next player, not a reset to
+    /// <c>players[0]</c>) once the map is full.
     /// </summary>
     private static CommandResult<GameState, GameEvent> ExecuteClaimTerritory(GameState state, ClaimTerritoryCommand command)
     {
@@ -243,6 +271,11 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             return Reject(GameErrorCode.InvalidTroopCount, "Troop count must be between 1 and the troops you have remaining.");
         }
 
+        if (state.Turn.Phase == TurnPhase.Claim && command.Troops != 1)
+        {
+            return Reject(GameErrorCode.InvalidTroopCount, "During Claim, exactly one troop is placed per claim.");
+        }
+
         var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
         {
             [command.Territory] = territory with { Owner = command.Actor, Troops = command.Troops }
@@ -254,15 +287,49 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             .ToArray();
 
         var events = new List<GameEvent> { new TerritoryClaimed(command.Actor, command.Territory, command.Troops) };
+        var nextTurn = AdvanceAfterClaim(state.Turn, state.Players, updatedTerritories, events);
 
         var newState = state with
         {
             Territories = updatedTerritories,
             Players = updatedPlayers,
+            Turn = nextTurn,
             Log = [.. state.Log, .. events]
         };
 
         return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Rotation/transition logic for <see cref="ExecuteClaimTerritory"/>
+    /// (design D1/D3): always rotates to the next player first (plain index,
+    /// no <c>TroopsRemaining</c>/<c>IsEliminated</c> eligibility skip — every
+    /// player is always eligible to claim until territories run out, and D2
+    /// guarantees troops always outlast territories), then checks whether
+    /// <paramref name="territories"/> still has any unowned entry. If so,
+    /// the phase stays <see cref="TurnPhase.Claim"/> at the rotated player
+    /// with no event. If every territory is now owned, this was the final
+    /// claim: transitions to <see cref="TurnPhase.Setup"/> at the rotated
+    /// player (not the claimer, and not a reset to <c>players[0]</c> — the
+    /// rulebook's normal turn-taking continues straight through the phase
+    /// boundary) and emits <see cref="PhaseChanged"/>.
+    /// </summary>
+    private static TurnState AdvanceAfterClaim(
+        TurnState turn,
+        IReadOnlyList<PlayerState> players,
+        IReadOnlyDictionary<TerritoryId, TerritoryState> territories,
+        List<GameEvent> events)
+    {
+        var currentIndex = players.ToList().FindIndex(p => p.Id == turn.CurrentPlayer);
+        var next = players[(currentIndex + 1) % players.Count].Id;
+
+        if (territories.Values.Any(t => t.Owner is null))
+        {
+            return new TurnState(next, TurnPhase.Claim);
+        }
+
+        events.Add(new PhaseChanged(TurnPhase.Claim, TurnPhase.Setup, next));
+        return new TurnState(next, TurnPhase.Setup);
     }
 
     /// <summary>
@@ -300,12 +367,12 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
             return Reject(GameErrorCode.NotOwner, "The target territory must be owned by another player.");
         }
 
-        // Defensive: no built-in flow reaches this today (see roadmap 1.3),
-        // since GameSetup still deals every territory immediately. Kept
-        // separate from the guard above (design D6) so the two rejection
-        // messages stay distinct, and so the `.Value` unwraps below become
-        // provably unreachable-by-construction rather than a latent
-        // InvalidOperationException once item 2.1 makes Owner: null reachable.
+        // Reachable in production since item 2.1: a Classic game that hasn't
+        // finished its Claim phase yet still has unclaimed (Owner: null)
+        // territories. Kept separate from the guard above (design D6) so the
+        // two rejection messages stay distinct, and so the `.Value` unwraps
+        // below are provably unreachable-by-construction rather than a
+        // latent InvalidOperationException.
         if (defenderTerritory.Owner is null)
         {
             return Reject(GameErrorCode.NotOwner, "The target territory has not been claimed by anyone yet.");
@@ -383,9 +450,22 @@ public sealed class GameEngine(IDiceRoller dice) : IGameEngine
                     events.Add(new GameWon(winner));
                 }
             }
+            else if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
+            {
+                // Classic, via ConquestVictoryRule (item 2.1) — resolved through
+                // VictoryRules.For, not hardcoded, so the test seam (design D5)
+                // can prove this branch is actually reached.
+                var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
+                if (modeVictoryRule.CheckVictory(postConquest) is { } winner)
+                {
+                    newStatus = new GameStatus.Won(winner);
+                    events.Add(new GameWon(winner));
+                }
+            }
             else
             {
-                // Pre-refactor inline check, byte-identical (Classic / TwoPlayer / Capital).
+                // Pre-refactor inline check, byte-identical (TwoPlayer / Capital —
+                // neither has an IVictoryRule yet; VictoryRules.For returns null).
                 var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
                 if (attackerOwnsEveryTerritory)
                 {

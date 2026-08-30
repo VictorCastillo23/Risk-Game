@@ -2,6 +2,7 @@
 @using Risk.Domain.Errors
 @using Risk.Engine.Events
 @using Risk.Engine.Results
+@using Risk.Engine.Setup
 @using Risk.Engine.State
 @using Risk.Web.Components.Shared
 @using Risk.Web.Models
@@ -12,6 +13,16 @@
 <PageTitle>Risk — Configurar partida</PageTitle>
 
 <h1>Configurar partida</h1>
+
+<div class="setup-game-mode">
+    <label for="game-mode">Modo de juego</label>
+    <select id="game-mode" @onchange="OnModeChanged">
+        @foreach (var mode in SelectableModes)
+        {
+            <option value="@mode" selected="@(mode == _mode)">@GameModeDisplay.Label(mode)</option>
+        }
+    </select>
+</div>
 
 <div class="setup-player-count">
     <label for="player-count">Cantidad de jugadores</label>
@@ -69,16 +80,37 @@
 <RejectionMessage Error="_error" />
 
 @code {
-    private const int MinPlayers = 2;
-    private const int MaxPlayers = 6;
+    // Only Classic is offered today — TwoPlayer's real ruleset (neutral
+    // third army) isn't implemented until a later roadmap item, so
+    // surfacing it here would be misleading. The <select> element itself
+    // stays present and array-driven so a future item can add more modes
+    // without restructuring this markup.
+    private static readonly GameMode[] SelectableModes = [GameMode.Classic];
 
-    private List<PlayerSetupRow> _rows = BuildRows(MinPlayers);
+    private GameMode _mode = GameMode.Classic;
+
+    private int MinPlayers => GameSetup.PlayerCountRange(_mode).Min;
+    private int MaxPlayers => GameSetup.PlayerCountRange(_mode).Max;
+
+    private List<PlayerSetupRow> _rows = BuildRows(GameSetup.PlayerCountRange(GameMode.Classic).Min);
     private GameError? _error;
 
     private static List<PlayerSetupRow> BuildRows(int count) =>
         Enumerable.Range(0, count)
             .Select(i => new PlayerSetupRow($"Jugador {i + 1}", PlayerPalette.Swatches[i], false))
             .ToList();
+
+    private void OnModeChanged(ChangeEventArgs e)
+    {
+        _mode = Enum.Parse<GameMode>((string)e.Value!);
+
+        if (_rows.Count < MinPlayers || _rows.Count > MaxPlayers)
+        {
+            _rows = BuildRows(Math.Clamp(_rows.Count, MinPlayers, MaxPlayers));
+        }
+
+        _error = null;
+    }
 
     private void OnPlayerCountChanged(ChangeEventArgs e)
     {
@@ -105,7 +137,7 @@
 
     private void OnStart()
     {
-        var result = Session.Start(_rows);
+        var result = Session.Start(_rows, _mode);
 
         switch (result)
         {

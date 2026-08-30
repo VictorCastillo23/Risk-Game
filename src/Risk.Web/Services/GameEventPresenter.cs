@@ -26,6 +26,7 @@ public static class GameEventPresenter
     public static string Describe(GameEvent gameEvent) => gameEvent switch
     {
         TerritoriesAssigned => "Los territorios fueron repartidos entre los jugadores.",
+        TerritoryClaimed e => $"{PlayerLabel(e.Player)} reclamó {e.Territory.Value}.",
         TroopsPlaced e => $"{PlayerLabel(e.Player)} colocó {e.Troops} tropas en {e.Territory.Value}.",
         CardsTraded e => $"{PlayerLabel(e.Actor)} canjeó {e.Cards.Count} cartas por {e.Bonus} tropas.",
         BattleResolved e =>

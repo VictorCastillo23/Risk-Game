@@ -43,9 +43,9 @@
                 {
                     <OccupyPrompt CurrentPlayer="state.Turn.CurrentPlayer" Pending="pendingOccupation" SourceTerritoryTroops="state.Territories[pendingOccupation.From].Troops" />
                 }
-                else if (state.Turn.Phase == TurnPhase.Setup)
+                else if (state.Turn.Phase is TurnPhase.Claim or TurnPhase.Setup)
                 {
-                    <SetupPanel Error="_setupError" />
+                    <SetupPanel Phase="state.Turn.Phase" Error="_placementError" />
                 }
                 else if (state.Turn.Phase == TurnPhase.Reinforce)
                 {
@@ -89,11 +89,12 @@
     // BattleResolved actually occurs.
     private BattleResolved? _lastBattle;
 
-    // Setup places 1 troop per click directly (no select-then-confirm step,
-    // unlike Reinforce which stages several before dispatching) — the
-    // rejection from that direct dispatch is tracked here since SetupPanel
-    // no longer owns any dispatch of its own.
-    private GameError? _setupError;
+    // Claim and Setup both dispatch directly on a single click (no
+    // select-then-confirm step, unlike Reinforce which stages several before
+    // dispatching) — the rejection from that direct dispatch is tracked
+    // here, shared across both phases, since SetupPanel no longer owns any
+    // dispatch of its own.
+    private GameError? _placementError;
 
     protected override void OnInitialized()
     {
@@ -114,7 +115,7 @@
     // While a PendingOccupation gate is active, all board clicks are ignored —
     // mirroring the engine's own OccupationPending rejection as a UX nicety
     // (the engine remains authoritative regardless of what the UI blocks).
-    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Setup, TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
+    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Claim, TurnPhase.Setup, TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
 
     private void OnTerritoryClick(TerritoryId territory)
     {
@@ -122,6 +123,23 @@
 
         if (state is null || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
         {
+            return;
+        }
+
+        if (state.Turn.Phase == TurnPhase.Claim)
+        {
+            if (state.Territories[territory].Owner is not null)
+            {
+                return;
+            }
+
+            var claimResult = Session.Execute(new ClaimTerritoryCommand(state.Turn.CurrentPlayer, territory, 1));
+            _placementError = claimResult switch
+            {
+                CommandResult<GameState, GameEvent>.Ok => null,
+                CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+                _ => _placementError
+            };
             return;
         }
 
@@ -133,11 +151,11 @@
             }
 
             var result = Session.Execute(new PlaceTroopsCommand(state.Turn.CurrentPlayer, territory, 1));
-            _setupError = result switch
+            _placementError = result switch
             {
                 CommandResult<GameState, GameEvent>.Ok => null,
                 CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
-                _ => _setupError
+                _ => _placementError
             };
             return;
         }

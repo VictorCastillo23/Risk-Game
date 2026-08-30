@@ -4,6 +4,7 @@ using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
+using Risk.Engine.Modes;
 using Risk.Engine.Results;
 using Risk.Engine.Setup;
 using Risk.Engine.State;
@@ -27,7 +28,7 @@ public class SecretMissionWiringTests
     [Fact]
     public void GameSetup_Create_produces_a_valid_SecretMission_starting_state()
     {
-        var result = GameSetup.Create(3, GameMode.SecretMission);
+        var result = GameSetup.Create(3, GameMode.SecretMission, QueuedDiceRoller.ForRollOff(3));
 
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         Assert.Equal(GameMode.SecretMission, ok.State.Mode);
@@ -57,7 +58,6 @@ public class SecretMissionWiringTests
     }
 
     [Theory]
-    [InlineData(GameMode.Classic)]
     [InlineData(GameMode.TwoPlayer)]
     [InlineData(GameMode.Capital)]
     public void Other_modes_still_win_via_the_untouched_actor_only_inline_check(GameMode mode)
@@ -75,6 +75,62 @@ public class SecretMissionWiringTests
         Assert.Equal(attacker, won.Winner);
         var gameWon = Assert.Single(ok.Events.OfType<GameWon>());
         Assert.Equal(attacker, gameWon.Winner);
+    }
+
+    /// <summary>
+    /// Positive routing proof (hard requirement, design D5): a Classic win
+    /// alone is NOT sufficient evidence that <see cref="ConquestVictoryRule"/>
+    /// is actually wired, because its logic is byte-identical to the inline
+    /// fallback it replaces — a Classic win test could pass by coincidence
+    /// even if <c>ExecuteAttack</c> never called the rule at all. Injecting a
+    /// <see cref="RecordingVictoryRule"/> via the internal test constructor
+    /// gives positive, observable proof the interface path is live.
+    /// </summary>
+    [Fact]
+    public void Classic_victory_is_routed_through_ConquestVictoryRule()
+    {
+        var attacker = new PlayerId(0);
+        var defender = new PlayerId(1);
+        var state = BuildOneTerritoryFromVictoryState(attacker, defender, GameMode.Classic);
+        var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
+        var recordingRule = new RecordingVictoryRule(new ConquestVictoryRule());
+        Func<GameMode, IVictoryRule?> victoryRuleFor = mode =>
+            mode == GameMode.Classic ? recordingRule : VictoryRules.For(mode);
+        var engine = new GameEngine(dice, victoryRuleFor);
+
+        var result = engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        var won = Assert.IsType<GameStatus.Won>(ok.State.Status);
+        Assert.Equal(attacker, won.Winner);
+        Assert.Equal(1, recordingRule.Calls);
+    }
+
+    /// <summary>
+    /// Negative control for the routing proof above: the very same
+    /// <see cref="RecordingVictoryRule"/> instance, wired into the resolver
+    /// only for <see cref="GameMode.Classic"/>, must see zero calls when a
+    /// TwoPlayer game is won — proving TwoPlayer correctly falls back to the
+    /// untouched inline check instead of also routing through the rule.
+    /// </summary>
+    [Fact]
+    public void TwoPlayer_victory_does_not_route_through_ConquestVictoryRule()
+    {
+        var attacker = new PlayerId(0);
+        var defender = new PlayerId(1);
+        var state = BuildOneTerritoryFromVictoryState(attacker, defender, GameMode.TwoPlayer);
+        var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
+        var recordingRule = new RecordingVictoryRule(new ConquestVictoryRule());
+        Func<GameMode, IVictoryRule?> victoryRuleFor = mode =>
+            mode == GameMode.Classic ? recordingRule : VictoryRules.For(mode);
+        var engine = new GameEngine(dice, victoryRuleFor);
+
+        var result = engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        var won = Assert.IsType<GameStatus.Won>(ok.State.Status);
+        Assert.Equal(attacker, won.Winner);
+        Assert.Equal(0, recordingRule.Calls);
     }
 
     /// <summary>

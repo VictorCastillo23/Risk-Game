@@ -14,7 +14,7 @@ Describe el comportamiento observable de `Risk.Engine` tal como lo consume `Risk
 
 **Flujo principal:**
 1. El jugador agrega entre 2 y 6 filas de jugador (nombre, color).
-2. Confirma el inicio; el sistema llama a `GameSetup.Create(playerCount)`.
+2. Confirma el inicio; el sistema llama a `GameSetup.Create(playerCount, mode, dice)` (la firma requiere un `IDiceRoller` desde el ítem 2.1 del roadmap; solo `GameMode.Classic` lo usa realmente, para el roll-off que decide quién arranca).
 3. El sistema reparte los 42 territorios al azar y de forma pareja entre los jugadores (1 tropa por territorio, orden aleatorio, asignación round-robin).
 4. El sistema calcula el pool de tropas inicial de cada jugador según la cantidad de jugadores (40/35/30/25/20 para 2/3/4/5/6 jugadores) menos los territorios ya recibidos.
 5. El sistema arma el mazo estándar de 44 cartas y el turno inicial en fase `Setup` para el jugador 0.
@@ -22,8 +22,9 @@ Describe el comportamiento observable de `Risk.Engine` tal como lo consume `Risk
 
 **Flujo alternativo:**
 - 2a. Cantidad de jugadores fuera de 2–6 → `InvalidPlayerCount`; la partida no se crea.
+- 2b. `GameMode.Classic` (único modo alcanzable desde el navegador hoy, ítem 1.1/2.1): no hay reparto inicial. Los 42 territorios arrancan sin dueño, cada jugador conserva su pool completo de tropas, y el turno inicial queda en fase `Claim` para el ganador del roll-off (`TurnOrder.DetermineFirst`). Cada `ClaimTerritoryCommand` reclama exactamente un territorio con exactamente 1 tropa y rota al siguiente jugador (round-robin); al reclamarse el territorio 42 la fase pasa a `Setup` (en el jugador rotado, no en `players[0]`) y continúa como el flujo principal desde el paso 6.
 
-**Postcondición:** Existe un `GameState` válido; se registró el evento `TerritoriesAssigned`.
+**Postcondición:** Existe un `GameState` válido. En modos con reparto inicial se registró el evento `TerritoriesAssigned`; en `GameMode.Classic` no se registra ningún evento en la creación (los eventos `TerritoryClaimed`/`PhaseChanged` se emiten a medida que se juega la fase `Claim`).
 
 ## UC-02 — Colocar las tropas iniciales (fase Setup)
 
