@@ -28,7 +28,7 @@ public class SecretMissionWiringTests
     [Fact]
     public void GameSetup_Create_produces_a_valid_SecretMission_starting_state()
     {
-        var result = GameSetup.Create(3, GameMode.SecretMission);
+        var result = GameSetup.Create(3, GameMode.SecretMission, QueuedDiceRoller.ForRollOff(3));
 
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         Assert.Equal(GameMode.SecretMission, ok.State.Mode);

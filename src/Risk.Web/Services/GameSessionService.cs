@@ -1,3 +1,4 @@
+using Risk.Domain.Dice;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
@@ -18,7 +19,7 @@ namespace Risk.Web.Services;
 /// success, and leaves both untouched on rejection so components can
 /// pattern-match one dispatch idiom throughout the UI.
 /// </summary>
-public sealed class GameSessionService(IGameEngine engine)
+public sealed class GameSessionService(IGameEngine engine, IDiceRoller dice)
 {
     public GameState? State { get; private set; }
 
@@ -46,7 +47,7 @@ public sealed class GameSessionService(IGameEngine engine)
     /// </param>
     public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic)
     {
-        var result = GameSetup.Create(rows.Count, mode);
+        var result = GameSetup.Create(rows.Count, mode, dice);
 
         if (result is CommandResult<GameState, GameEvent>.Ok ok)
         {

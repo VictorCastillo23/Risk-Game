@@ -1,14 +1,14 @@
 using Risk.Domain.Dice;
 
-namespace Risk.Tests.Fakes;
+namespace Risk.Web.Tests.Fakes;
 
 /// <summary>
 /// A deterministic <see cref="IDiceRoller"/> driven by a pre-loaded queue of
-/// rolls, so combat tests control exact dice outcomes instead of relying on
-/// real randomness. Each call to <see cref="Roll"/> dequeues the next queued
-/// roll; it throws if the queue is exhausted or if the queued roll's size
-/// doesn't match the requested count, surfacing test setup mistakes
-/// immediately instead of silently returning the wrong data.
+/// rolls. Mirrors <c>Risk.Tests.Fakes.QueuedDiceRoller</c> exactly (that
+/// type is <c>internal</c> to <c>Risk.Tests</c>, a separate assembly with no
+/// <c>InternalsVisibleTo</c>, so it cannot be shared directly) — same shape,
+/// same codebase convention as <see cref="AlwaysAttackerWinsDiceRoller"/>
+/// (<c>Risk.Web.Tests/Fakes/</c> mirrors <c>Risk.Tests/Fakes/</c>).
 /// </summary>
 internal sealed class QueuedDiceRoller : IDiceRoller
 {
@@ -18,9 +18,8 @@ internal sealed class QueuedDiceRoller : IDiceRoller
     /// Builds a <see cref="QueuedDiceRoller"/> pre-loaded with a tie-free,
     /// strictly descending roll-off sequence (6, 5, 4, 3, 2, ...) — one
     /// single-die roll per candidate — so <c>TurnOrder.DetermineFirst</c>
-    /// always resolves in exactly one round with player 0 winning. Callers
-    /// that need a specific (non-player-0) winner should build their own
-    /// queue instead. Supports at most 5 players (Risk's max legal count).
+    /// always resolves in exactly one round with player 0 winning. Supports
+    /// at most 5 players (Risk's max legal count).
     /// </summary>
     public static QueuedDiceRoller ForRollOff(int playerCount)
     {

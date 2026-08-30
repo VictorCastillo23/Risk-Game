@@ -16,7 +16,8 @@ internal static class GameStateBuilder
 {
     public static GameState CompleteSetup(int playerCount, GameMode mode = GameMode.TwoPlayer)
     {
-        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(playerCount, mode));
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
         var state = ok.State;
         var engine = new GameEngine(new QueuedDiceRoller());
 

@@ -1,4 +1,5 @@
 using Risk.Domain.Cards;
+using Risk.Domain.Dice;
 using Risk.Domain.Errors;
 using Risk.Domain.Map;
 using Risk.Domain.Players;
@@ -47,7 +48,15 @@ public static class GameSetup
         GameMode.Classic or GameMode.SecretMission or GameMode.Capital => (3, 5)
     };
 
-    public static CommandResult<GameState, GameEvent> Create(int playerCount, GameMode mode)
+    /// <param name="playerCount">How many players are seated.</param>
+    /// <param name="mode">Which mode's setup rules apply.</param>
+    /// <param name="dice">
+    /// The dice source, required (no ambient <see cref="Random"/>) per this
+    /// repo's convention. Only <see cref="GameMode.Classic"/> actually rolls
+    /// it (via <c>TurnOrder.DetermineFirst</c>, to pick the Claim-phase
+    /// starting player); every other mode ignores it.
+    /// </param>
+    public static CommandResult<GameState, GameEvent> Create(int playerCount, GameMode mode, IDiceRoller dice)
     {
         var (min, max) = PlayerCountRange(mode);
 
@@ -70,15 +79,37 @@ public static class GameSetup
             return new CommandResult<GameState, GameEvent>.Ok(s, s.Log);
         }
 
-        // Classic/TwoPlayer/Capital fall through to this same random-equitable
+        if (mode == GameMode.Classic)
+        {
+            // Classic starts with every territory unclaimed (Claim phase) —
+            // no upfront deal, so nobody's pool is deducted yet. The dice
+            // roll-off (TurnOrder.DetermineFirst) picks who claims/places
+            // first, matching the classic rulebook's opening ritual.
+            var unclaimedTerritories = WorldMap.Territories
+                .ToDictionary(t => t.Id, _ => new TerritoryState(Owner: null, Troops: 0));
+
+            var classicPlayerStates = players
+                .Select(p => new PlayerState(p, [], false, startingTroops))
+                .ToArray();
+
+            var firstPlayer = TurnOrder.DetermineFirst(players, dice);
+            var claimTurn = new TurnState(firstPlayer, TurnPhase.Claim);
+
+            var classicState = new GameState(unclaimedTerritories, classicPlayerStates, claimTurn,
+                Deck.CreateStandard(), [], new GameStatus.InProgress(), Mode: mode);
+
+            return new CommandResult<GameState, GameEvent>.Ok(classicState, []);
+        }
+
+        // TwoPlayer/Capital fall through to this same random-equitable
         // deal as SecretMission today — deliberately NOT routed through
         // SecretMissionSetup, and deliberately not de-duplicated against it.
-        // Each of these three modes gets its own real ISetupStrategy in a
-        // later roadmap item (2.1/4.1/5.1) with genuinely different setup
-        // rules (Classic/Capital claim territories one at a time instead of
-        // an upfront random deal; TwoPlayer splits into a 3-way deal with a
-        // neutral army) — extracting a shared helper now would tie this
-        // temporary duplication to logic that's about to diverge per mode.
+        // Each of these two modes gets its own real ISetupStrategy in a
+        // later roadmap item (4.1/5.1) with genuinely different setup rules
+        // (Capital claims territories one at a time instead of an upfront
+        // random deal; TwoPlayer splits into a 3-way deal with a neutral
+        // army) — extracting a shared helper now would tie this temporary
+        // duplication to logic that's about to diverge per mode.
         var shuffledTerritoryIds = WorldMap.Territories
             .Select(t => t.Id)
             .OrderBy(_ => Random.Shared.Next())

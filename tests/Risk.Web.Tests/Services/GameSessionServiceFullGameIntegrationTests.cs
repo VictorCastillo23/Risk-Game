@@ -34,7 +34,10 @@ public class GameSessionServiceFullGameIntegrationTests
     public void A_full_two_player_game_reaches_victory_through_GameSessionService()
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine);
+        // TwoPlayer mode never rolls the setup dice (TurnOrder.DetermineFirst
+        // is only invoked for Classic), so reusing the combat roller here is
+        // safe and avoids introducing an unused third fake.
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller());
         var changedCount = 0;
         session.Changed += () => changedCount++;
 

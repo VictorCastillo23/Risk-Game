@@ -22,7 +22,7 @@ public class GameSessionServiceTests
     [Fact]
     public void Start_WithValidRows_SetsStateAndPlayersAndRaisesChanged()
     {
-        var session = new GameSessionService(new FakeGameEngine());
+        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
         var raised = false;
         session.Changed += () => raised = true;
 
@@ -39,7 +39,9 @@ public class GameSessionServiceTests
     [Fact]
     public void Start_WithInvalidPlayerCount_LeavesStateNullAndDoesNotRaiseChanged()
     {
-        var session = new GameSessionService(new FakeGameEngine());
+        // Rejected before dice is ever touched (1 player is illegal for the
+        // default Classic mode), so an empty roller is safe here.
+        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
         var raised = false;
         session.Changed += () => raised = true;
 
@@ -55,7 +57,7 @@ public class GameSessionServiceTests
     public void Execute_Ok_MutatesStateAndRaisesChanged()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine);
+        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(2));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         var stateAfterStart = session.State!;
         var newState = stateAfterStart with { TradesCompleted = 1 };
@@ -76,7 +78,7 @@ public class GameSessionServiceTests
     public void Execute_Rejected_LeavesStateUnchangedAndDoesNotRaiseChanged()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine);
+        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(2));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         var stateAfterStart = session.State!;
         engine.ExecuteResult = new CommandResult<GameState, GameEvent>.Rejected(
@@ -94,7 +96,7 @@ public class GameSessionServiceTests
     [Fact]
     public void Reset_ClearsState()
     {
-        var session = new GameSessionService(new FakeGameEngine());
+        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
 
         session.Reset();
@@ -117,7 +119,7 @@ public class GameSessionServiceTests
                 PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
                 false))
             .ToArray();
-        var session = new GameSessionService(new FakeGameEngine());
+        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(playerCount));
 
         var result = session.Start(rows, mode);
 
@@ -139,7 +141,9 @@ public class GameSessionServiceTests
                 PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
                 false))
             .ToArray();
-        var session = new GameSessionService(new FakeGameEngine());
+        // Rejected before dice is ever touched (6 players is illegal for
+        // Classic), so an empty roller is safe here.
+        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
 
         var result = session.Start(rows, GameMode.Classic);
 
