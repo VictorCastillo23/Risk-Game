@@ -37,9 +37,16 @@ public sealed class GameSessionService(IGameEngine engine)
     /// <paramref name="rows"/> to the implicit <c>PlayerId(0..N-1)</c>
     /// order that <see cref="GameSetup.Create"/> assigns.
     /// </summary>
-    public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows)
+    /// <param name="rows">The configured players, in seating order.</param>
+    /// <param name="mode">
+    /// Defaults to <see cref="GameMode.Classic"/> as a placeholder until a
+    /// mode-selector UI ships (roadmap item 2.2). This is a known, accepted
+    /// temporary regression: Risk.Web currently cannot start a 2-player game,
+    /// since <see cref="GameMode.Classic"/> requires 3-5 players.
+    /// </param>
+    public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic)
     {
-        var result = GameSetup.Create(rows.Count);
+        var result = GameSetup.Create(rows.Count, mode);
 
         if (result is CommandResult<GameState, GameEvent>.Ok ok)
         {

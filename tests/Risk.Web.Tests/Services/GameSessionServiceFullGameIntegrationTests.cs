@@ -43,7 +43,7 @@ public class GameSessionServiceFullGameIntegrationTests
             new("Ana", "#E53935", false),
             new("Beto", "#1E88E5", false)
         };
-        var startResult = session.Start(rows);
+        var startResult = session.Start(rows, GameMode.TwoPlayer);
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(startResult);
 
         var attacker = session.State!.Turn.CurrentPlayer; // player 0 is always dealt the first turn

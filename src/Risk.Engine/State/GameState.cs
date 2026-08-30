@@ -18,4 +18,5 @@ public sealed record GameState(
     IReadOnlyList<Card> Deck,
     IReadOnlyList<GameEvent> Log,
     GameStatus Status,
-    int TradesCompleted = 0);
+    int TradesCompleted = 0,
+    GameMode Mode = GameMode.Classic);

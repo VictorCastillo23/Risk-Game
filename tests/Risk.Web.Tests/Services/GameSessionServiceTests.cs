@@ -26,7 +26,7 @@ public class GameSessionServiceTests
         var raised = false;
         session.Changed += () => raised = true;
 
-        var result = session.Start(TwoValidRows);
+        var result = session.Start(TwoValidRows, GameMode.TwoPlayer);
 
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         Assert.True(session.IsStarted);
@@ -56,7 +56,7 @@ public class GameSessionServiceTests
     {
         var engine = new FakeGameEngine();
         var session = new GameSessionService(engine);
-        session.Start(TwoValidRows);
+        session.Start(TwoValidRows, GameMode.TwoPlayer);
         var stateAfterStart = session.State!;
         var newState = stateAfterStart with { TradesCompleted = 1 };
         engine.ExecuteResult = new CommandResult<GameState, GameEvent>.Ok(newState, []);
@@ -77,7 +77,7 @@ public class GameSessionServiceTests
     {
         var engine = new FakeGameEngine();
         var session = new GameSessionService(engine);
-        session.Start(TwoValidRows);
+        session.Start(TwoValidRows, GameMode.TwoPlayer);
         var stateAfterStart = session.State!;
         engine.ExecuteResult = new CommandResult<GameState, GameEvent>.Rejected(
             new GameError(GameErrorCode.NotYourTurn, "not your turn"));
@@ -95,7 +95,7 @@ public class GameSessionServiceTests
     public void Reset_ClearsState()
     {
         var session = new GameSessionService(new FakeGameEngine());
-        session.Start(TwoValidRows);
+        session.Start(TwoValidRows, GameMode.TwoPlayer);
 
         session.Reset();
 
@@ -105,12 +105,11 @@ public class GameSessionServiceTests
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    [InlineData(6)]
-    public void Start_ZipsRowsToPlayerIdInOrder_ForEveryValidPlayerCount(int playerCount)
+    [InlineData(GameMode.TwoPlayer, 2)]
+    [InlineData(GameMode.Classic, 3)]
+    [InlineData(GameMode.Classic, 4)]
+    [InlineData(GameMode.Classic, 5)]
+    public void Start_ZipsRowsToPlayerIdInOrder_ForEveryValidPlayerCount(GameMode mode, int playerCount)
     {
         var rows = Enumerable.Range(0, playerCount)
             .Select(i => new PlayerSetupRow(
@@ -120,7 +119,7 @@ public class GameSessionServiceTests
             .ToArray();
         var session = new GameSessionService(new FakeGameEngine());
 
-        var result = session.Start(rows);
+        var result = session.Start(rows, mode);
 
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         for (var i = 0; i < playerCount; i++)
@@ -129,5 +128,22 @@ public class GameSessionServiceTests
             Assert.Equal(rows[i].Name, config.Name);
             Assert.Equal(rows[i].ColorHex, config.ColorHex);
         }
+    }
+
+    [Fact]
+    public void Start_RejectsSixPlayersUnderClassicMode()
+    {
+        var rows = Enumerable.Range(0, 6)
+            .Select(i => new PlayerSetupRow(
+                $"Player{i}",
+                PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
+                false))
+            .ToArray();
+        var session = new GameSessionService(new FakeGameEngine());
+
+        var result = session.Start(rows, GameMode.Classic);
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidPlayerCount, rejection.Error.Code);
     }
 }

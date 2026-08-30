@@ -8,4 +8,4 @@ namespace Risk.Engine.State;
 /// troops they still need to place (starting troops during Setup, or the
 /// current turn's reinforcement during Reinforce).
 /// </summary>
-public sealed record PlayerState(PlayerId Id, IReadOnlyList<Card> Hand, bool IsEliminated, int TroopsRemaining);
+public sealed record PlayerState(PlayerId Id, IReadOnlyList<Card> Hand, bool IsEliminated, int TroopsRemaining, bool IsNeutral = false);

@@ -14,9 +14,9 @@ namespace Risk.Tests.Fakes;
 /// </summary>
 internal static class GameStateBuilder
 {
-    public static GameState CompleteSetup(int playerCount)
+    public static GameState CompleteSetup(int playerCount, GameMode mode = GameMode.TwoPlayer)
     {
-        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(playerCount));
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(playerCount, mode));
         var state = ok.State;
         var engine = new GameEngine(new QueuedDiceRoller());
 

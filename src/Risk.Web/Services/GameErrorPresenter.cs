@@ -26,7 +26,7 @@ public static class GameErrorPresenter
         GameErrorCode.FortifyAlreadyUsed => "Ya moviste tropas este turno.",
         GameErrorCode.NoFriendlyPath => "No hay un camino propio entre esos territorios.",
         GameErrorCode.GameOver => "La partida ya terminó.",
-        GameErrorCode.InvalidPlayerCount => "La cantidad de jugadores debe estar entre 2 y 6.",
+        GameErrorCode.InvalidPlayerCount => "La cantidad de jugadores no es válida para el modo de juego elegido.",
         GameErrorCode.InvalidTroopCount => "La cantidad de tropas indicada no es válida.",
         GameErrorCode.NoPendingOccupation => "No hay ninguna ocupación pendiente de confirmar.",
         GameErrorCode.ReinforcementIncomplete => "Todavía te quedan tropas de refuerzo por colocar.",

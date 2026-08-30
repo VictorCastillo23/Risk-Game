@@ -45,7 +45,7 @@ public class FullGameIntegrationTests
     public void A_full_two_player_game_reaches_victory_through_the_public_command_pipeline()
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var setupOk = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(2));
+        var setupOk = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(GameSetup.Create(2, GameMode.TwoPlayer));
         var state = setupOk.State;
         var attacker = state.Turn.CurrentPlayer; // player 0 is always dealt the first turn
 
