@@ -246,6 +246,19 @@ public class TwoPlayerSetupTests
     }
 
     [Fact]
+    public void PlaceTroopsCommand_rejects_during_Phase_B_since_the_actors_own_pool_is_already_empty()
+    {
+        var (state, engine) = StartPhaseB();
+        var actor = state.Turn.CurrentPlayer;
+        var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+        var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidTroopCount, rejection.Error.Code);
+    }
+
+    [Fact]
     public void PlaceNeutralTroopsCommand_rejects_during_Phase_A()
     {
         var (state, engine) = StartPhaseA();
