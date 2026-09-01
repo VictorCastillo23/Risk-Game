@@ -24,6 +24,7 @@ public class SecretMissionWiringTests
 {
     private static readonly TerritoryId Alaska = new("Alaska");
     private static readonly TerritoryId NorthwestTerritory = new("NorthwestTerritory"); // adjacent to Alaska
+    private static readonly TerritoryId Kamchatka = new("Kamchatka"); // far from Alaska/NorthwestTerritory; used as the neutral's holdout
 
     [Fact]
     public void GameSetup_Create_produces_a_valid_SecretMission_starting_state()
@@ -58,7 +59,6 @@ public class SecretMissionWiringTests
     }
 
     [Theory]
-    [InlineData(GameMode.TwoPlayer)]
     [InlineData(GameMode.Capital)]
     public void Other_modes_still_win_via_the_untouched_actor_only_inline_check(GameMode mode)
     {
@@ -107,22 +107,30 @@ public class SecretMissionWiringTests
     }
 
     /// <summary>
-    /// Negative control for the routing proof above: the very same
-    /// <see cref="RecordingVictoryRule"/> instance, wired into the resolver
-    /// only for <see cref="GameMode.Classic"/>, must see zero calls when a
-    /// TwoPlayer game is won — proving TwoPlayer correctly falls back to the
-    /// untouched inline check instead of also routing through the rule.
+    /// Positive routing proof for <see cref="GameMode.TwoPlayer"/> (item 4.3),
+    /// mirroring <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>:
+    /// a TwoPlayer win alone is not sufficient evidence that
+    /// <see cref="TwoPlayerVictoryRule"/> is actually wired, because a
+    /// same-shaped 2-humans-only state (no neutral) would also satisfy
+    /// <see cref="ConquestVictoryRule"/>'s "owns everything" check by
+    /// coincidence. Building the state with a neutral player that still owns
+    /// territory when the second human is eliminated, and asserting the
+    /// <see cref="RecordingVictoryRule"/>'s call count, gives positive,
+    /// observable proof that <c>ExecuteAttack</c> reaches
+    /// <see cref="TwoPlayerVictoryRule"/> via branch 2 — not the branch-3
+    /// inline fallback, and not <see cref="ConquestVictoryRule"/>.
     /// </summary>
     [Fact]
-    public void TwoPlayer_victory_does_not_route_through_ConquestVictoryRule()
+    public void TwoPlayer_victory_is_routed_through_TwoPlayerVictoryRule()
     {
         var attacker = new PlayerId(0);
         var defender = new PlayerId(1);
-        var state = BuildOneTerritoryFromVictoryState(attacker, defender, GameMode.TwoPlayer);
+        var neutral = new PlayerId(2);
+        var state = BuildTwoPlayerOneTerritoryFromVictoryState(attacker, defender, neutral);
         var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
-        var recordingRule = new RecordingVictoryRule(new ConquestVictoryRule());
+        var recordingRule = new RecordingVictoryRule(new TwoPlayerVictoryRule());
         Func<GameMode, IVictoryRule?> victoryRuleFor = mode =>
-            mode == GameMode.Classic ? recordingRule : VictoryRules.For(mode);
+            mode == GameMode.TwoPlayer ? recordingRule : VictoryRules.For(mode);
         var engine = new GameEngine(dice, victoryRuleFor);
 
         var result = engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1));
@@ -130,7 +138,7 @@ public class SecretMissionWiringTests
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         var won = Assert.IsType<GameStatus.Won>(ok.State.Status);
         Assert.Equal(attacker, won.Winner);
-        Assert.Equal(0, recordingRule.Calls);
+        Assert.Equal(1, recordingRule.Calls);
     }
 
     /// <summary>
@@ -160,5 +168,41 @@ public class SecretMissionWiringTests
 
         return new GameState(
             territories, players, new TurnState(attacker, TurnPhase.Attack), Deck.CreateStandard(), [], new GameStatus.InProgress(), Mode: mode);
+    }
+
+    /// <summary>
+    /// TwoPlayer-shaped variant of <see cref="BuildOneTerritoryFromVictoryState"/>
+    /// (design D4): 2 humans + 1 <see cref="PlayerState.IsNeutral"/> player.
+    /// <paramref name="attacker"/> owns every territory except
+    /// <see cref="NorthwestTerritory"/> (the defender's sole remaining
+    /// territory) and <see cref="Kamchatka"/> (owned by the neutral, who
+    /// keeps it through and after this attack) — so this conquest both
+    /// eliminates the defender and wins the game, while the neutral still
+    /// holds territory, proving <see cref="TwoPlayerVictoryRule"/>'s
+    /// elimination-based check rather than a territory-count check.
+    /// </summary>
+    private static GameState BuildTwoPlayerOneTerritoryFromVictoryState(PlayerId attacker, PlayerId defender, PlayerId neutral)
+    {
+        var territories = new Dictionary<TerritoryId, TerritoryState>();
+        foreach (var territory in WorldMap.Territories)
+        {
+            territories[territory.Id] = territory.Id switch
+            {
+                _ when territory.Id == NorthwestTerritory => new TerritoryState(defender, 1),
+                _ when territory.Id == Kamchatka => new TerritoryState(neutral, 1),
+                _ => new TerritoryState(attacker, 1)
+            };
+        }
+        territories[Alaska] = new TerritoryState(attacker, 4);
+
+        IReadOnlyList<PlayerState> players =
+        [
+            new PlayerState(attacker, [], false, 0),
+            new PlayerState(defender, [], false, 0),
+            new PlayerState(neutral, [], false, 0, IsNeutral: true)
+        ];
+
+        return new GameState(
+            territories, players, new TurnState(attacker, TurnPhase.Attack), Deck.CreateStandard(), [], new GameStatus.InProgress(), Mode: GameMode.TwoPlayer);
     }
 }
