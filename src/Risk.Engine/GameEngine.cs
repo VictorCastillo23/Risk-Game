@@ -61,6 +61,17 @@ public sealed class GameEngine : IGameEngine
             return Reject(GameErrorCode.GameOver, "The game has already ended.");
         }
 
+        // Item 4.2/D1: checked before the actor-is-current-player check
+        // below. The neutral (TwoPlayer's third army) is not "out of turn"
+        // — it can never legitimately act at all, so the diagnostic must say
+        // so precisely rather than falling through to NotYourTurn. Uses a
+        // non-throwing existence check (not Single) because actor validity
+        // is not yet established at this point in the pipeline.
+        if (state.Players.Any(p => p.Id == command.Actor && p.IsNeutral))
+        {
+            return Reject(GameErrorCode.ActorIsNeutral, "The neutral army cannot issue commands.");
+        }
+
         if (command.Actor != state.Turn.CurrentPlayer)
         {
             return Reject(GameErrorCode.NotYourTurn, "It is not your turn.");
@@ -814,16 +825,22 @@ public sealed class GameEngine : IGameEngine
     }
 
     /// <summary>
-    /// The next non-eliminated player after <paramref name="fromIndex"/>,
+    /// The next non-eliminated, non-neutral player after <paramref name="fromIndex"/>,
     /// wrapping around the player list. Eliminated players are skipped so
     /// the turn cycle never lands on someone with no territories left.
+    /// Neutral players (<see cref="PlayerState.IsNeutral"/>, item 4.1's
+    /// <see cref="GameMode.TwoPlayer"/> third army) are skipped too (item
+    /// 4.2/D1): the neutral is a board object, not an agent, and must never
+    /// become <see cref="TurnState.CurrentPlayer"/> nor receive reinforcement
+    /// via <see cref="AdvanceToNextPlayer"/>'s unconditional
+    /// <see cref="Reinforcement.Calculate"/> call.
     /// </summary>
     private static PlayerState NextActivePlayer(IReadOnlyList<PlayerState> players, int fromIndex)
     {
         for (var offset = 1; offset <= players.Count; offset++)
         {
             var candidate = players[(fromIndex + offset) % players.Count];
-            if (!candidate.IsEliminated)
+            if (!candidate.IsEliminated && !candidate.IsNeutral)
             {
                 return candidate;
             }
