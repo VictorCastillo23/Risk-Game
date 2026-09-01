@@ -50,4 +50,22 @@ public class BoardColorsTests
 
         Assert.DoesNotContain(BoardColors.UnclaimedColor, players.Values.Select(p => p.ColorHex));
     }
+
+    [Fact]
+    public void NeutralColor_DiffersFromUnknownOwnerColor()
+    {
+        Assert.NotEqual(BoardColors.UnknownOwnerColor, BoardColors.NeutralColor);
+    }
+
+    [Fact]
+    public void NeutralColor_DiffersFromUnclaimedColor()
+    {
+        Assert.NotEqual(BoardColors.UnclaimedColor, BoardColors.NeutralColor);
+    }
+
+    [Fact]
+    public void NeutralColor_IsNotInThePlayerPalette()
+    {
+        Assert.DoesNotContain(BoardColors.NeutralColor, PlayerPalette.Swatches);
+    }
 }
