@@ -45,7 +45,7 @@
                 }
                 else if (state.Turn.Phase is TurnPhase.Claim or TurnPhase.Setup)
                 {
-                    <SetupPanel Phase="state.Turn.Phase" Error="_placementError" />
+                    <SetupPanel Phase="state.Turn.Phase" Error="_placementError" IsPhaseB="TwoPlayerSetupPhase.IsPhaseB(state)" />
                 }
                 else if (state.Turn.Phase == TurnPhase.Reinforce)
                 {
@@ -145,6 +145,22 @@
 
         if (state.Turn.Phase == TurnPhase.Setup)
         {
+            // Design D3: Phase B dispatches unconditionally, no Web-side
+            // owner pre-filter — the engine's own NotOwner rejection on a
+            // non-neutral territory IS the feedback (SetupPanel renders a
+            // Phase-B-specific message for it).
+            if (TwoPlayerSetupPhase.IsPhaseB(state))
+            {
+                var neutralResult = Session.Execute(new PlaceNeutralTroopsCommand(state.Turn.CurrentPlayer, territory, 1));
+                _placementError = neutralResult switch
+                {
+                    CommandResult<GameState, GameEvent>.Ok => null,
+                    CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+                    _ => _placementError
+                };
+                return;
+            }
+
             if (state.Territories[territory].Owner != state.Turn.CurrentPlayer)
             {
                 return;
