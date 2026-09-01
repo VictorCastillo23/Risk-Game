@@ -224,7 +224,7 @@ public class TwoPlayerSetupTests
         var result = engine.Execute(state, new PlaceNeutralTroopsCommand(neutral.Id, territory, 1));
 
         var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
-        Assert.Equal(GameErrorCode.NotYourTurn, rejection.Error.Code);
+        Assert.Equal(GameErrorCode.ActorIsNeutral, rejection.Error.Code);
     }
 
     [Fact]
