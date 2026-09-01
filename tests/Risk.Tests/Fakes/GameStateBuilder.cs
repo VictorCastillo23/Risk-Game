@@ -26,17 +26,39 @@ internal static class GameStateBuilder
             state = CompleteClaimPhase(state, engine);
         }
 
-        // Excludes the neutral third party (item 4.1): PR2's per-turn budget
-        // generalization keeps the neutral out of Phase A's rotation entirely
-        // (PlaceNeutralTroopsCommand/Phase B is PR3's scope), so a bare
-        // Troops:1 loop that still watched the neutral's pool would never
-        // terminate. This still drains Setup for every non-neutral player
-        // AND their first Reinforce-phase pool (the loop naturally continues
+        // Excludes the neutral third party (item 4.1) from the loop's own
+        // completion condition — the neutral never becomes CurrentPlayer, so
+        // watching its pool here would spin forever once it's the only pool
+        // left. This still drains Setup for every non-neutral player AND
+        // their first Reinforce-phase pool (the loop naturally continues
         // past the Setup->Reinforce transition since Phase's own guard
         // doesn't gate this loop), matching this helper's existing contract.
-        while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
+        //
+        // TwoPlayer-aware (item 4.1 PR3): the loop must also keep running
+        // for as long as Setup itself is still active (`Phase == Setup`),
+        // not just while a non-neutral pool is nonzero — otherwise it stops
+        // dead the instant both humans hit 0 (Phase A's end), which is
+        // exactly the moment TwoPlayer's Phase B opens, with the neutral's
+        // pool (26) still fully unplaced. Once a human's own Setup pool is
+        // drained while Setup is still active, that's Phase B: place via
+        // PlaceNeutralTroopsCommand instead, same pattern as
+        // GameSimulation.PlaceOneStartingTroop.
+        while (state.Turn.Phase == TurnPhase.Setup
+            || state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
         {
             var actor = state.Turn.CurrentPlayer;
+            var actorPool = state.Players.Single(p => p.Id == actor).TroopsRemaining;
+
+            if (state.Turn.Phase == TurnPhase.Setup && actorPool == 0)
+            {
+                var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+                var neutralTerritory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+                var neutralResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+                    engine.Execute(state, new PlaceNeutralTroopsCommand(actor, neutralTerritory, 1)));
+                state = neutralResult.State;
+                continue;
+            }
+
             var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
             var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
                 engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1)));

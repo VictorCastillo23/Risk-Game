@@ -105,6 +105,7 @@ public sealed class GameEngine : IGameEngine
         return command switch
         {
             PlaceTroopsCommand place => ExecutePlaceTroops(state, place),
+            PlaceNeutralTroopsCommand placeNeutral => ExecutePlaceNeutralTroops(state, placeNeutral),
             TradeCardsCommand trade => ExecuteTradeCards(state, trade),
             ClaimTerritoryCommand claim => ExecuteClaimTerritory(state, claim),
             AttackCommand attack => ExecuteAttack(state, attack),
@@ -128,6 +129,11 @@ public sealed class GameEngine : IGameEngine
     private static TurnPhase? RequiredPhaseFor(GameCommand command) => command switch
     {
         PlaceTroopsCommand => null,
+        // Only legal during Setup; the finer-grained "is this actually
+        // Phase B" condition is derived state, not a simple phase check, so
+        // it is enforced inside ExecutePlaceNeutralTroops (design D3) rather
+        // than here.
+        PlaceNeutralTroopsCommand => TurnPhase.Setup,
         // Trading is phase-agnostic: it can be a voluntary Reinforce-phase
         // action (bonus troops land in the current/next Reinforce pool) or a
         // mandatory overflow trade-down forced mid-Attack by an elimination
@@ -170,6 +176,72 @@ public sealed class GameEngine : IGameEngine
     /// </summary>
     private static int SetupBudgetRemaining(int troopsRemaining, int perTurn) =>
         troopsRemaining % perTurn is 0 ? perTurn : troopsRemaining % perTurn;
+
+    /// <summary>
+    /// Design D3: whether <paramref name="state"/> is currently in
+    /// <see cref="GameMode.TwoPlayer"/>'s Setup Phase B — derived from state,
+    /// not a flag. True once both real humans have exhausted their own
+    /// Setup pool (Phase A complete) while the neutral still has troops of
+    /// its own left to place. Short-circuits on <c>Mode == TwoPlayer</c>
+    /// first so non-TwoPlayer modes (which have no neutral player at all)
+    /// never evaluate the neutral-lookup that follows.
+    /// </summary>
+    private static bool IsPhaseB(GameState state) =>
+        state.Mode == GameMode.TwoPlayer
+        && state.Turn.Phase == TurnPhase.Setup
+        && state.Players.Where(p => !p.IsNeutral).All(p => p.TroopsRemaining == 0)
+        && state.Players.Single(p => p.IsNeutral).TroopsRemaining > 0;
+
+    /// <summary>
+    /// Handles <see cref="PlaceNeutralTroopsCommand"/> (design D3): a human
+    /// chooses where one of the neutral player's troops lands during
+    /// <see cref="GameMode.TwoPlayer"/>'s Setup Phase B. Mirrors
+    /// <see cref="ExecutePlaceTroops"/>'s territory/pool accounting, but
+    /// spends the *neutral's* pool, not the acting human's — the human is
+    /// only choosing a target, never receiving the troop.
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> ExecutePlaceNeutralTroops(GameState state, PlaceNeutralTroopsCommand command)
+    {
+        if (!IsPhaseB(state))
+        {
+            return Reject(GameErrorCode.WrongPhase, "Neutral troops can only be placed after both players have placed all of their own setup troops.");
+        }
+
+        var neutral = state.Players.Single(p => p.IsNeutral);
+
+        if (!state.Territories.TryGetValue(command.Territory, out var territory) || territory.Owner != neutral.Id)
+        {
+            return Reject(GameErrorCode.NotOwner, "That territory is not owned by the neutral player.");
+        }
+
+        if (command.Troops != 1 || command.Troops > neutral.TroopsRemaining)
+        {
+            return Reject(GameErrorCode.InvalidTroopCount, "Exactly one neutral troop is placed per turn during Phase B.");
+        }
+
+        var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+        {
+            [command.Territory] = territory with { Troops = territory.Troops + command.Troops }
+        };
+
+        var updatedNeutral = neutral with { TroopsRemaining = neutral.TroopsRemaining - command.Troops };
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == updatedNeutral.Id ? updatedNeutral : p)
+            .ToArray();
+
+        var events = new List<GameEvent> { new NeutralTroopsPlaced(command.Actor, command.Territory, command.Troops) };
+        var (nextTurn, finalPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, events);
+
+        var newState = state with
+        {
+            Territories = updatedTerritories,
+            Players = finalPlayers,
+            Turn = nextTurn,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
 
     private static CommandResult<GameState, GameEvent> ExecutePlaceTroops(GameState state, PlaceTroopsCommand command)
     {
@@ -762,17 +834,20 @@ public sealed class GameEngine : IGameEngine
 
     /// <summary>
     /// Rotation for Setup-phase placement (design D1/D4). Only ever hands the
-    /// turn to a non-neutral player with troops remaining — a neutral
+    /// turn to a non-neutral player — a neutral
     /// (<see cref="PlayerState.IsNeutral"/>, item 4.1's <see cref="GameMode.TwoPlayer"/>
     /// third army) never becomes <see cref="TurnState.CurrentPlayer"/>: it is
     /// a board object, not an agent, and only <c>PlaceNeutralTroopsCommand</c>
-    /// (Phase B, PR3's scope) may ever spend its pool. For every other mode
-    /// this is a no-op (no player is ever <c>IsNeutral</c>). Once no eligible
-    /// non-neutral candidate remains — even if a neutral still has troops of
-    /// its own — Setup is treated as complete for this PR's scope and the
-    /// first player begins the normal turn cycle in Reinforce; a TwoPlayer
-    /// neutral's pool sitting unplaced here is PR3's accepted, documented gap
-    /// (Phase B/<c>PlaceNeutralTroopsCommand</c> is not implemented yet).
+    /// spends its pool. Three cases, checked in order:
+    /// (1) a non-neutral player still has their own Setup troops to place
+    /// (Phase A) — rotate to them;
+    /// (2) no non-neutral player has troops left, but a neutral does
+    /// (<see cref="GameMode.TwoPlayer"/>'s Phase B) — keep alternating the
+    /// same humans by plain index rotation, skipping only the neutral,
+    /// so a human can submit the next <c>PlaceNeutralTroopsCommand</c>;
+    /// (3) neither — Setup is fully complete (every mode's normal path, and
+    /// TwoPlayer's Phase B-drained path) and the first player begins the
+    /// normal turn cycle in Reinforce.
     /// </summary>
     private static (TurnState Turn, IReadOnlyList<PlayerState> Players) AdvanceAfterSetupPlacement(
         TurnState turn,
@@ -791,9 +866,23 @@ public sealed class GameEngine : IGameEngine
             }
         }
 
-        // Every non-neutral player has placed all starting troops: setup is
-        // complete (for this PR's scope) and the first player begins the
-        // normal turn cycle in Reinforce.
+        var neutral = players.FirstOrDefault(p => p.IsNeutral);
+        if (neutral is { TroopsRemaining: > 0 })
+        {
+            for (var offset = 1; offset <= players.Count; offset++)
+            {
+                var candidate = players[(currentIndex + offset) % players.Count];
+                if (!candidate.IsNeutral)
+                {
+                    return (turn with { CurrentPlayer = candidate.Id }, players);
+                }
+            }
+        }
+
+        // Every non-neutral player has placed all starting troops, and (for
+        // TwoPlayer) the neutral's pool is also fully drained: setup is
+        // complete and the first player begins the normal turn cycle in
+        // Reinforce.
         var firstPlayer = players[0];
         var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
         IReadOnlyList<PlayerState> reinforcedPlayers = players

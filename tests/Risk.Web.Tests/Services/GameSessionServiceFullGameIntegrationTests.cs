@@ -126,10 +126,28 @@ public class GameSessionServiceFullGameIntegrationTests
         Assert.Same(stateBeforeRejectedCommand, session.State);
     }
 
+    /// <summary>
+    /// TwoPlayer-aware (item 4.1) — mirrors
+    /// <c>Risk.Tests.Fakes.GameSimulation.PlaceOneStartingTroop</c>: once the
+    /// acting human's own Setup pool is drained while Setup is still active,
+    /// Phase B is open and they instead choose where one of the neutral's
+    /// troops lands via <see cref="PlaceNeutralTroopsCommand"/>.
+    /// </summary>
     private static void PlaceOneStartingTroop(GameSessionService session)
     {
         var state = session.State!;
         var actor = state.Turn.CurrentPlayer;
+        var actorPool = state.Players.Single(p => p.Id == actor).TroopsRemaining;
+
+        if (state.Turn.Phase == TurnPhase.Setup && actorPool == 0)
+        {
+            var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+            var neutralTerritory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+            var neutralResult = session.Execute(new PlaceNeutralTroopsCommand(actor, neutralTerritory, 1));
+            Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(neutralResult);
+            return;
+        }
+
         var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
         var result = session.Execute(new PlaceTroopsCommand(actor, territory, 1));
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);

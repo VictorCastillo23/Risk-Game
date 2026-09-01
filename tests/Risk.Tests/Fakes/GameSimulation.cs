@@ -18,9 +18,32 @@ namespace Risk.Tests.Fakes;
 /// </summary>
 internal static class GameSimulation
 {
+    /// <summary>
+    /// Places one starting troop for whoever is currently <c>CurrentPlayer</c>
+    /// during <see cref="TurnPhase.Setup"/>. TwoPlayer-aware (item 4.1): if
+    /// the acting human's own Setup pool is already drained while Setup is
+    /// still active, that means Phase B is open (only <see cref="GameMode.TwoPlayer"/>
+    /// ever leaves a human as <c>CurrentPlayer</c> with an empty pool during
+    /// Setup) — the human is choosing where one of the neutral's troops
+    /// lands, via <see cref="PlaceNeutralTroopsCommand"/> instead. For every
+    /// other mode (no neutral ever exists) this branch is unreachable, since
+    /// exhausting a player's Setup pool always rotates the turn away from
+    /// them in the same command.
+    /// </summary>
     public static GameState PlaceOneStartingTroop(GameEngine engine, GameState state)
     {
         var actor = state.Turn.CurrentPlayer;
+        var actorPool = state.Players.Single(p => p.Id == actor).TroopsRemaining;
+
+        if (state.Turn.Phase == TurnPhase.Setup && actorPool == 0)
+        {
+            var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+            var neutralTerritory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+            var neutralResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+                engine.Execute(state, new PlaceNeutralTroopsCommand(actor, neutralTerritory, 1)));
+            return neutralResult.State;
+        }
+
         var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
         var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
             engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1)));

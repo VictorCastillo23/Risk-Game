@@ -102,6 +102,21 @@ public class GameSetupTests
         Assert.All(ok.State.Players, p => Assert.False(p.IsNeutral));
     }
 
+    /// <summary>
+    /// The carve-out for <see cref="Create_marks_no_player_as_neutral"/>:
+    /// that test is Classic-4p-only, not parameterized across modes, so it
+    /// needs no exemption. <see cref="GameMode.TwoPlayer"/> instead asserts
+    /// exactly one neutral among its three parties (roadmap 4.1).
+    /// </summary>
+    [Fact]
+    public void Create_marks_exactly_one_player_as_neutral_in_TwoPlayer_mode()
+    {
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(2, GameMode.TwoPlayer, QueuedDiceRoller.ForRollOff(2)));
+
+        Assert.Single(ok.State.Players, p => p.IsNeutral);
+    }
+
     [Fact]
     public void Create_deals_all_42_territories_equitably_across_4_players()
     {
@@ -193,18 +208,16 @@ public class GameSetupTests
         Assert.Equal(expectedMax, max);
     }
 
-    // NOTE (PR2, roadmap 4.1): this test predates the neutral third party
-    // (PR1) and PR2's per-turn budget generalization. It still drives a
-    // bare Troops:1-per-command loop, which stays legal under the new
-    // budget (1 is always within the 1..2 range), but the loop/assertions
-    // are updated to exclude the neutral: Phase B (PlaceNeutralTroopsCommand)
-    // doesn't exist yet, and the neutral must never receive a turn during
-    // Phase A (design D4/orchestrator directive) — see AdvanceAfterSetupPlacement.
-    // This intentionally lands at the accepted PR2 intermediate state: Phase
-    // A completes for both humans and the game jumps straight to Reinforce
-    // with the neutral's pool untouched (26). PR3 (task 3.9) rewrites this
-    // to drive both Phase A and Phase B to full completion once
-    // PlaceNeutralTroopsCommand exists.
+    // NOTE (PR3, roadmap 4.1): this test predates the neutral third party
+    // (PR1) and PR2/PR3's Setup generalization. It drives a bare
+    // Troops:1-per-command loop through Phase A (legal — 1 is always within
+    // the 1..2 budget), then a PlaceNeutralTroopsCommand-per-turn loop
+    // through Phase B, and finally keeps draining with the same 1-troop
+    // pattern past the Setup->Reinforce transition — the same trick
+    // GameStateBuilder.CompleteSetup already relies on — so the final
+    // assertion of "every pool is 0" reflects a fully drained state rather
+    // than stopping mid-Reinforce with the first player's freshly granted
+    // pool sitting unplaced.
     [Fact]
     public void Turn_based_placement_ends_only_when_all_players_reach_zero_remaining_troops()
     {
@@ -213,6 +226,7 @@ public class GameSetupTests
         var state = ok.State;
         var engine = new Risk.Engine.GameEngine(new QueuedDiceRoller());
 
+        // Phase A
         while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
         {
             var actor = state.Turn.CurrentPlayer;
@@ -223,8 +237,33 @@ public class GameSetupTests
             state = accepted.State;
         }
 
-        Assert.All(state.Players.Where(p => !p.IsNeutral), p => Assert.Equal(0, p.TroopsRemaining));
-        Assert.Equal(26, state.Players.Single(p => p.IsNeutral).TroopsRemaining); // Phase B: PR3's scope
+        Assert.Equal(TurnPhase.Setup, state.Turn.Phase);
+        Assert.Equal(26, state.Players.Single(p => p.IsNeutral).TroopsRemaining);
+
+        // Phase B
+        while (state.Players.Single(p => p.IsNeutral).TroopsRemaining > 0)
+        {
+            var actor = state.Turn.CurrentPlayer;
+            var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+            var territory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+
+            var result = engine.Execute(state, new PlaceNeutralTroopsCommand(actor, territory, 1));
+            var accepted = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+            state = accepted.State;
+        }
+
+        // Drain the newly granted Reinforce pool too, same pattern as above.
+        while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
+        {
+            var actor = state.Turn.CurrentPlayer;
+            var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+            var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1));
+            var accepted = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+            state = accepted.State;
+        }
+
+        Assert.All(state.Players, p => Assert.Equal(0, p.TroopsRemaining));
         Assert.Equal(TurnPhase.Reinforce, state.Turn.Phase);
         Assert.Equal(new PlayerId(0), state.Turn.CurrentPlayer);
     }
