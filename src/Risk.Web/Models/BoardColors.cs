@@ -26,6 +26,14 @@ public static class BoardColors
     /// </summary>
     public const string UnclaimedColor = "#4B5563";
 
+    /// <summary>
+    /// Warm brown for the <see cref="GameMode.TwoPlayer"/> neutral army's
+    /// territories (roadmap item 4.4) — distinct in hue and lightness from
+    /// the cool grays <see cref="UnknownOwnerColor"/>/<see cref="UnclaimedColor"/>
+    /// and from every swatch in <see cref="PlayerPalette.Swatches"/>.
+    /// </summary>
+    public const string NeutralColor = "#6D4C41";
+
     /// <summary>The configured color for <paramref name="owner"/>, or <see cref="UnknownOwnerColor"/> if unregistered.</summary>
     public static string OwnerColor(PlayerId owner, IReadOnlyDictionary<PlayerId, PlayerConfig> players) =>
         players.TryGetValue(owner, out var config) ? config.ColorHex : UnknownOwnerColor;
