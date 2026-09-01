@@ -26,7 +26,15 @@ internal static class GameStateBuilder
             state = CompleteClaimPhase(state, engine);
         }
 
-        while (state.Players.Any(p => p.TroopsRemaining > 0))
+        // Excludes the neutral third party (item 4.1): PR2's per-turn budget
+        // generalization keeps the neutral out of Phase A's rotation entirely
+        // (PlaceNeutralTroopsCommand/Phase B is PR3's scope), so a bare
+        // Troops:1 loop that still watched the neutral's pool would never
+        // terminate. This still drains Setup for every non-neutral player
+        // AND their first Reinforce-phase pool (the loop naturally continues
+        // past the Setup->Reinforce transition since Phase's own guard
+        // doesn't gate this loop), matching this helper's existing contract.
+        while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
         {
             var actor = state.Turn.CurrentPlayer;
             var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;

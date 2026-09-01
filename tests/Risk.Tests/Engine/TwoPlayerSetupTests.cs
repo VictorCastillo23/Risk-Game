@@ -1,4 +1,7 @@
+using Risk.Domain.Errors;
 using Risk.Domain.Players;
+using Risk.Engine;
+using Risk.Engine.Commands;
 using Risk.Engine.Events;
 using Risk.Engine.Results;
 using Risk.Engine.Setup;
@@ -16,6 +19,13 @@ namespace Risk.Tests.Engine;
 /// </summary>
 public class TwoPlayerSetupTests
 {
+    private static (GameState State, GameEngine Engine) StartPhaseA()
+    {
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(2, GameMode.TwoPlayer, QueuedDiceRoller.ForRollOff(2)));
+        return (ok.State, new GameEngine(new QueuedDiceRoller()));
+    }
+
     [Fact]
     public void Create_deals_42_territories_into_three_14_piles_with_one_neutral()
     {
@@ -57,5 +67,112 @@ public class TwoPlayerSetupTests
         var territoriesPlaced = state.Territories.Count; // 1 troop auto-placed per dealt territory
 
         Assert.Equal(3 * 40, totalRemaining + territoriesPlaced);
+    }
+
+    // PR2 (design D1): Phase A's per-turn budget is derived from
+    // TroopsRemaining's parity, not a new counter — see
+    // GameEngine.SetupTroopsPerTurn/SetupBudgetRemaining.
+
+    [Fact]
+    public void Placing_two_troops_on_one_territory_advances_the_turn()
+    {
+        var (state, engine) = StartPhaseA();
+        var actor = state.Turn.CurrentPlayer;
+        var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+        var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 2));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.Equal(24, ok.State.Players.Single(p => p.Id == actor).TroopsRemaining);
+        Assert.Equal(3, ok.State.Territories[territory].Troops);
+        Assert.NotEqual(actor, ok.State.Turn.CurrentPlayer);
+        Assert.False(ok.State.Players.Single(p => p.Id == ok.State.Turn.CurrentPlayer).IsNeutral);
+    }
+
+    [Fact]
+    public void Splitting_one_and_one_across_two_territories_keeps_the_turn_then_advances_on_the_second_placement()
+    {
+        var (state, engine) = StartPhaseA();
+        var actor = state.Turn.CurrentPlayer;
+        var ownedTerritories = state.Territories.Where(kv => kv.Value.Owner == actor).Select(kv => kv.Key).ToArray();
+        var territoryA = ownedTerritories[0];
+        var territoryB = ownedTerritories[1];
+
+        var firstResult = engine.Execute(state, new PlaceTroopsCommand(actor, territoryA, 1));
+        var firstOk = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(firstResult);
+
+        Assert.Equal(25, firstOk.State.Players.Single(p => p.Id == actor).TroopsRemaining);
+        Assert.Equal(actor, firstOk.State.Turn.CurrentPlayer); // mid-turn: budget not exhausted
+
+        var secondResult = engine.Execute(firstOk.State, new PlaceTroopsCommand(actor, territoryB, 1));
+        var secondOk = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(secondResult);
+
+        Assert.Equal(24, secondOk.State.Players.Single(p => p.Id == actor).TroopsRemaining);
+        Assert.Equal(2, secondOk.State.Territories[territoryA].Troops);
+        Assert.Equal(2, secondOk.State.Territories[territoryB].Troops);
+        Assert.NotEqual(actor, secondOk.State.Turn.CurrentPlayer);
+    }
+
+    [Fact]
+    public void Troops_three_is_rejected_in_TwoPlayer_Phase_A()
+    {
+        var (state, engine) = StartPhaseA();
+        var actor = state.Turn.CurrentPlayer;
+        var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+        var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 3));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidTroopCount, rejection.Error.Code);
+    }
+
+    [Fact]
+    public void Troops_two_is_rejected_after_a_partial_one_troop_placement()
+    {
+        var (state, engine) = StartPhaseA();
+        var actor = state.Turn.CurrentPlayer;
+        var ownedTerritories = state.Territories.Where(kv => kv.Value.Owner == actor).Select(kv => kv.Key).ToArray();
+        var territoryA = ownedTerritories[0];
+        var territoryB = ownedTerritories[1];
+
+        var firstResult = engine.Execute(state, new PlaceTroopsCommand(actor, territoryA, 1));
+        var firstOk = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(firstResult);
+
+        // Only 1 troop remains of this turn's 2-troop budget; requesting 2
+        // more must be rejected even though the actor still has 25 troops
+        // left in their overall pool.
+        var secondResult = engine.Execute(firstOk.State, new PlaceTroopsCommand(actor, territoryB, 2));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(secondResult);
+        Assert.Equal(GameErrorCode.InvalidTroopCount, rejection.Error.Code);
+    }
+
+    [Fact]
+    public void TradeCards_cannot_alter_TroopsRemaining_during_TwoPlayer_Setup()
+    {
+        var (state, engine) = StartPhaseA();
+        var actor = state.Turn.CurrentPlayer;
+        var actorBefore = state.Players.Single(p => p.Id == actor);
+
+        // A 3-card hand is required for CardSet.IsValid, but Setup-phase
+        // players start with an empty hand, so any trade attempt during
+        // Setup is rejected before it could ever touch TroopsRemaining —
+        // pinning design D1's "pool cannot grow during Setup" invariant.
+        var result = engine.Execute(state, new TradeCardsCommand(actor, actorBefore.Hand));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidCardSet, rejection.Error.Code);
+    }
+
+    [Fact]
+    public void EndPhase_is_rejected_during_TwoPlayer_Setup()
+    {
+        var (state, engine) = StartPhaseA();
+        var actor = state.Turn.CurrentPlayer;
+
+        var result = engine.Execute(state, new EndPhaseCommand(actor));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.WrongPhase, rejection.Error.Code);
     }
 }

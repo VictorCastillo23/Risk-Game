@@ -193,6 +193,18 @@ public class GameSetupTests
         Assert.Equal(expectedMax, max);
     }
 
+    // NOTE (PR2, roadmap 4.1): this test predates the neutral third party
+    // (PR1) and PR2's per-turn budget generalization. It still drives a
+    // bare Troops:1-per-command loop, which stays legal under the new
+    // budget (1 is always within the 1..2 range), but the loop/assertions
+    // are updated to exclude the neutral: Phase B (PlaceNeutralTroopsCommand)
+    // doesn't exist yet, and the neutral must never receive a turn during
+    // Phase A (design D4/orchestrator directive) — see AdvanceAfterSetupPlacement.
+    // This intentionally lands at the accepted PR2 intermediate state: Phase
+    // A completes for both humans and the game jumps straight to Reinforce
+    // with the neutral's pool untouched (26). PR3 (task 3.9) rewrites this
+    // to drive both Phase A and Phase B to full completion once
+    // PlaceNeutralTroopsCommand exists.
     [Fact]
     public void Turn_based_placement_ends_only_when_all_players_reach_zero_remaining_troops()
     {
@@ -201,7 +213,7 @@ public class GameSetupTests
         var state = ok.State;
         var engine = new Risk.Engine.GameEngine(new QueuedDiceRoller());
 
-        while (state.Players.Any(p => p.TroopsRemaining > 0))
+        while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
         {
             var actor = state.Turn.CurrentPlayer;
             var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
@@ -211,8 +223,34 @@ public class GameSetupTests
             state = accepted.State;
         }
 
-        Assert.All(state.Players, p => Assert.Equal(0, p.TroopsRemaining));
+        Assert.All(state.Players.Where(p => !p.IsNeutral), p => Assert.Equal(0, p.TroopsRemaining));
+        Assert.Equal(26, state.Players.Single(p => p.IsNeutral).TroopsRemaining); // Phase B: PR3's scope
         Assert.Equal(TurnPhase.Reinforce, state.Turn.Phase);
         Assert.Equal(new PlayerId(0), state.Turn.CurrentPlayer);
+    }
+
+    [Theory]
+    [InlineData(GameMode.Classic, 3)]
+    [InlineData(GameMode.SecretMission, 3)]
+    [InlineData(GameMode.Capital, 3)]
+    public void Classic_SecretMission_Capital_still_reject_Troops_two_in_Setup(GameMode mode, int playerCount)
+    {
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
+        var state = ok.State;
+        var engine = new Risk.Engine.GameEngine(new QueuedDiceRoller());
+
+        if (state.Turn.Phase == TurnPhase.Claim)
+        {
+            state = GameStateBuilder.CompleteClaimPhase(state, engine);
+        }
+
+        var actor = state.Turn.CurrentPlayer;
+        var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+        var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 2));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidTroopCount, rejection.Error.Code);
     }
 }

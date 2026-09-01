@@ -142,6 +142,35 @@ public sealed class GameEngine : IGameEngine
         _ => throw new InvalidOperationException("Unreachable: unknown GameCommand type.")
     };
 
+    /// <summary>
+    /// How many troops a player may place per Setup-phase command/turn
+    /// (design D1). Every mode except <see cref="GameMode.TwoPlayer"/> keeps
+    /// the classic "exactly one troop, immediate rotation" rule (<c>1</c>);
+    /// <see cref="GameMode.TwoPlayer"/>'s Phase A allows <c>2</c>, splittable
+    /// across one or two commands (reglasrisk.md: "coloca dos tropas sobre
+    /// un territorio o dos de los que ocupes"). This is the ONLY place
+    /// TwoPlayer's "2 per turn" rule is expressed.
+    /// </summary>
+    private static int SetupTroopsPerTurn(GameMode mode) => mode == GameMode.TwoPlayer ? 2 : 1;
+
+    /// <summary>
+    /// How much of the current turn's Setup placement budget is still
+    /// available, derived from <paramref name="troopsRemaining"/>'s parity
+    /// against <paramref name="perTurn"/> rather than a separately tracked
+    /// counter (design D1 — avoids a stale-flag reset bug class, the same
+    /// one already documented on <c>ConqueredThisTurn</c>). A pool that is an
+    /// exact multiple of <paramref name="perTurn"/> is always at a turn
+    /// boundary, so the full budget is available; otherwise the remainder is
+    /// what is left of the turn already in progress. Safe because
+    /// <c>TroopsRemaining</c> cannot grow during Setup: <c>EndPhaseCommand</c>
+    /// rejects with <see cref="GameErrorCode.WrongPhase"/>, and
+    /// <c>TradeCardsCommand</c> — though phase-agnostic — dies on
+    /// <c>CardSet.IsValid</c> rejecting any hand size other than 3 (Setup
+    /// hands are always empty).
+    /// </summary>
+    private static int SetupBudgetRemaining(int troopsRemaining, int perTurn) =>
+        troopsRemaining % perTurn is 0 ? perTurn : troopsRemaining % perTurn;
+
     private static CommandResult<GameState, GameEvent> ExecutePlaceTroops(GameState state, PlaceTroopsCommand command)
     {
         if (state.Turn.Phase is not (TurnPhase.Setup or TurnPhase.Reinforce))
@@ -161,9 +190,10 @@ public sealed class GameEngine : IGameEngine
             return Reject(GameErrorCode.InvalidTroopCount, "Troop count must be between 1 and the troops you have remaining.");
         }
 
-        if (state.Turn.Phase == TurnPhase.Setup && command.Troops != 1)
+        if (state.Turn.Phase == TurnPhase.Setup
+            && command.Troops > SetupBudgetRemaining(player.TroopsRemaining, SetupTroopsPerTurn(state.Mode)))
         {
-            return Reject(GameErrorCode.InvalidTroopCount, "During setup, exactly one troop is placed per turn.");
+            return Reject(GameErrorCode.InvalidTroopCount, "Troop count exceeds this turn's setup placement budget.");
         }
 
         var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
@@ -179,7 +209,8 @@ public sealed class GameEngine : IGameEngine
         var events = new List<GameEvent> { new TroopsPlaced(command.Actor, command.Territory, command.Troops) };
         var nextTurn = state.Turn;
 
-        if (state.Turn.Phase == TurnPhase.Setup)
+        if (state.Turn.Phase == TurnPhase.Setup
+            && updatedPlayer.TroopsRemaining % SetupTroopsPerTurn(state.Mode) == 0)
         {
             (nextTurn, updatedPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, events);
         }
@@ -729,6 +760,20 @@ public sealed class GameEngine : IGameEngine
         throw new InvalidOperationException("Unreachable: at least one active player must remain once the game is won.");
     }
 
+    /// <summary>
+    /// Rotation for Setup-phase placement (design D1/D4). Only ever hands the
+    /// turn to a non-neutral player with troops remaining — a neutral
+    /// (<see cref="PlayerState.IsNeutral"/>, item 4.1's <see cref="GameMode.TwoPlayer"/>
+    /// third army) never becomes <see cref="TurnState.CurrentPlayer"/>: it is
+    /// a board object, not an agent, and only <c>PlaceNeutralTroopsCommand</c>
+    /// (Phase B, PR3's scope) may ever spend its pool. For every other mode
+    /// this is a no-op (no player is ever <c>IsNeutral</c>). Once no eligible
+    /// non-neutral candidate remains — even if a neutral still has troops of
+    /// its own — Setup is treated as complete for this PR's scope and the
+    /// first player begins the normal turn cycle in Reinforce; a TwoPlayer
+    /// neutral's pool sitting unplaced here is PR3's accepted, documented gap
+    /// (Phase B/<c>PlaceNeutralTroopsCommand</c> is not implemented yet).
+    /// </summary>
     private static (TurnState Turn, IReadOnlyList<PlayerState> Players) AdvanceAfterSetupPlacement(
         TurnState turn,
         IReadOnlyList<PlayerState> players,
@@ -740,14 +785,15 @@ public sealed class GameEngine : IGameEngine
         for (var offset = 1; offset <= players.Count; offset++)
         {
             var candidate = players[(currentIndex + offset) % players.Count];
-            if (candidate.TroopsRemaining > 0)
+            if (!candidate.IsNeutral && candidate.TroopsRemaining > 0)
             {
                 return (turn with { CurrentPlayer = candidate.Id }, players);
             }
         }
 
-        // Every player has placed all starting troops: setup is complete and
-        // the first player begins the normal turn cycle in Reinforce.
+        // Every non-neutral player has placed all starting troops: setup is
+        // complete (for this PR's scope) and the first player begins the
+        // normal turn cycle in Reinforce.
         var firstPlayer = players[0];
         var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
         IReadOnlyList<PlayerState> reinforcedPlayers = players
