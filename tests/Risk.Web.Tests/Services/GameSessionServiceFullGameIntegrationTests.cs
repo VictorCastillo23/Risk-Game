@@ -50,6 +50,7 @@ public class GameSessionServiceFullGameIntegrationTests
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(startResult);
 
         var attacker = session.State!.Turn.CurrentPlayer; // player 0 is always dealt the first turn
+        var humanOpponent = session.State!.Players.Single(p => !p.IsNeutral && p.Id != attacker).Id;
 
         // Setup phase: place every starting troop, one at a time, in rotation.
         while (session.State!.Turn.Phase == TurnPhase.Setup)
@@ -108,8 +109,11 @@ public class GameSessionServiceFullGameIntegrationTests
         var finalState = session.State!;
         var won = Assert.IsType<GameStatus.Won>(finalState.Status);
         Assert.Equal(attacker, won.Winner);
-        Assert.All(finalState.Territories.Values, t => Assert.Equal(attacker, t.Owner));
-        Assert.Equal(WorldMap.Territories.Count, finalState.Territories.Count(t => t.Value.Owner == attacker));
+        // Victory now triggers as soon as the human opponent is eliminated (item
+        // 4.3's TwoPlayerVictoryRule) — the neutral may still own territory at
+        // that point, so this no longer asserts the attacker owns all 42.
+        var opponentFinal = finalState.Players.Single(p => p.Id == humanOpponent);
+        Assert.True(opponentFinal.IsEliminated);
         Assert.Contains(finalState.Log, e => e is GameWon);
         Assert.True(changedCount > 0);
 
