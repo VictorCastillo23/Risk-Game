@@ -22,14 +22,14 @@ public class GameErrorPresenterTests
     }
 
     [Fact]
-    public void Describe_AllSixteenCodes_ProduceDistinctMessages()
+    public void Describe_AllSeventeenCodes_ProduceDistinctMessages()
     {
         var messages = Enum.GetValues<GameErrorCode>()
             .Select(code => GameErrorPresenter.Describe(new GameError(code, "raw engine message")))
             .ToList();
 
-        Assert.Equal(16, messages.Count);
-        Assert.Equal(16, messages.Distinct().Count());
+        Assert.Equal(17, messages.Count);
+        Assert.Equal(17, messages.Distinct().Count());
     }
 
     [Fact]
