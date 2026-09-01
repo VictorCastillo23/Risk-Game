@@ -578,8 +578,9 @@ public sealed class GameEngine : IGameEngine
             }
             else
             {
-                // Pre-refactor inline check, byte-identical (TwoPlayer / Capital —
-                // neither has an IVictoryRule yet; VictoryRules.For returns null).
+                // Pre-refactor inline check, byte-identical (Capital only — the last
+                // mode without an IVictoryRule; VictoryRules.For returns null. Capital's
+                // real rule is roadmap item 5.3.) TwoPlayer moved to the branch above in 4.3.
                 var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
                 if (attackerOwnsEveryTerritory)
                 {

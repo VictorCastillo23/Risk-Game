@@ -15,12 +15,13 @@ namespace Risk.Engine.Modes;
 public static class VictoryRules
 {
     private static readonly IVictoryRule ConquestVictory = new ConquestVictoryRule();
+    private static readonly IVictoryRule TwoPlayerVictory = new TwoPlayerVictoryRule();
 
     public static IVictoryRule? For(GameMode mode) => mode switch
     {
         GameMode.Classic => ConquestVictory,
         GameMode.SecretMission => null,
-        GameMode.TwoPlayer => null,
+        GameMode.TwoPlayer => TwoPlayerVictory,
         GameMode.Capital => null
     };
 }
