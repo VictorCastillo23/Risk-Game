@@ -20,5 +20,6 @@ public enum GameErrorCode
     InvalidPlayerCount,
     InvalidTroopCount,
     NoPendingOccupation,
-    ReinforcementIncomplete
+    ReinforcementIncomplete,
+    ActorIsNeutral
 }
