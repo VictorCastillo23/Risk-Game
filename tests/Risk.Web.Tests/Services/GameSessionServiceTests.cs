@@ -150,6 +150,39 @@ public class GameSessionServiceTests
     }
 
     [Fact]
+    public void Start_WithTwoPlayerMode_SynthesizesNeutralPlayerConfig()
+    {
+        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+
+        var result = session.Start(TwoValidRows, GameMode.TwoPlayer);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        var neutral = session.State!.Players.Single(p => p.IsNeutral);
+        var config = session.ConfigFor(neutral.Id);
+        Assert.Equal(BoardColors.NeutralColor, config.ColorHex);
+        Assert.False(config.IsAi);
+        Assert.Equal(3, session.Players.Count);
+    }
+
+    [Fact]
+    public void Start_WithClassicMode_DoesNotSynthesizeAnyNeutralPlayerConfig()
+    {
+        var rows = Enumerable.Range(0, 3)
+            .Select(i => new PlayerSetupRow(
+                $"Player{i}",
+                PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
+                false))
+            .ToArray();
+        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(3));
+
+        var result = session.Start(rows, GameMode.Classic);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.Equal(3, session.Players.Count);
+        Assert.DoesNotContain(session.Players.Values, config => config.ColorHex == BoardColors.NeutralColor);
+    }
+
+    [Fact]
     public void Start_RejectsSixPlayersUnderClassicMode()
     {
         var rows = Enumerable.Range(0, 6)
