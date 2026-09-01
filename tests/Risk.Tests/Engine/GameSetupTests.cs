@@ -151,7 +151,9 @@ public class GameSetupTests
     }
 
     [Theory]
-    [InlineData(GameMode.TwoPlayer, 2, 40)]
+    [InlineData(GameMode.Capital, 3, 35)]
+    [InlineData(GameMode.Capital, 4, 30)]
+    [InlineData(GameMode.Capital, 5, 25)]
     public void Create_assigns_the_official_starting_troop_pool_via_upfront_deal(GameMode mode, int playerCount, int startingTroops)
     {
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(

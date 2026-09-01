@@ -131,7 +131,10 @@ public class EndPhaseCommandTests
     public void Execute_rejects_end_phase_from_a_player_who_is_not_the_active_player()
     {
         var state = GameStateBuilder.CompleteSetup(2);
-        var inactivePlayer = state.Players.Single(p => p.Id != state.Turn.CurrentPlayer).Id;
+        // Exclude the neutral third party (GameSetup.Create's default mode,
+        // GameMode.TwoPlayer, deals a neutral army per item 4.1) — this test
+        // only cares about the other human, not the board-object neutral.
+        var inactivePlayer = state.Players.Single(p => !p.IsNeutral && p.Id != state.Turn.CurrentPlayer).Id;
         var engine = new GameEngine(new QueuedDiceRoller());
 
         var result = engine.Execute(state, new EndPhaseCommand(inactivePlayer));

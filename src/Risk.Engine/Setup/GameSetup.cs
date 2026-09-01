@@ -25,6 +25,13 @@ public static class GameSetup
     /// </summary>
     private static readonly ISetupStrategy SecretMissionSetup = new SecretMissionSetupStrategy();
 
+    /// <summary>
+    /// <see cref="GameMode.TwoPlayer"/>'s <see cref="ISetupStrategy"/>. Same
+    /// static-instance convention as <see cref="SecretMissionSetup"/> (design
+    /// D3 — no mode resolver until a third strategy needs one).
+    /// </summary>
+    private static readonly ISetupStrategy TwoPlayerSetup = new TwoPlayerSetupStrategy();
+
     private static readonly IReadOnlyDictionary<int, int> StartingTroopsByPlayerCount = new Dictionary<int, int>
     {
         [2] = 40,
@@ -79,6 +86,12 @@ public static class GameSetup
             return new CommandResult<GameState, GameEvent>.Ok(s, s.Log);
         }
 
+        if (mode == GameMode.TwoPlayer)
+        {
+            var s = TwoPlayerSetup.Create(players, startingTroops);
+            return new CommandResult<GameState, GameEvent>.Ok(s, s.Log);
+        }
+
         if (mode == GameMode.Classic)
         {
             // Classic starts with every territory unclaimed (Claim phase) —
@@ -101,15 +114,14 @@ public static class GameSetup
             return new CommandResult<GameState, GameEvent>.Ok(classicState, []);
         }
 
-        // TwoPlayer/Capital fall through to this same random-equitable
-        // deal as SecretMission today — deliberately NOT routed through
+        // Capital falls through to this same random-equitable deal as
+        // SecretMission today — deliberately NOT routed through
         // SecretMissionSetup, and deliberately not de-duplicated against it.
-        // Each of these two modes gets its own real ISetupStrategy in a
-        // later roadmap item (4.1/5.1) with genuinely different setup rules
-        // (Capital claims territories one at a time instead of an upfront
-        // random deal; TwoPlayer splits into a 3-way deal with a neutral
-        // army) — extracting a shared helper now would tie this temporary
-        // duplication to logic that's about to diverge per mode.
+        // Capital gets its own real ISetupStrategy in a later roadmap item
+        // (5.1) with genuinely different setup rules (claims territories one
+        // at a time instead of an upfront random deal) — extracting a shared
+        // helper now would tie this temporary duplication to logic that's
+        // about to diverge per mode.
         var shuffledTerritoryIds = WorldMap.Territories
             .Select(t => t.Id)
             .OrderBy(_ => Random.Shared.Next())
