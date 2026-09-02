@@ -107,6 +107,7 @@ public sealed class GameEngine : IGameEngine
             PlaceTroopsCommand place => ExecutePlaceTroops(state, place),
             TradeCardsCommand trade => ExecuteTradeCards(state, trade),
             ClaimTerritoryCommand claim => ExecuteClaimTerritory(state, claim),
+            SelectHeadquartersCommand selectHeadquarters => ExecuteSelectHeadquarters(state, selectHeadquarters),
             AttackCommand attack => ExecuteAttack(state, attack),
             OccupyCommand occupy => ExecuteOccupy(state, occupy),
             FortifyCommand fortify => ExecuteFortify(state, fortify),
@@ -135,6 +136,7 @@ public sealed class GameEngine : IGameEngine
         // design's open gate-ordering question).
         TradeCardsCommand => null,
         ClaimTerritoryCommand => TurnPhase.Claim,
+        SelectHeadquartersCommand => TurnPhase.SelectHeadquarters,
         AttackCommand => TurnPhase.Attack,
         OccupyCommand => TurnPhase.Attack,
         FortifyCommand => TurnPhase.Fortify,
@@ -181,7 +183,7 @@ public sealed class GameEngine : IGameEngine
 
         if (state.Turn.Phase == TurnPhase.Setup)
         {
-            (nextTurn, updatedPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, events);
+            (nextTurn, updatedPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, state.Mode, events);
         }
 
         var newState = state with
@@ -330,6 +332,90 @@ public sealed class GameEngine : IGameEngine
 
         events.Add(new PhaseChanged(TurnPhase.Claim, TurnPhase.Setup, next));
         return new TurnState(next, TurnPhase.Setup);
+    }
+
+    /// <summary>
+    /// Designates <see cref="SelectHeadquartersCommand.Territory"/> as the
+    /// actor's headquarters during <see cref="TurnPhase.SelectHeadquarters"/>
+    /// (design D2/spec). Ownership is the only constraint — no continent or
+    /// adjacency rule applies. On success, structurally removes the
+    /// territory's <see cref="TerritoryCard"/> from <see cref="GameState.Deck"/>
+    /// so it can never enter any player's <c>Hand</c> (spec's card-exclusion
+    /// requirement), emits the territory-free <see cref="HeadquartersSelected"/>
+    /// event (design D1 — <see cref="GameState.Log"/> is public/unredacted),
+    /// and advances via <see cref="AdvanceAfterHeadquartersSelection"/>.
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> ExecuteSelectHeadquarters(GameState state, SelectHeadquartersCommand command)
+    {
+        if (!state.Territories.TryGetValue(command.Territory, out var territory) || territory.Owner != command.Actor)
+        {
+            return Reject(GameErrorCode.NotOwner, "You do not own that territory.");
+        }
+
+        var player = state.Players.Single(p => p.Id == command.Actor);
+        var updatedPlayer = player with { HeadquartersId = command.Territory };
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == updatedPlayer.Id ? updatedPlayer : p)
+            .ToArray();
+
+        var updatedDeck = state.Deck
+            .Where(card => card is not TerritoryCard territoryCard || territoryCard.Territory != command.Territory)
+            .ToArray();
+
+        var events = new List<GameEvent> { new HeadquartersSelected(command.Actor) };
+        var (nextTurn, finalPlayers) = AdvanceAfterHeadquartersSelection(state.Turn, updatedPlayers, state.Territories, events);
+
+        var newState = state with
+        {
+            Players = finalPlayers,
+            Deck = updatedDeck,
+            Turn = nextTurn,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Rotation/transition logic for <see cref="ExecuteSelectHeadquarters"/>.
+    /// While at least one player has not yet selected a headquarters, rotates
+    /// to the next player (plain index, mirroring <see cref="AdvanceAfterClaim"/>
+    /// — no <c>IsEliminated</c> skip needed: design D3 proves elimination is
+    /// unreachable before this phase completes) and the phase stays
+    /// <see cref="TurnPhase.SelectHeadquarters"/>. Once every player has
+    /// selected, this was the final selection: emits
+    /// <see cref="HeadquartersRevealed"/> with every player's headquarters,
+    /// then transitions to <see cref="TurnPhase.Reinforce"/> at
+    /// <c>players[0]</c> with that player's reinforcement pool computed —
+    /// the same completion shape as <see cref="AdvanceAfterSetupPlacement"/>,
+    /// not <see cref="AdvanceAfterClaim"/>'s "rotated next player" shape,
+    /// since who selected last is irrelevant to whose turn is next.
+    /// </summary>
+    private static (TurnState Turn, IReadOnlyList<PlayerState> Players) AdvanceAfterHeadquartersSelection(
+        TurnState turn,
+        IReadOnlyList<PlayerState> players,
+        IReadOnlyDictionary<TerritoryId, TerritoryState> territories,
+        List<GameEvent> events)
+    {
+        if (players.Any(p => p.HeadquartersId is null))
+        {
+            var currentIndex = players.ToList().FindIndex(p => p.Id == turn.CurrentPlayer);
+            var next = players[(currentIndex + 1) % players.Count].Id;
+            return (turn with { CurrentPlayer = next }, players);
+        }
+
+        var headquarters = players.ToDictionary(p => p.Id, p => p.HeadquartersId!.Value);
+        events.Add(new HeadquartersRevealed(headquarters));
+
+        var firstPlayer = players[0];
+        var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
+        IReadOnlyList<PlayerState> reinforcedPlayers = players
+            .Select(p => p.Id == firstPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .ToArray();
+
+        events.Add(new PhaseChanged(TurnPhase.SelectHeadquarters, TurnPhase.Reinforce, firstPlayer.Id));
+
+        return (new TurnState(firstPlayer.Id, TurnPhase.Reinforce), reinforcedPlayers);
     }
 
     /// <summary>
@@ -733,6 +819,7 @@ public sealed class GameEngine : IGameEngine
         TurnState turn,
         IReadOnlyList<PlayerState> players,
         IReadOnlyDictionary<TerritoryId, TerritoryState> territories,
+        GameMode mode,
         List<GameEvent> events)
     {
         var currentIndex = players.ToList().FindIndex(p => p.Id == turn.CurrentPlayer);
@@ -746,8 +833,17 @@ public sealed class GameEngine : IGameEngine
             }
         }
 
-        // Every player has placed all starting troops: setup is complete and
-        // the first player begins the normal turn cycle in Reinforce.
+        // Every player has placed all starting troops: setup is complete.
+        // GameMode.Capital diverges here — it enters a one-round
+        // SelectHeadquarters gate before Reinforce (spec's mode-aware
+        // AdvanceAfterSetupPlacement requirement); every other mode goes
+        // straight to Reinforce for the first player, unchanged.
+        if (mode == GameMode.Capital)
+        {
+            events.Add(new PhaseChanged(TurnPhase.Setup, TurnPhase.SelectHeadquarters, players[0].Id));
+            return (new TurnState(players[0].Id, TurnPhase.SelectHeadquarters), players);
+        }
+
         var firstPlayer = players[0];
         var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
         IReadOnlyList<PlayerState> reinforcedPlayers = players
