@@ -92,62 +92,36 @@ public static class GameSetup
             return new CommandResult<GameState, GameEvent>.Ok(s, s.Log);
         }
 
-        if (mode == GameMode.Classic)
+        if (mode is GameMode.Classic or GameMode.Capital)
         {
-            // Classic starts with every territory unclaimed (Claim phase) —
-            // no upfront deal, so nobody's pool is deducted yet. The dice
-            // roll-off (TurnOrder.DetermineFirst) picks who claims/places
-            // first, matching the classic rulebook's opening ritual.
+            // Classic and Capital both start with every territory unclaimed
+            // (Claim phase) — no upfront deal, so nobody's pool is deducted
+            // yet. The dice roll-off (TurnOrder.DetermineFirst) picks who
+            // claims/places first, matching the classic rulebook's opening
+            // ritual. Capital reuses this path unchanged (5.1); it diverges
+            // from Classic only after setup placement, when it transitions
+            // to TurnPhase.SelectHeadquarters instead of Reinforce.
             var unclaimedTerritories = WorldMap.Territories
                 .ToDictionary(t => t.Id, _ => new TerritoryState(Owner: null, Troops: 0));
 
-            var classicPlayerStates = players
+            var claimPlayerStates = players
                 .Select(p => new PlayerState(p, [], false, startingTroops))
                 .ToArray();
 
             var firstPlayer = TurnOrder.DetermineFirst(players, dice);
             var claimTurn = new TurnState(firstPlayer, TurnPhase.Claim);
 
-            var classicState = new GameState(unclaimedTerritories, classicPlayerStates, claimTurn,
+            var claimState = new GameState(unclaimedTerritories, claimPlayerStates, claimTurn,
                 Deck.CreateStandard(), [], new GameStatus.InProgress(), Mode: mode);
 
-            return new CommandResult<GameState, GameEvent>.Ok(classicState, []);
+            return new CommandResult<GameState, GameEvent>.Ok(claimState, []);
         }
 
-        // Capital falls through to this same random-equitable deal as
-        // SecretMission today — deliberately NOT routed through
-        // SecretMissionSetup, and deliberately not de-duplicated against it.
-        // Capital gets its own real ISetupStrategy in a later roadmap item
-        // (5.1) with genuinely different setup rules (claims territories one
-        // at a time instead of an upfront random deal) — extracting a shared
-        // helper now would tie this temporary duplication to logic that's
-        // about to diverge per mode.
-        var shuffledTerritoryIds = WorldMap.Territories
-            .Select(t => t.Id)
-            .OrderBy(_ => Random.Shared.Next())
-            .ToArray();
-
-        var territories = new Dictionary<TerritoryId, TerritoryState>();
-        var ownedCounts = new int[playerCount];
-
-        for (var i = 0; i < shuffledTerritoryIds.Length; i++)
-        {
-            var owner = players[i % playerCount];
-            territories[shuffledTerritoryIds[i]] = new TerritoryState(owner, 1);
-            ownedCounts[owner.Value]++;
-        }
-
-        var playerStates = players
-            .Select((p, i) => new PlayerState(p, [], false, startingTroops - ownedCounts[i]))
-            .ToArray();
-
-        var turn = new TurnState(players[0], TurnPhase.Setup);
-        IReadOnlyDictionary<TerritoryId, PlayerId> assignments = territories.ToDictionary(kv => kv.Key, kv => kv.Value.Owner!.Value);
-        var events = new List<GameEvent> { new TerritoriesAssigned(assignments) };
-
-        var state = new GameState(territories, playerStates, turn, Deck.CreateStandard(), events,
-            new GameStatus.InProgress(), Mode: mode);
-
-        return new CommandResult<GameState, GameEvent>.Ok(state, events);
+        // SecretMission, TwoPlayer, Classic, and Capital are GameMode's only
+        // values (State/GameMode.cs) and are all handled above — this point
+        // is reachable only if a 5th mode is added here without updating
+        // this method, per this repo's convention of throwing on an
+        // unhandled case rather than silently falling through.
+        throw new InvalidOperationException($"Unreachable: unhandled {nameof(GameMode)} value {mode}.");
     }
 }

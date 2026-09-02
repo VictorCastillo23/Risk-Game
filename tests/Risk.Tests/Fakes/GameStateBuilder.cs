@@ -65,6 +65,34 @@ internal static class GameStateBuilder
             state = result.State;
         }
 
+        if (state.Turn.Phase == TurnPhase.SelectHeadquarters)
+        {
+            state = CompleteHeadquartersSelection(state, engine);
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// Fast-forwards a <see cref="TurnPhase.SelectHeadquarters"/> state
+    /// (<see cref="GameMode.Capital"/> only) through the full round-robin
+    /// selection round — each player designates the first territory they own
+    /// in enumeration order as their headquarters — until every player has
+    /// selected and the engine transitions to <see cref="TurnPhase.Reinforce"/>.
+    /// A no-op if <paramref name="state"/> is not currently in
+    /// <see cref="TurnPhase.SelectHeadquarters"/>.
+    /// </summary>
+    public static GameState CompleteHeadquartersSelection(GameState state, GameEngine engine)
+    {
+        while (state.Turn.Phase == TurnPhase.SelectHeadquarters)
+        {
+            var actor = state.Turn.CurrentPlayer;
+            var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+            var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+                engine.Execute(state, new SelectHeadquartersCommand(actor, territory)));
+            state = result.State;
+        }
+
         return state;
     }
 

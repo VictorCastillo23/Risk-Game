@@ -118,35 +118,47 @@ public class GameSetupTests
     }
 
     [Fact]
-    public void Create_deals_all_42_territories_equitably_across_4_players()
+    public void Create_deals_all_42_territories_equitably_across_SecretMission_players()
     {
-        // Capital still goes through the shared upfront random-deal branch
-        // (Classic moved to the unclaimed Claim-phase start in 2.1 — see
-        // Create_starts_Classic_with_all_territories_unclaimed_... below).
+        // SecretMission is now the sole mode still on the shared upfront
+        // random-deal branch: Classic moved to the unclaimed Claim-phase
+        // start in 2.1, TwoPlayer got its own 3-way neutral-deal strategy
+        // in 4.1, and Capital joined Classic's Claim-phase start in 5.1
+        // (see Create_starts_Classic_and_Capital_with_all_territories_unclaimed_...
+        // above). 42 splits evenly across 3 players, so all three counts
+        // are exactly 14 — no remainder to spread unevenly.
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-            GameSetup.Create(4, GameMode.Capital, QueuedDiceRoller.ForRollOff(4)));
+            GameSetup.Create(3, GameMode.SecretMission, QueuedDiceRoller.ForRollOff(3)));
 
         var counts = ok.State.Territories.Values
             .GroupBy(t => t.Owner!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        Assert.Equal(4, counts.Count);
+        Assert.Equal(3, counts.Count);
         Assert.Equal(42, counts.Values.Sum());
-        Assert.All(counts.Values, count => Assert.InRange(count, 10, 11));
+        Assert.All(counts.Values, count => Assert.Equal(14, count));
     }
 
-    [Fact]
-    public void Create_starts_Classic_with_all_territories_unclaimed_full_troop_pools_and_Claim_phase()
+    [Theory]
+    [InlineData(GameMode.Classic, 3, 35)]
+    [InlineData(GameMode.Classic, 4, 30)]
+    [InlineData(GameMode.Classic, 5, 25)]
+    [InlineData(GameMode.Capital, 3, 35)]
+    [InlineData(GameMode.Capital, 4, 30)]
+    [InlineData(GameMode.Capital, 5, 25)]
+    public void Create_starts_Classic_and_Capital_with_all_territories_unclaimed_full_troop_pools_and_Claim_phase(GameMode mode, int playerCount, int startingTroops)
     {
         // ForRollOff is tie-free and strictly descending, so player 0 always
         // wins the roll-off — asserted below as the resulting CurrentPlayer.
+        // Capital reuses Classic's Claim-phase setup path (5.1) instead of
+        // the random-equitable deal, so it is byte-parity with Classic here.
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-            GameSetup.Create(4, GameMode.Classic, QueuedDiceRoller.ForRollOff(4)));
+            GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
 
         Assert.Equal(WorldMap.Territories.Count, ok.State.Territories.Count);
         Assert.All(ok.State.Territories.Values, t => Assert.Null(t.Owner));
         Assert.All(ok.State.Territories.Values, t => Assert.Equal(0, t.Troops));
-        Assert.All(ok.State.Players, p => Assert.Equal(30, p.TroopsRemaining));
+        Assert.All(ok.State.Players, p => Assert.Equal(startingTroops, p.TroopsRemaining));
         Assert.Equal(TurnPhase.Claim, ok.State.Turn.Phase);
         Assert.Equal(new PlayerId(0), ok.State.Turn.CurrentPlayer);
         Assert.Empty(ok.State.Log.OfType<TerritoriesAssigned>());
@@ -166,11 +178,15 @@ public class GameSetupTests
     }
 
     [Theory]
-    [InlineData(GameMode.Capital, 3, 35)]
-    [InlineData(GameMode.Capital, 4, 30)]
-    [InlineData(GameMode.Capital, 5, 25)]
+    [InlineData(GameMode.SecretMission, 3, 35)]
+    [InlineData(GameMode.SecretMission, 4, 30)]
+    [InlineData(GameMode.SecretMission, 5, 25)]
     public void Create_assigns_the_official_starting_troop_pool_via_upfront_deal(GameMode mode, int playerCount, int startingTroops)
     {
+        // SecretMission is the sole remaining upfront-deal mode (see
+        // Create_deals_all_42_territories_equitably_across_SecretMission_players
+        // above) — Capital moved to Classic's Claim-phase start in 5.1, so
+        // it no longer belongs on this theory.
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
             GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
 
