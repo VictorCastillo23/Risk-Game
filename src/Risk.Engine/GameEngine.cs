@@ -522,6 +522,23 @@ public sealed class GameEngine : IGameEngine
                 PendingOccupation = new PendingOccupation(command.From, command.To, command.DiceCount)
             };
 
+            // Design D1: scan ALL players for whoever originally declared
+            // command.To as their headquarters, not just the pre-conquest
+            // owner (defenderTerritory.Owner) — a recapture chain would
+            // otherwise report the intermediate holder instead of the
+            // original declarer. SingleOrDefault is safe: HeadquartersId is
+            // write-once (5.1-D1) and a territory has exactly one owner, so
+            // two players sharing one HeadquartersId is a programmer-error
+            // signal, not a rule violation to Reject.
+            if (state.Mode == GameMode.Capital)
+            {
+                var declarer = state.Players.SingleOrDefault(p => p.HeadquartersId == command.To);
+                if (declarer is not null)
+                {
+                    events.Add(new HeadquartersCaptured(command.Actor, declarer.Id, command.To));
+                }
+            }
+
             var defenderOwnsAnyTerritory = updatedTerritories.Values.Any(t => t.Owner == defenderTerritory.Owner);
             if (!defenderOwnsAnyTerritory)
             {
