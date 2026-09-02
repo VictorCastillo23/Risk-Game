@@ -38,6 +38,20 @@ public class SecretMissionWiringTests
         Assert.Equal(3, ok.State.Players.Count);
         var assigned = Assert.Single(ok.State.Log.OfType<TerritoriesAssigned>());
         Assert.Equal(WorldMap.Territories.Count, assigned.Assignments.Count);
+        Assert.All(ok.State.Players, p => Assert.NotNull(p.Mission));
+    }
+
+    [Theory]
+    [InlineData(GameMode.Classic)]
+    [InlineData(GameMode.TwoPlayer)]
+    [InlineData(GameMode.Capital)]
+    public void GameSetup_Create_leaves_Mission_null_for_non_SecretMission_modes(GameMode mode)
+    {
+        var playerCount = mode == GameMode.TwoPlayer ? 2 : 3;
+        var result = GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.All(ok.State.Players, p => Assert.Null(p.Mission));
     }
 
     [Fact]
