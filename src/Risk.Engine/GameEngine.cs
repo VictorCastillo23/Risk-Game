@@ -123,7 +123,18 @@ public sealed class GameEngine : IGameEngine
             .Where(p => p.Id != viewer)
             .ToDictionary(p => p.Id, p => p.Hand.Count);
 
-        return new PlayerView(state.Territories, ownHand, otherCounts, state.Turn);
+        // Design D1: headquarters reveal is derived, not stored. The
+        // predicate is monotonic (HeadquartersId is write-once) and
+        // deliberately has no IsEliminated skip — see GameEngine's own
+        // AdvanceAfterHeadquartersSelection doc comment / design D3 for the
+        // unreachability proof that elimination cannot occur before this
+        // predicate is evaluated for the first time.
+        var ownHeadquarters = state.Players.Single(p => p.Id == viewer).HeadquartersId;
+        var revealedHeadquarters = state.Players.All(p => p.HeadquartersId is not null)
+            ? state.Players.ToDictionary(p => p.Id, p => p.HeadquartersId!.Value)
+            : new Dictionary<PlayerId, TerritoryId>();
+
+        return new PlayerView(state.Territories, ownHand, otherCounts, state.Turn, ownHeadquarters, revealedHeadquarters);
     }
 
     private static TurnPhase? RequiredPhaseFor(GameCommand command) => command switch
