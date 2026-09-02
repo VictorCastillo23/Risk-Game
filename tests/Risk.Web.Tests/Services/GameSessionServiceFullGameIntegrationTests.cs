@@ -50,6 +50,7 @@ public class GameSessionServiceFullGameIntegrationTests
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(startResult);
 
         var attacker = session.State!.Turn.CurrentPlayer; // player 0 is always dealt the first turn
+        var humanOpponent = session.State!.Players.Single(p => !p.IsNeutral && p.Id != attacker).Id;
 
         // Setup phase: place every starting troop, one at a time, in rotation.
         while (session.State!.Turn.Phase == TurnPhase.Setup)
@@ -108,8 +109,11 @@ public class GameSessionServiceFullGameIntegrationTests
         var finalState = session.State!;
         var won = Assert.IsType<GameStatus.Won>(finalState.Status);
         Assert.Equal(attacker, won.Winner);
-        Assert.All(finalState.Territories.Values, t => Assert.Equal(attacker, t.Owner));
-        Assert.Equal(WorldMap.Territories.Count, finalState.Territories.Count(t => t.Value.Owner == attacker));
+        // Victory now triggers as soon as the human opponent is eliminated (item
+        // 4.3's TwoPlayerVictoryRule) — the neutral may still own territory at
+        // that point, so this no longer asserts the attacker owns all 42.
+        var opponentFinal = finalState.Players.Single(p => p.Id == humanOpponent);
+        Assert.True(opponentFinal.IsEliminated);
         Assert.Contains(finalState.Log, e => e is GameWon);
         Assert.True(changedCount > 0);
 
@@ -126,10 +130,28 @@ public class GameSessionServiceFullGameIntegrationTests
         Assert.Same(stateBeforeRejectedCommand, session.State);
     }
 
+    /// <summary>
+    /// TwoPlayer-aware (item 4.1) — mirrors
+    /// <c>Risk.Tests.Fakes.GameSimulation.PlaceOneStartingTroop</c>: once the
+    /// acting human's own Setup pool is drained while Setup is still active,
+    /// Phase B is open and they instead choose where one of the neutral's
+    /// troops lands via <see cref="PlaceNeutralTroopsCommand"/>.
+    /// </summary>
     private static void PlaceOneStartingTroop(GameSessionService session)
     {
         var state = session.State!;
         var actor = state.Turn.CurrentPlayer;
+        var actorPool = state.Players.Single(p => p.Id == actor).TroopsRemaining;
+
+        if (state.Turn.Phase == TurnPhase.Setup && actorPool == 0)
+        {
+            var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+            var neutralTerritory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+            var neutralResult = session.Execute(new PlaceNeutralTroopsCommand(actor, neutralTerritory, 1));
+            Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(neutralResult);
+            return;
+        }
+
         var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
         var result = session.Execute(new PlaceTroopsCommand(actor, territory, 1));
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);

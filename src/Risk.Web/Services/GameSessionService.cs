@@ -52,9 +52,23 @@ public sealed class GameSessionService(IGameEngine engine, IDiceRoller dice)
         {
             State = ok.State;
             LastEvents = ok.Events;
-            Players = rows
+            var players = rows
                 .Select((row, index) => new PlayerConfig(new PlayerId(index), row.Name, row.ColorHex, row.IsAi))
                 .ToDictionary(config => config.Id);
+
+            // Design D2: GameMode.TwoPlayer's neutral third army is
+            // GameSetup.Create's own player, not one of the setup screen's
+            // rows — it never gets a PlayerSetupRow, so it needs its own
+            // synthesized PlayerConfig here or BoardSvg/PhaseIndicator would
+            // fall back to BoardColors.UnknownOwnerColor for it. IsAi: false
+            // — the neutral never takes a turn, it's only ever a placement
+            // target during Setup Phase B, chosen by a human.
+            if (ok.State.Players.SingleOrDefault(p => p.IsNeutral) is { } neutral)
+            {
+                players[neutral.Id] = new PlayerConfig(neutral.Id, "Ejército neutral", BoardColors.NeutralColor, IsAi: false);
+            }
+
+            Players = players;
             Changed?.Invoke();
         }
 

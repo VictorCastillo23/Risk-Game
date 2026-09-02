@@ -102,36 +102,63 @@ public class GameSetupTests
         Assert.All(ok.State.Players, p => Assert.False(p.IsNeutral));
     }
 
+    /// <summary>
+    /// The carve-out for <see cref="Create_marks_no_player_as_neutral"/>:
+    /// that test is Classic-4p-only, not parameterized across modes, so it
+    /// needs no exemption. <see cref="GameMode.TwoPlayer"/> instead asserts
+    /// exactly one neutral among its three parties (roadmap 4.1).
+    /// </summary>
     [Fact]
-    public void Create_deals_all_42_territories_equitably_across_4_players()
+    public void Create_marks_exactly_one_player_as_neutral_in_TwoPlayer_mode()
     {
-        // Capital still goes through the shared upfront random-deal branch
-        // (Classic moved to the unclaimed Claim-phase start in 2.1 — see
-        // Create_starts_Classic_with_all_territories_unclaimed_... below).
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-            GameSetup.Create(4, GameMode.Capital, QueuedDiceRoller.ForRollOff(4)));
+            GameSetup.Create(2, GameMode.TwoPlayer, QueuedDiceRoller.ForRollOff(2)));
+
+        Assert.Single(ok.State.Players, p => p.IsNeutral);
+    }
+
+    [Fact]
+    public void Create_deals_all_42_territories_equitably_across_SecretMission_players()
+    {
+        // SecretMission is now the sole mode still on the shared upfront
+        // random-deal branch: Classic moved to the unclaimed Claim-phase
+        // start in 2.1, TwoPlayer got its own 3-way neutral-deal strategy
+        // in 4.1, and Capital joined Classic's Claim-phase start in 5.1
+        // (see Create_starts_Classic_and_Capital_with_all_territories_unclaimed_...
+        // above). 42 splits evenly across 3 players, so all three counts
+        // are exactly 14 — no remainder to spread unevenly.
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(3, GameMode.SecretMission, QueuedDiceRoller.ForRollOff(3)));
 
         var counts = ok.State.Territories.Values
             .GroupBy(t => t.Owner!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        Assert.Equal(4, counts.Count);
+        Assert.Equal(3, counts.Count);
         Assert.Equal(42, counts.Values.Sum());
-        Assert.All(counts.Values, count => Assert.InRange(count, 10, 11));
+        Assert.All(counts.Values, count => Assert.Equal(14, count));
     }
 
-    [Fact]
-    public void Create_starts_Classic_with_all_territories_unclaimed_full_troop_pools_and_Claim_phase()
+    [Theory]
+    [InlineData(GameMode.Classic, 3, 35)]
+    [InlineData(GameMode.Classic, 4, 30)]
+    [InlineData(GameMode.Classic, 5, 25)]
+    [InlineData(GameMode.Capital, 3, 35)]
+    [InlineData(GameMode.Capital, 4, 30)]
+    [InlineData(GameMode.Capital, 5, 25)]
+    public void Create_starts_Classic_and_Capital_with_all_territories_unclaimed_full_troop_pools_and_Claim_phase(GameMode mode, int playerCount, int startingTroops)
     {
         // ForRollOff is tie-free and strictly descending, so player 0 always
         // wins the roll-off — asserted below as the resulting CurrentPlayer.
+        // Capital reuses Classic's Claim-phase setup path (5.1) instead of
+        // the random-equitable deal, so it is byte-parity with Classic here.
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-            GameSetup.Create(4, GameMode.Classic, QueuedDiceRoller.ForRollOff(4)));
+            GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
 
         Assert.Equal(WorldMap.Territories.Count, ok.State.Territories.Count);
         Assert.All(ok.State.Territories.Values, t => Assert.Null(t.Owner));
         Assert.All(ok.State.Territories.Values, t => Assert.Equal(0, t.Troops));
-        Assert.All(ok.State.Players, p => Assert.Equal(30, p.TroopsRemaining));
+        Assert.All(ok.State.Players, p => Assert.Equal(startingTroops, p.TroopsRemaining));
         Assert.Equal(TurnPhase.Claim, ok.State.Turn.Phase);
         Assert.Equal(new PlayerId(0), ok.State.Turn.CurrentPlayer);
         Assert.Empty(ok.State.Log.OfType<TerritoriesAssigned>());
@@ -151,9 +178,15 @@ public class GameSetupTests
     }
 
     [Theory]
-    [InlineData(GameMode.TwoPlayer, 2, 40)]
+    [InlineData(GameMode.SecretMission, 3, 35)]
+    [InlineData(GameMode.SecretMission, 4, 30)]
+    [InlineData(GameMode.SecretMission, 5, 25)]
     public void Create_assigns_the_official_starting_troop_pool_via_upfront_deal(GameMode mode, int playerCount, int startingTroops)
     {
+        // SecretMission is the sole remaining upfront-deal mode (see
+        // Create_deals_all_42_territories_equitably_across_SecretMission_players
+        // above) — Capital moved to Classic's Claim-phase start in 5.1, so
+        // it no longer belongs on this theory.
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
             GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
 
@@ -191,6 +224,16 @@ public class GameSetupTests
         Assert.Equal(expectedMax, max);
     }
 
+    // NOTE (PR3, roadmap 4.1): this test predates the neutral third party
+    // (PR1) and PR2/PR3's Setup generalization. It drives a bare
+    // Troops:1-per-command loop through Phase A (legal — 1 is always within
+    // the 1..2 budget), then a PlaceNeutralTroopsCommand-per-turn loop
+    // through Phase B, and finally keeps draining with the same 1-troop
+    // pattern past the Setup->Reinforce transition — the same trick
+    // GameStateBuilder.CompleteSetup already relies on — so the final
+    // assertion of "every pool is 0" reflects a fully drained state rather
+    // than stopping mid-Reinforce with the first player's freshly granted
+    // pool sitting unplaced.
     [Fact]
     public void Turn_based_placement_ends_only_when_all_players_reach_zero_remaining_troops()
     {
@@ -199,7 +242,34 @@ public class GameSetupTests
         var state = ok.State;
         var engine = new Risk.Engine.GameEngine(new QueuedDiceRoller());
 
-        while (state.Players.Any(p => p.TroopsRemaining > 0))
+        // Phase A
+        while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
+        {
+            var actor = state.Turn.CurrentPlayer;
+            var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+            var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 1));
+            var accepted = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+            state = accepted.State;
+        }
+
+        Assert.Equal(TurnPhase.Setup, state.Turn.Phase);
+        Assert.Equal(26, state.Players.Single(p => p.IsNeutral).TroopsRemaining);
+
+        // Phase B
+        while (state.Players.Single(p => p.IsNeutral).TroopsRemaining > 0)
+        {
+            var actor = state.Turn.CurrentPlayer;
+            var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+            var territory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+
+            var result = engine.Execute(state, new PlaceNeutralTroopsCommand(actor, territory, 1));
+            var accepted = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+            state = accepted.State;
+        }
+
+        // Drain the newly granted Reinforce pool too, same pattern as above.
+        while (state.Players.Where(p => !p.IsNeutral).Any(p => p.TroopsRemaining > 0))
         {
             var actor = state.Turn.CurrentPlayer;
             var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
@@ -212,5 +282,30 @@ public class GameSetupTests
         Assert.All(state.Players, p => Assert.Equal(0, p.TroopsRemaining));
         Assert.Equal(TurnPhase.Reinforce, state.Turn.Phase);
         Assert.Equal(new PlayerId(0), state.Turn.CurrentPlayer);
+    }
+
+    [Theory]
+    [InlineData(GameMode.Classic, 3)]
+    [InlineData(GameMode.SecretMission, 3)]
+    [InlineData(GameMode.Capital, 3)]
+    public void Classic_SecretMission_Capital_still_reject_Troops_two_in_Setup(GameMode mode, int playerCount)
+    {
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(playerCount, mode, QueuedDiceRoller.ForRollOff(playerCount)));
+        var state = ok.State;
+        var engine = new Risk.Engine.GameEngine(new QueuedDiceRoller());
+
+        if (state.Turn.Phase == TurnPhase.Claim)
+        {
+            state = GameStateBuilder.CompleteClaimPhase(state, engine);
+        }
+
+        var actor = state.Turn.CurrentPlayer;
+        var territory = state.Territories.First(kv => kv.Value.Owner == actor).Key;
+
+        var result = engine.Execute(state, new PlaceTroopsCommand(actor, territory, 2));
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidTroopCount, rejection.Error.Code);
     }
 }

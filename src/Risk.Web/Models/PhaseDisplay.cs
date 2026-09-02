@@ -21,6 +21,7 @@ public static class PhaseDisplay
     {
         TurnPhase.Claim => "Reclamo de territorios",
         TurnPhase.Setup => "Configuración",
+        TurnPhase.SelectHeadquarters => "Selección de cuartel general",
         TurnPhase.Reinforce => "Refuerzo",
         TurnPhase.Attack => "Ataque",
         TurnPhase.Fortify => "Fortificación"

@@ -1,4 +1,3 @@
-using Risk.Domain.Map;
 using Risk.Engine;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
@@ -46,6 +45,7 @@ public class FullGameIntegrationTests
             GameSetup.Create(2, GameMode.TwoPlayer, QueuedDiceRoller.ForRollOff(2)));
         var state = setupOk.State;
         var attacker = state.Turn.CurrentPlayer; // player 0 is always dealt the first turn
+        var humanOpponent = state.Players.Single(p => !p.IsNeutral && p.Id != attacker).Id;
 
         // Setup phase: place every starting troop, one at a time, in rotation.
         while (state.Turn.Phase == TurnPhase.Setup)
@@ -108,8 +108,11 @@ public class FullGameIntegrationTests
 
         var won = Assert.IsType<GameStatus.Won>(state.Status);
         Assert.Equal(attacker, won.Winner);
-        Assert.All(state.Territories.Values, t => Assert.Equal(attacker, t.Owner));
-        Assert.Equal(WorldMap.Territories.Count, state.Territories.Count(t => t.Value.Owner == attacker));
+        // Victory now triggers as soon as the human opponent is eliminated (item
+        // 4.3's TwoPlayerVictoryRule) — the neutral may still own territory at
+        // that point, so this no longer asserts the attacker owns all 42.
+        var opponentFinal = state.Players.Single(p => p.Id == humanOpponent);
+        Assert.True(opponentFinal.IsEliminated);
         Assert.Contains(state.Log, e => e is GameWon);
 
         // Once won, the engine must refuse any further command.

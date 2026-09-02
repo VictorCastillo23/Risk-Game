@@ -80,12 +80,10 @@
 <RejectionMessage Error="_error" />
 
 @code {
-    // Only Classic is offered today — TwoPlayer's real ruleset (neutral
-    // third army) isn't implemented until a later roadmap item, so
-    // surfacing it here would be misleading. The <select> element itself
-    // stays present and array-driven so a future item can add more modes
-    // without restructuring this markup.
-    private static readonly GameMode[] SelectableModes = [GameMode.Classic];
+    // Classic and TwoPlayer (roadmap item 4.4) are offered today. The
+    // <select> element stays present and array-driven so a future item can
+    // add more modes without restructuring this markup.
+    private static readonly GameMode[] SelectableModes = [GameMode.Classic, GameMode.TwoPlayer];
 
     private GameMode _mode = GameMode.Classic;
 

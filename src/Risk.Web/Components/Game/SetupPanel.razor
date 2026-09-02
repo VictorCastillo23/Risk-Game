@@ -5,7 +5,7 @@
 <div class="setup-panel panel-frame">
     <p class="setup-panel-hint">@Hint</p>
 
-    <RejectionMessage Error="Error" />
+    <RejectionMessage Error="Error" MessageOverride="@ErrorMessageOverride" />
 </div>
 
 @code {
@@ -19,6 +19,16 @@
     public TurnPhase Phase { get; set; }
 
     /// <summary>
+    /// Whether <see cref="Phase"/> is <see cref="GameMode.TwoPlayer"/>'s
+    /// Setup Phase B (design D3) — drives both <see cref="Hint"/>'s third
+    /// case and <see cref="ErrorMessageOverride"/>. Computed by
+    /// <c>Game.razor</c> via <c>TwoPlayerSetupPhase.IsPhaseB</c> and passed
+    /// in, so this panel stays pure/parameter-driven.
+    /// </summary>
+    [Parameter]
+    public bool IsPhaseB { get; set; }
+
+    /// <summary>
     /// The most recent rejection from a Claim- or Setup-phase board click,
     /// if any — dispatch happens directly from the host page's click handler
     /// (a single click claims a territory or places 1 troop, no
@@ -27,7 +37,20 @@
     [Parameter]
     public GameError? Error { get; set; }
 
-    private string Hint => Phase == TurnPhase.Claim
-        ? "Hacé click en un territorio libre para reclamarlo."
-        : "Hacé click en un territorio propio para colocar una tropa.";
+    private string Hint => Phase switch
+    {
+        TurnPhase.Claim => "Hacé click en un territorio libre para reclamarlo.",
+        TurnPhase.Setup when IsPhaseB => "Fase B: hacé click en un territorio del ejército neutral para colocarle una tropa.",
+        _ => "Hacé click en un territorio propio para colocar una tropa."
+    };
+
+    // Design D3: the shared NotOwner copy ("No sos dueño de ese
+    // territorio.") is misleading during Phase B — the most likely misclick
+    // is the player's OWN territory, out of Phase-A habit, and that copy is
+    // flatly false there. Scoped to Phase B only; every other NotOwner
+    // rejection (Attack, Fortify, Phase A) keeps the shared global message.
+    private string? ErrorMessageOverride =>
+        IsPhaseB && Error?.Code == GameErrorCode.NotOwner
+            ? "En la Fase B solo podés colocar tropas en territorios del ejército neutral."
+            : null;
 }

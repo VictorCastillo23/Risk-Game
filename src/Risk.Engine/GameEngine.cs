@@ -61,6 +61,17 @@ public sealed class GameEngine : IGameEngine
             return Reject(GameErrorCode.GameOver, "The game has already ended.");
         }
 
+        // Item 4.2/D1: checked before the actor-is-current-player check
+        // below. The neutral (TwoPlayer's third army) is not "out of turn"
+        // — it can never legitimately act at all, so the diagnostic must say
+        // so precisely rather than falling through to NotYourTurn. Uses a
+        // non-throwing existence check (not Single) because actor validity
+        // is not yet established at this point in the pipeline.
+        if (state.Players.Any(p => p.Id == command.Actor && p.IsNeutral))
+        {
+            return Reject(GameErrorCode.ActorIsNeutral, "The neutral army cannot issue commands.");
+        }
+
         if (command.Actor != state.Turn.CurrentPlayer)
         {
             return Reject(GameErrorCode.NotYourTurn, "It is not your turn.");
@@ -105,8 +116,10 @@ public sealed class GameEngine : IGameEngine
         return command switch
         {
             PlaceTroopsCommand place => ExecutePlaceTroops(state, place),
+            PlaceNeutralTroopsCommand placeNeutral => ExecutePlaceNeutralTroops(state, placeNeutral),
             TradeCardsCommand trade => ExecuteTradeCards(state, trade),
             ClaimTerritoryCommand claim => ExecuteClaimTerritory(state, claim),
+            SelectHeadquartersCommand selectHeadquarters => ExecuteSelectHeadquarters(state, selectHeadquarters),
             AttackCommand attack => ExecuteAttack(state, attack),
             OccupyCommand occupy => ExecuteOccupy(state, occupy),
             FortifyCommand fortify => ExecuteFortify(state, fortify),
@@ -122,12 +135,28 @@ public sealed class GameEngine : IGameEngine
             .Where(p => p.Id != viewer)
             .ToDictionary(p => p.Id, p => p.Hand.Count);
 
-        return new PlayerView(state.Territories, ownHand, otherCounts, state.Turn);
+        // Design D1: headquarters reveal is derived, not stored. The
+        // predicate is monotonic (HeadquartersId is write-once) and
+        // deliberately has no IsEliminated skip — see GameEngine's own
+        // AdvanceAfterHeadquartersSelection doc comment / design D3 for the
+        // unreachability proof that elimination cannot occur before this
+        // predicate is evaluated for the first time.
+        var ownHeadquarters = state.Players.Single(p => p.Id == viewer).HeadquartersId;
+        var revealedHeadquarters = state.Players.All(p => p.HeadquartersId is not null)
+            ? state.Players.ToDictionary(p => p.Id, p => p.HeadquartersId!.Value)
+            : new Dictionary<PlayerId, TerritoryId>();
+
+        return new PlayerView(state.Territories, ownHand, otherCounts, state.Turn, ownHeadquarters, revealedHeadquarters);
     }
 
     private static TurnPhase? RequiredPhaseFor(GameCommand command) => command switch
     {
         PlaceTroopsCommand => null,
+        // Only legal during Setup; the finer-grained "is this actually
+        // Phase B" condition is derived state, not a simple phase check, so
+        // it is enforced inside ExecutePlaceNeutralTroops (design D3) rather
+        // than here.
+        PlaceNeutralTroopsCommand => TurnPhase.Setup,
         // Trading is phase-agnostic: it can be a voluntary Reinforce-phase
         // action (bonus troops land in the current/next Reinforce pool) or a
         // mandatory overflow trade-down forced mid-Attack by an elimination
@@ -135,12 +164,108 @@ public sealed class GameEngine : IGameEngine
         // design's open gate-ordering question).
         TradeCardsCommand => null,
         ClaimTerritoryCommand => TurnPhase.Claim,
+        SelectHeadquartersCommand => TurnPhase.SelectHeadquarters,
         AttackCommand => TurnPhase.Attack,
         OccupyCommand => TurnPhase.Attack,
         FortifyCommand => TurnPhase.Fortify,
         EndPhaseCommand => null,
         _ => throw new InvalidOperationException("Unreachable: unknown GameCommand type.")
     };
+
+    /// <summary>
+    /// How many troops a player may place per Setup-phase command/turn
+    /// (design D1). Every mode except <see cref="GameMode.TwoPlayer"/> keeps
+    /// the classic "exactly one troop, immediate rotation" rule (<c>1</c>);
+    /// <see cref="GameMode.TwoPlayer"/>'s Phase A allows <c>2</c>, splittable
+    /// across one or two commands (reglasrisk.md: "coloca dos tropas sobre
+    /// un territorio o dos de los que ocupes"). This is the ONLY place
+    /// TwoPlayer's "2 per turn" rule is expressed.
+    /// </summary>
+    private static int SetupTroopsPerTurn(GameMode mode) => mode == GameMode.TwoPlayer ? 2 : 1;
+
+    /// <summary>
+    /// How much of the current turn's Setup placement budget is still
+    /// available, derived from <paramref name="troopsRemaining"/>'s parity
+    /// against <paramref name="perTurn"/> rather than a separately tracked
+    /// counter (design D1 — avoids a stale-flag reset bug class, the same
+    /// one already documented on <c>ConqueredThisTurn</c>). A pool that is an
+    /// exact multiple of <paramref name="perTurn"/> is always at a turn
+    /// boundary, so the full budget is available; otherwise the remainder is
+    /// what is left of the turn already in progress. Safe because
+    /// <c>TroopsRemaining</c> cannot grow during Setup: <c>EndPhaseCommand</c>
+    /// rejects with <see cref="GameErrorCode.WrongPhase"/>, and
+    /// <c>TradeCardsCommand</c> — though phase-agnostic — dies on
+    /// <c>CardSet.IsValid</c> rejecting any hand size other than 3 (Setup
+    /// hands are always empty).
+    /// </summary>
+    private static int SetupBudgetRemaining(int troopsRemaining, int perTurn) =>
+        troopsRemaining % perTurn is 0 ? perTurn : troopsRemaining % perTurn;
+
+    /// <summary>
+    /// Design D3: whether <paramref name="state"/> is currently in
+    /// <see cref="GameMode.TwoPlayer"/>'s Setup Phase B — derived from state,
+    /// not a flag. True once both real humans have exhausted their own
+    /// Setup pool (Phase A complete) while the neutral still has troops of
+    /// its own left to place. Short-circuits on <c>Mode == TwoPlayer</c>
+    /// first so non-TwoPlayer modes (which have no neutral player at all)
+    /// never evaluate the neutral-lookup that follows.
+    /// </summary>
+    private static bool IsPhaseB(GameState state) =>
+        state.Mode == GameMode.TwoPlayer
+        && state.Turn.Phase == TurnPhase.Setup
+        && state.Players.Where(p => !p.IsNeutral).All(p => p.TroopsRemaining == 0)
+        && state.Players.Single(p => p.IsNeutral).TroopsRemaining > 0;
+
+    /// <summary>
+    /// Handles <see cref="PlaceNeutralTroopsCommand"/> (design D3): a human
+    /// chooses where one of the neutral player's troops lands during
+    /// <see cref="GameMode.TwoPlayer"/>'s Setup Phase B. Mirrors
+    /// <see cref="ExecutePlaceTroops"/>'s territory/pool accounting, but
+    /// spends the *neutral's* pool, not the acting human's — the human is
+    /// only choosing a target, never receiving the troop.
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> ExecutePlaceNeutralTroops(GameState state, PlaceNeutralTroopsCommand command)
+    {
+        if (!IsPhaseB(state))
+        {
+            return Reject(GameErrorCode.WrongPhase, "Neutral troops can only be placed after both players have placed all of their own setup troops.");
+        }
+
+        var neutral = state.Players.Single(p => p.IsNeutral);
+
+        if (!state.Territories.TryGetValue(command.Territory, out var territory) || territory.Owner != neutral.Id)
+        {
+            return Reject(GameErrorCode.NotOwner, "That territory is not owned by the neutral player.");
+        }
+
+        if (command.Troops != 1 || command.Troops > neutral.TroopsRemaining)
+        {
+            return Reject(GameErrorCode.InvalidTroopCount, "Exactly one neutral troop is placed per turn during Phase B.");
+        }
+
+        var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
+        {
+            [command.Territory] = territory with { Troops = territory.Troops + command.Troops }
+        };
+
+        var updatedNeutral = neutral with { TroopsRemaining = neutral.TroopsRemaining - command.Troops };
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == updatedNeutral.Id ? updatedNeutral : p)
+            .ToArray();
+
+        var events = new List<GameEvent> { new NeutralTroopsPlaced(command.Actor, command.Territory, command.Troops) };
+        var (nextTurn, finalPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, state.Mode, events);
+
+        var newState = state with
+        {
+            Territories = updatedTerritories,
+            Players = finalPlayers,
+            Turn = nextTurn,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
 
     private static CommandResult<GameState, GameEvent> ExecutePlaceTroops(GameState state, PlaceTroopsCommand command)
     {
@@ -161,9 +286,10 @@ public sealed class GameEngine : IGameEngine
             return Reject(GameErrorCode.InvalidTroopCount, "Troop count must be between 1 and the troops you have remaining.");
         }
 
-        if (state.Turn.Phase == TurnPhase.Setup && command.Troops != 1)
+        if (state.Turn.Phase == TurnPhase.Setup
+            && command.Troops > SetupBudgetRemaining(player.TroopsRemaining, SetupTroopsPerTurn(state.Mode)))
         {
-            return Reject(GameErrorCode.InvalidTroopCount, "During setup, exactly one troop is placed per turn.");
+            return Reject(GameErrorCode.InvalidTroopCount, "Troop count exceeds this turn's setup placement budget.");
         }
 
         var updatedTerritories = new Dictionary<TerritoryId, TerritoryState>(state.Territories)
@@ -179,9 +305,10 @@ public sealed class GameEngine : IGameEngine
         var events = new List<GameEvent> { new TroopsPlaced(command.Actor, command.Territory, command.Troops) };
         var nextTurn = state.Turn;
 
-        if (state.Turn.Phase == TurnPhase.Setup)
+        if (state.Turn.Phase == TurnPhase.Setup
+            && updatedPlayer.TroopsRemaining % SetupTroopsPerTurn(state.Mode) == 0)
         {
-            (nextTurn, updatedPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, events);
+            (nextTurn, updatedPlayers) = AdvanceAfterSetupPlacement(state.Turn, updatedPlayers, updatedTerritories, state.Mode, events);
         }
 
         var newState = state with
@@ -333,6 +460,90 @@ public sealed class GameEngine : IGameEngine
     }
 
     /// <summary>
+    /// Designates <see cref="SelectHeadquartersCommand.Territory"/> as the
+    /// actor's headquarters during <see cref="TurnPhase.SelectHeadquarters"/>
+    /// (design D2/spec). Ownership is the only constraint — no continent or
+    /// adjacency rule applies. On success, structurally removes the
+    /// territory's <see cref="TerritoryCard"/> from <see cref="GameState.Deck"/>
+    /// so it can never enter any player's <c>Hand</c> (spec's card-exclusion
+    /// requirement), emits the territory-free <see cref="HeadquartersSelected"/>
+    /// event (design D1 — <see cref="GameState.Log"/> is public/unredacted),
+    /// and advances via <see cref="AdvanceAfterHeadquartersSelection"/>.
+    /// </summary>
+    private static CommandResult<GameState, GameEvent> ExecuteSelectHeadquarters(GameState state, SelectHeadquartersCommand command)
+    {
+        if (!state.Territories.TryGetValue(command.Territory, out var territory) || territory.Owner != command.Actor)
+        {
+            return Reject(GameErrorCode.NotOwner, "You do not own that territory.");
+        }
+
+        var player = state.Players.Single(p => p.Id == command.Actor);
+        var updatedPlayer = player with { HeadquartersId = command.Territory };
+        IReadOnlyList<PlayerState> updatedPlayers = state.Players
+            .Select(p => p.Id == updatedPlayer.Id ? updatedPlayer : p)
+            .ToArray();
+
+        var updatedDeck = state.Deck
+            .Where(card => card is not TerritoryCard territoryCard || territoryCard.Territory != command.Territory)
+            .ToArray();
+
+        var events = new List<GameEvent> { new HeadquartersSelected(command.Actor) };
+        var (nextTurn, finalPlayers) = AdvanceAfterHeadquartersSelection(state.Turn, updatedPlayers, state.Territories, events);
+
+        var newState = state with
+        {
+            Players = finalPlayers,
+            Deck = updatedDeck,
+            Turn = nextTurn,
+            Log = [.. state.Log, .. events]
+        };
+
+        return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Rotation/transition logic for <see cref="ExecuteSelectHeadquarters"/>.
+    /// While at least one player has not yet selected a headquarters, rotates
+    /// to the next player (plain index, mirroring <see cref="AdvanceAfterClaim"/>
+    /// — no <c>IsEliminated</c> skip needed: design D3 proves elimination is
+    /// unreachable before this phase completes) and the phase stays
+    /// <see cref="TurnPhase.SelectHeadquarters"/>. Once every player has
+    /// selected, this was the final selection: emits
+    /// <see cref="HeadquartersRevealed"/> with every player's headquarters,
+    /// then transitions to <see cref="TurnPhase.Reinforce"/> at
+    /// <c>players[0]</c> with that player's reinforcement pool computed —
+    /// the same completion shape as <see cref="AdvanceAfterSetupPlacement"/>,
+    /// not <see cref="AdvanceAfterClaim"/>'s "rotated next player" shape,
+    /// since who selected last is irrelevant to whose turn is next.
+    /// </summary>
+    private static (TurnState Turn, IReadOnlyList<PlayerState> Players) AdvanceAfterHeadquartersSelection(
+        TurnState turn,
+        IReadOnlyList<PlayerState> players,
+        IReadOnlyDictionary<TerritoryId, TerritoryState> territories,
+        List<GameEvent> events)
+    {
+        if (players.Any(p => p.HeadquartersId is null))
+        {
+            var currentIndex = players.ToList().FindIndex(p => p.Id == turn.CurrentPlayer);
+            var next = players[(currentIndex + 1) % players.Count].Id;
+            return (turn with { CurrentPlayer = next }, players);
+        }
+
+        var headquarters = players.ToDictionary(p => p.Id, p => p.HeadquartersId!.Value);
+        events.Add(new HeadquartersRevealed(headquarters));
+
+        var firstPlayer = players[0];
+        var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
+        IReadOnlyList<PlayerState> reinforcedPlayers = players
+            .Select(p => p.Id == firstPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .ToArray();
+
+        events.Add(new PhaseChanged(TurnPhase.SelectHeadquarters, TurnPhase.Reinforce, firstPlayer.Id));
+
+        return (new TurnState(firstPlayer.Id, TurnPhase.Reinforce), reinforcedPlayers);
+    }
+
+    /// <summary>
     /// Attempts to remove every card in <paramref name="cards"/> from
     /// <paramref name="hand"/> (by value, one instance per match). Returns
     /// false without mutating anything meaningful if the hand doesn't
@@ -425,6 +636,23 @@ public sealed class GameEngine : IGameEngine
                 PendingOccupation = new PendingOccupation(command.From, command.To, command.DiceCount)
             };
 
+            // Design D1: scan ALL players for whoever originally declared
+            // command.To as their headquarters, not just the pre-conquest
+            // owner (defenderTerritory.Owner) — a recapture chain would
+            // otherwise report the intermediate holder instead of the
+            // original declarer. SingleOrDefault is safe: HeadquartersId is
+            // write-once (5.1-D1) and a territory has exactly one owner, so
+            // two players sharing one HeadquartersId is a programmer-error
+            // signal, not a rule violation to Reject.
+            if (state.Mode == GameMode.Capital)
+            {
+                var declarer = state.Players.SingleOrDefault(p => p.HeadquartersId == command.To);
+                if (declarer is not null)
+                {
+                    events.Add(new HeadquartersCaptured(command.Actor, declarer.Id, command.To));
+                }
+            }
+
             var defenderOwnsAnyTerritory = updatedTerritories.Values.Any(t => t.Owner == defenderTerritory.Owner);
             if (!defenderOwnsAnyTerritory)
             {
@@ -464,8 +692,9 @@ public sealed class GameEngine : IGameEngine
             }
             else
             {
-                // Pre-refactor inline check, byte-identical (TwoPlayer / Capital —
-                // neither has an IVictoryRule yet; VictoryRules.For returns null).
+                // Pre-refactor inline check, byte-identical (Capital only — the last
+                // mode without an IVictoryRule; VictoryRules.For returns null. Capital's
+                // real rule is roadmap item 5.3.) TwoPlayer moved to the branch above in 4.3.
                 var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
                 if (attackerOwnsEveryTerritory)
                 {
@@ -711,16 +940,22 @@ public sealed class GameEngine : IGameEngine
     }
 
     /// <summary>
-    /// The next non-eliminated player after <paramref name="fromIndex"/>,
+    /// The next non-eliminated, non-neutral player after <paramref name="fromIndex"/>,
     /// wrapping around the player list. Eliminated players are skipped so
     /// the turn cycle never lands on someone with no territories left.
+    /// Neutral players (<see cref="PlayerState.IsNeutral"/>, item 4.1's
+    /// <see cref="GameMode.TwoPlayer"/> third army) are skipped too (item
+    /// 4.2/D1): the neutral is a board object, not an agent, and must never
+    /// become <see cref="TurnState.CurrentPlayer"/> nor receive reinforcement
+    /// via <see cref="AdvanceToNextPlayer"/>'s unconditional
+    /// <see cref="Reinforcement.Calculate"/> call.
     /// </summary>
     private static PlayerState NextActivePlayer(IReadOnlyList<PlayerState> players, int fromIndex)
     {
         for (var offset = 1; offset <= players.Count; offset++)
         {
             var candidate = players[(fromIndex + offset) % players.Count];
-            if (!candidate.IsEliminated)
+            if (!candidate.IsEliminated && !candidate.IsNeutral)
             {
                 return candidate;
             }
@@ -729,10 +964,28 @@ public sealed class GameEngine : IGameEngine
         throw new InvalidOperationException("Unreachable: at least one active player must remain once the game is won.");
     }
 
+    /// <summary>
+    /// Rotation for Setup-phase placement (design D1/D4). Only ever hands the
+    /// turn to a non-neutral player — a neutral
+    /// (<see cref="PlayerState.IsNeutral"/>, item 4.1's <see cref="GameMode.TwoPlayer"/>
+    /// third army) never becomes <see cref="TurnState.CurrentPlayer"/>: it is
+    /// a board object, not an agent, and only <c>PlaceNeutralTroopsCommand</c>
+    /// spends its pool. Three cases, checked in order:
+    /// (1) a non-neutral player still has their own Setup troops to place
+    /// (Phase A) — rotate to them;
+    /// (2) no non-neutral player has troops left, but a neutral does
+    /// (<see cref="GameMode.TwoPlayer"/>'s Phase B) — keep alternating the
+    /// same humans by plain index rotation, skipping only the neutral,
+    /// so a human can submit the next <c>PlaceNeutralTroopsCommand</c>;
+    /// (3) neither — Setup is fully complete (every mode's normal path, and
+    /// TwoPlayer's Phase B-drained path) and the first player begins the
+    /// normal turn cycle in Reinforce.
+    /// </summary>
     private static (TurnState Turn, IReadOnlyList<PlayerState> Players) AdvanceAfterSetupPlacement(
         TurnState turn,
         IReadOnlyList<PlayerState> players,
         IReadOnlyDictionary<TerritoryId, TerritoryState> territories,
+        GameMode mode,
         List<GameEvent> events)
     {
         var currentIndex = players.ToList().FindIndex(p => p.Id == turn.CurrentPlayer);
@@ -740,14 +993,36 @@ public sealed class GameEngine : IGameEngine
         for (var offset = 1; offset <= players.Count; offset++)
         {
             var candidate = players[(currentIndex + offset) % players.Count];
-            if (candidate.TroopsRemaining > 0)
+            if (!candidate.IsNeutral && candidate.TroopsRemaining > 0)
             {
                 return (turn with { CurrentPlayer = candidate.Id }, players);
             }
         }
 
-        // Every player has placed all starting troops: setup is complete and
-        // the first player begins the normal turn cycle in Reinforce.
+        var neutral = players.FirstOrDefault(p => p.IsNeutral);
+        if (neutral is { TroopsRemaining: > 0 })
+        {
+            for (var offset = 1; offset <= players.Count; offset++)
+            {
+                var candidate = players[(currentIndex + offset) % players.Count];
+                if (!candidate.IsNeutral)
+                {
+                    return (turn with { CurrentPlayer = candidate.Id }, players);
+                }
+            }
+        }
+
+        // Every non-neutral player has placed all starting troops, and (for
+        // TwoPlayer) the neutral's pool is also fully drained: setup is
+        // complete. GameMode.Capital diverges here — it enters a one-round
+        // SelectHeadquarters gate before Reinforce; every other mode goes
+        // straight to Reinforce for the first player, unchanged.
+        if (mode == GameMode.Capital)
+        {
+            events.Add(new PhaseChanged(TurnPhase.Setup, TurnPhase.SelectHeadquarters, players[0].Id));
+            return (new TurnState(players[0].Id, TurnPhase.SelectHeadquarters), players);
+        }
+
         var firstPlayer = players[0];
         var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
         IReadOnlyList<PlayerState> reinforcedPlayers = players

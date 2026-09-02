@@ -2,11 +2,21 @@
 
 @if (Error is not null)
 {
-    <p class="game-error" role="alert" aria-live="polite">@Risk.Web.Services.GameErrorPresenter.Describe(Error)</p>
+    <p class="game-error" role="alert" aria-live="polite">@(MessageOverride ?? Risk.Web.Services.GameErrorPresenter.Describe(Error))</p>
 }
 
 @code {
     /// <summary>The rejection to render inline, or <c>null</c> to render nothing (zero-height).</summary>
     [Parameter]
     public GameError? Error { get; set; }
+
+    /// <summary>
+    /// Optional copy that replaces <see cref="Risk.Web.Services.GameErrorPresenter.Describe"/>'s
+    /// output for this one rendering (design D3) — e.g. Setup Phase B's
+    /// context-aware <see cref="GameErrorCode.NotOwner"/> message. Unset in
+    /// every other call site, so this is a zero-behavior-change addition
+    /// there.
+    /// </summary>
+    [Parameter]
+    public string? MessageOverride { get; set; }
 }
