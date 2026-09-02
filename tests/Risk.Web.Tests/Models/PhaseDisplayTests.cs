@@ -8,6 +8,7 @@ public class PhaseDisplayTests
     [Theory]
     [InlineData(TurnPhase.Claim, "Reclamo de territorios")]
     [InlineData(TurnPhase.Setup, "Configuración")]
+    [InlineData(TurnPhase.SelectHeadquarters, "Selección de cuartel general")]
     [InlineData(TurnPhase.Reinforce, "Refuerzo")]
     [InlineData(TurnPhase.Attack, "Ataque")]
     [InlineData(TurnPhase.Fortify, "Fortificación")]
