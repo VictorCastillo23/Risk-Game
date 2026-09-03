@@ -139,7 +139,13 @@ public sealed class GameEngine : IGameEngine
             ? state.Players.ToDictionary(p => p.Id, p => p.HeadquartersId!.Value)
             : new Dictionary<PlayerId, TerritoryId>();
 
-        return new PlayerView(state.Territories, ownHand, otherCounts, state.Turn, ownHeadquarters, revealedHeadquarters);
+        // Design 3.4-D1/D2: the substitution is engine-owned. Observe reports what
+        // the player must actually complete, which is exactly what
+        // SecretMissionVictoryRule checks — one function, two call sites, no drift.
+        var ownMission = state.Players.Single(p => p.Id == viewer).Mission;
+        var ownEffectiveMission = ownMission is null ? null : MissionResolution.Effective(viewer, ownMission);
+
+        return new PlayerView(state.Territories, ownHand, otherCounts, state.Turn, ownHeadquarters, revealedHeadquarters, ownEffectiveMission);
     }
 
     private static TurnPhase? RequiredPhaseFor(GameCommand command) => command switch
