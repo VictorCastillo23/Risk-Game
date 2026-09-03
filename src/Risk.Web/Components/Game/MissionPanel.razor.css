@@ -1,0 +1,13 @@
+.mission-panel-text {
+    background: var(--parchment);
+    border: 1px solid var(--wood);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    margin: 0 0 0.6rem;
+}
+
+.mission-panel-hint {
+    margin: 0 0 0.6rem;
+    color: var(--ink-soft);
+    font-style: italic;
+}
