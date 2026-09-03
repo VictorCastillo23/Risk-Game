@@ -141,14 +141,6 @@ public class TwoPlayerVictoryRuleTests
         Assert.IsType<TwoPlayerVictoryRule>(rule);
     }
 
-    [Fact]
-    public void VictoryRules_For_Capital_still_resolves_to_null()
-    {
-        var rule = VictoryRules.For(GameMode.Capital);
-
-        Assert.Null(rule);
-    }
-
     private static GameState BuildState(
         IReadOnlyList<PlayerId> territoryOwners,
         IReadOnlyList<PlayerState> players,

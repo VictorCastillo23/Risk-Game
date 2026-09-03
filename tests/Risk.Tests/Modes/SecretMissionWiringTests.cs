@@ -142,23 +142,42 @@ public class SecretMissionWiringTests
         Assert.Equal(1, recordingRule.Calls);
     }
 
-    [Theory]
-    [InlineData(GameMode.Capital)]
-    public void Other_modes_still_win_via_the_untouched_actor_only_inline_check(GameMode mode)
+    /// <summary>
+    /// Positive routing proof for <see cref="GameMode.Capital"/> (roadmap item
+    /// 5.3), mirroring <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>
+    /// / <see cref="TwoPlayer_victory_is_routed_through_TwoPlayerVictoryRule"/>:
+    /// a Capital win alone is NOT sufficient evidence that
+    /// <see cref="CapitalVictoryRule"/> is actually wired, since a state where
+    /// the attacker owns every territory (including both HQs) also satisfies
+    /// the now-dead inline "owns all 42" fallback by coincidence. Injecting a
+    /// <see cref="RecordingVictoryRule"/> via the internal test constructor
+    /// gives positive, observable proof that <c>ExecuteAttack</c> reaches
+    /// <see cref="CapitalVictoryRule"/> through the generic <c>victoryRuleFor</c>
+    /// dispatch (spec: "Capital dispatches through CapitalVictoryRule, not the
+    /// inline fallback").
+    /// </summary>
+    [Fact]
+    public void Capital_victory_is_routed_through_CapitalVictoryRule()
     {
         var attacker = new PlayerId(0);
         var defender = new PlayerId(1);
-        var state = BuildOneTerritoryFromVictoryState(attacker, defender, mode);
+        // Attacker's HQ (Alaska) is already theirs; defender's HQ is
+        // NorthwestTerritory — the territory this attack captures, so the
+        // conquest completes both "own your HQ" and "own every opponent HQ".
+        var state = BuildOneTerritoryFromVictoryState(
+            attacker, defender, GameMode.Capital, attackerHq: Alaska, defenderHq: NorthwestTerritory);
         var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
-        var engine = new GameEngine(dice);
+        var recordingRule = new RecordingVictoryRule(new CapitalVictoryRule());
+        Func<GameMode, IVictoryRule?> victoryRuleFor = mode =>
+            mode == GameMode.Capital ? recordingRule : VictoryRules.For(mode);
+        var engine = new GameEngine(dice, victoryRuleFor);
 
         var result = engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1));
 
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         var won = Assert.IsType<GameStatus.Won>(ok.State.Status);
         Assert.Equal(attacker, won.Winner);
-        var gameWon = Assert.Single(ok.Events.OfType<GameWon>());
-        Assert.Equal(attacker, gameWon.Winner);
+        Assert.Equal(1, recordingRule.Calls);
     }
 
     /// <summary>
@@ -231,10 +250,17 @@ public class SecretMissionWiringTests
     /// defender's sole remaining territory), so this attack both eliminates
     /// the defender and wins the game in the same command. Mirrors
     /// <c>VictoryTests.BuildOneTerritoryFromVictoryState</c>, parameterized
-    /// by <see cref="GameMode"/>.
+    /// by <see cref="GameMode"/>. <paramref name="attackerHq"/>/<paramref name="defenderHq"/>
+    /// are for <see cref="GameMode.Capital"/>'s routing test only — every
+    /// other mode leaves them null and ignores <see cref="PlayerState.HeadquartersId"/>.
     /// </summary>
     private static GameState BuildOneTerritoryFromVictoryState(
-        PlayerId attacker, PlayerId defender, GameMode mode, MissionCard? attackerMission = null)
+        PlayerId attacker,
+        PlayerId defender,
+        GameMode mode,
+        MissionCard? attackerMission = null,
+        TerritoryId? attackerHq = null,
+        TerritoryId? defenderHq = null)
     {
         var territories = new Dictionary<TerritoryId, TerritoryState>();
         foreach (var territory in WorldMap.Territories)
@@ -247,8 +273,8 @@ public class SecretMissionWiringTests
 
         IReadOnlyList<PlayerState> players =
         [
-            new PlayerState(attacker, [], false, 0, Mission: attackerMission),
-            new PlayerState(defender, [], false, 0)
+            new PlayerState(attacker, [], false, 0, Mission: attackerMission, HeadquartersId: attackerHq),
+            new PlayerState(defender, [], false, 0, HeadquartersId: defenderHq)
         ];
 
         return new GameState(
