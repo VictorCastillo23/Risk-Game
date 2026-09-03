@@ -20,7 +20,7 @@ public static class Reinforcement
         var territoryTroops = Math.Max(owned / TerritoriesPerTroop, MinimumTroops);
 
         var continentBonus = Continents.All
-            .Where(c => c.Members.Count > 0 && c.Members.All(m => territories.TryGetValue(m, out var t) && t.Owner == player))
+            .Where(c => ContinentControl.IsFullyOwnedBy(c, territories, player))
             .Sum(c => c.Bonus);
 
         return territoryTroops + continentBonus;
