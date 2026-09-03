@@ -23,13 +23,6 @@ public sealed class GameEngine : IGameEngine
 {
     private const int MandatoryTradeThreshold = 5;
 
-    /// <summary>
-    /// <see cref="GameMode.SecretMission"/>'s <see cref="IVictoryRule"/>.
-    /// Static, not constructor-injected, per design D3 — a full mode
-    /// resolver is deferred until a second mode is wired.
-    /// </summary>
-    private static readonly IVictoryRule SecretMissionVictory = new SecretMissionVictoryRule();
-
     private readonly IDiceRoller dice;
     private readonly Func<GameMode, IVictoryRule?> victoryRuleFor;
 
@@ -669,20 +662,12 @@ public sealed class GameEngine : IGameEngine
                 }
             }
 
-            if (state.Mode == GameMode.SecretMission)
+            if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
             {
-                var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
-                if (SecretMissionVictory.CheckVictory(postConquest) is { } winner)
-                {
-                    newStatus = new GameStatus.Won(winner);
-                    events.Add(new GameWon(winner));
-                }
-            }
-            else if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
-            {
-                // Classic, via ConquestVictoryRule (item 2.1) — resolved through
-                // VictoryRules.For, not hardcoded, so the test seam (design D5)
-                // can prove this branch is actually reached.
+                // Classic (item 2.1), TwoPlayer (item 4.3), SecretMission
+                // (item 3.3) — all resolved through VictoryRules.For, not
+                // hardcoded, so the test seam (design D5) can prove this
+                // branch is actually reached.
                 var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
                 if (modeVictoryRule.CheckVictory(postConquest) is { } winner)
                 {

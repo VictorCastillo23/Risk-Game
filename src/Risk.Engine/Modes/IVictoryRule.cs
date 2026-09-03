@@ -13,10 +13,10 @@ namespace Risk.Engine.Modes;
 /// resolves ownership, but <em>before</em> the conquered territory receives
 /// its occupying troops via <c>OccupyCommand</c> — the state passed in still
 /// has the conquered territory at 0 troops. Rules that only read ownership
-/// (the interim SecretMission conquest-of-all-territories check) are
-/// unaffected; rules that need occupying troop counts (future troop-based
-/// missions) need a second call site at the end of <c>ExecuteOccupy</c>,
-/// not a change to this interface.
+/// and elimination state are unaffected; rules that need occupying troop
+/// counts (SecretMission's <c>OccupyTerritories</c> missions) need a second
+/// call site at the end of <c>ExecuteOccupy</c>, not a change to this
+/// interface.
 /// </remarks>
 public interface IVictoryRule
 {
