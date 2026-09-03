@@ -30,11 +30,10 @@ public class HexAdjacencyRegressionTests
 
     /// <summary>
     /// Pre-existing false hex-adjacencies discovered incidentally by this
-    /// regression check but outside this fix's scope (Asia-only, per the
-    /// audit that produced this test class). Tracked here instead of
-    /// silently ignored so the class of bug stays caught for every other
-    /// pair while this specific one awaits its own dedicated fix.
-    /// Empty now that Egypt-Congo (Africa) has been fixed as well.
+    /// regression check. Tracked here instead of silently ignored so the
+    /// class of bug stays caught for every other pair while a specific one
+    /// awaits its own dedicated fix. Empty now that both the Asia pairs and
+    /// the Africa pair (Egypt-Congo) have been fixed.
     /// </summary>
     private static readonly (string A, string B)[] KnownPreExistingFalseAdjacencies = [];
 

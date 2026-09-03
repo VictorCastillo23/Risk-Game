@@ -59,13 +59,18 @@ public static class TerritoryLayout
         ("WesternEurope", "EU", 0, 2),
         ("SouthernEurope", "EU", 1, 2),
 
-        // Africa — Madagascar a detached island off the east coast
-        ("NorthAfrica", "AF", 0, 0),
-        ("Egypt", "AF", 1, 0),
-        ("Congo", "AF", 0, 1),
+        // Africa — EastAfrica as the hub bordering all 5 other territories;
+        // the rest ring around it in real-border order (Egypt, NorthAfrica,
+        // Congo, SouthAfrica, Madagascar) so consecutive ring pairs touch
+        // (matching WorldMap borders) while Egypt and Congo — real
+        // non-neighbors — land on non-consecutive ring slots and no longer
+        // falsely share a hex edge. See HexAdjacencyRegressionTests.
+        ("NorthAfrica", "AF", 2, 0),
+        ("Egypt", "AF", 2, 1),
+        ("Congo", "AF", 1, 0),
         ("EastAfrica", "AF", 1, 1),
-        ("Madagascar", "AF", 2, 1),
-        ("SouthAfrica", "AF", 0, 2),
+        ("Madagascar", "AF", 0, 2),
+        ("SouthAfrica", "AF", 0, 1),
 
         // Asia — the largest continent: wide north tapering to the Middle East / India peninsula.
         // Coordinates are deliberately NOT a simple grid: they trace the real WorldMap
