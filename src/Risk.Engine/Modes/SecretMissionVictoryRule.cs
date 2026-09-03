@@ -12,7 +12,7 @@ namespace Risk.Engine.Modes;
 /// <see cref="OccupyTerritories"/>, <see cref="EliminateArmy"/>, or
 /// <see cref="ConquerContinents"/>. A dealt <see cref="EliminateArmy"/> naming
 /// the holder's own seat is evaluated as <see cref="OccupyTerritories"/>(24, 1)
-/// instead (see <see cref="EffectiveMission"/>), without mutating
+/// instead (see <see cref="MissionResolution.Effective"/>), without mutating
 /// <see cref="PlayerState.Mission"/>.
 /// </summary>
 public sealed class SecretMissionVictoryRule : IVictoryRule
@@ -26,7 +26,7 @@ public sealed class SecretMissionVictoryRule : IVictoryRule
                 continue;
             }
 
-            if (IsComplete(EffectiveMission(player.Id, player.Mission), player.Id, state))
+            if (IsComplete(MissionResolution.Effective(player.Id, player.Mission), player.Id, state))
             {
                 return player.Id;
             }
@@ -34,16 +34,6 @@ public sealed class SecretMissionVictoryRule : IVictoryRule
 
         return null;
     }
-
-    /// <summary>
-    /// Check-time only (roadmap 3.2 deferral, reglasrisk.md:84-85): a dealt
-    /// EliminateArmy naming the holder's OWN seat evaluates as its printed
-    /// fallback. PlayerState.Mission is never rewritten.
-    /// </summary>
-    private static MissionCard EffectiveMission(PlayerId player, MissionCard dealt) =>
-        dealt is EliminateArmy(var army) && army.Value == player.Value
-            ? new OccupyTerritories(24, MinArmiesPerTerritory: 1)
-            : dealt;
 
     private static bool IsComplete(MissionCard mission, PlayerId player, GameState state) => mission switch
     {
