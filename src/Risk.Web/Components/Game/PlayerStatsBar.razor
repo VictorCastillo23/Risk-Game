@@ -1,0 +1,27 @@
+@using Risk.Domain.Players
+@using Risk.Engine.State
+@using Risk.Web.Models
+
+<div class="player-stats-bar">
+    @foreach (var row in PlayerStats.Rows(State))
+    {
+        var config = Players[row.Player];
+
+        <div class="player-stats-bar-entry">
+            <span class="player-stats-bar-swatch" style="background-color:@config.ColorHex"></span>
+            <span class="player-stats-bar-name">@config.Name</span>
+            <span class="player-stats-bar-territories" title="Territorios">Territorios: @row.TerritoryCount</span>
+            <span class="player-stats-bar-troops" title="Tropas">Tropas: @row.TroopCount</span>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The state to render totals from — always-visible, all-players summary (design: read straight off <c>GameState</c>, same convention as <c>PhaseIndicator</c>).</summary>
+    [Parameter, EditorRequired]
+    public GameState State { get; set; } = null!;
+
+    /// <summary>Player identity/color lookup for the active session's players (includes the synthesized neutral entry in <see cref="GameMode.TwoPlayer"/>).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyDictionary<PlayerId, PlayerConfig> Players { get; set; } = null!;
+}
