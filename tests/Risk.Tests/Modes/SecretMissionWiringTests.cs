@@ -1,5 +1,6 @@
 using Risk.Domain.Cards;
 using Risk.Domain.Map;
+using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
@@ -54,12 +55,20 @@ public class SecretMissionWiringTests
         Assert.All(ok.State.Players, p => Assert.Null(p.Mission));
     }
 
+    /// <summary>
+    /// Mission-driven replacement for the pre-3.3 "owns all 42 territories"
+    /// characterization test (which built players with <c>Mission: null</c>
+    /// and is no longer a valid SecretMission win — design D5/D6). The
+    /// attacker's own dealt <c>EliminateArmy(defender)</c> completes in the
+    /// same <c>Execute</c> call that eliminates the defender.
+    /// </summary>
     [Fact]
-    public void SecretMission_conquest_of_the_last_territory_wins_through_IGameEngine_Execute()
+    public void SecretMission_attackers_own_EliminateArmy_mission_completes_in_the_same_Execute_call()
     {
         var attacker = new PlayerId(0);
         var defender = new PlayerId(1);
-        var state = BuildOneTerritoryFromVictoryState(attacker, defender, GameMode.SecretMission);
+        var mission = new EliminateArmy(new ArmyId(defender.Value));
+        var state = BuildOneTerritoryFromVictoryState(attacker, defender, GameMode.SecretMission, attackerMission: mission);
         var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
         var engine = new GameEngine(dice);
 
@@ -70,6 +79,67 @@ public class SecretMissionWiringTests
         Assert.Equal(attacker, won.Winner);
         var gameWon = Assert.Single(ok.Events.OfType<GameWon>());
         Assert.Equal(attacker, gameWon.Winner);
+    }
+
+    /// <summary>
+    /// Spec requirement "A player's mission can complete due to another
+    /// player's action" (3.3): a bystander who took no action can still win
+    /// the moment a third player's attack eliminates the bystander's
+    /// mission target, in the same <c>Execute</c> call — proving
+    /// <see cref="SecretMissionVictoryRule.CheckVictory"/> evaluates every
+    /// active player, not just <c>command.Actor</c>.
+    /// </summary>
+    [Fact]
+    public void SecretMission_a_third_players_attack_completes_a_bystanders_EliminateArmy_mission_in_the_same_Execute_call()
+    {
+        var bystander = new PlayerId(0); // holds EliminateArmy(defender); takes no action this turn
+        var defender = new PlayerId(1);
+        var attacker = new PlayerId(2);
+        var mission = new EliminateArmy(new ArmyId(defender.Value));
+        var state = BuildThreePlayerCrossMissionState(bystander, defender, attacker, mission);
+        var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
+        var engine = new GameEngine(dice);
+
+        var result = engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        var won = Assert.IsType<GameStatus.Won>(ok.State.Status);
+        Assert.Equal(bystander, won.Winner);
+        var gameWon = Assert.Single(ok.Events.OfType<GameWon>());
+        Assert.Equal(bystander, gameWon.Winner);
+    }
+
+    /// <summary>
+    /// Positive routing proof for <see cref="GameMode.SecretMission"/>
+    /// (design D5/D7 — unlocked once <c>GameEngine.cs</c>'s hardcoded field
+    /// and dedicated branch are deleted), mirroring
+    /// <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>
+    /// and <see cref="TwoPlayer_victory_is_routed_through_TwoPlayerVictoryRule"/>:
+    /// injecting a <see cref="RecordingVictoryRule"/> via the internal test
+    /// constructor gives positive, observable proof that
+    /// <c>ExecuteAttack</c> reaches <see cref="SecretMissionVictoryRule"/>
+    /// through the generic <c>victoryRuleFor</c> dispatch, not a
+    /// SecretMission-specific hardcoded branch.
+    /// </summary>
+    [Fact]
+    public void SecretMission_victory_is_routed_through_SecretMissionVictoryRule()
+    {
+        var attacker = new PlayerId(0);
+        var defender = new PlayerId(1);
+        var mission = new EliminateArmy(new ArmyId(defender.Value));
+        var state = BuildOneTerritoryFromVictoryState(attacker, defender, GameMode.SecretMission, attackerMission: mission);
+        var dice = new QueuedDiceRoller().Enqueue(6).Enqueue(1);
+        var recordingRule = new RecordingVictoryRule(new SecretMissionVictoryRule());
+        Func<GameMode, IVictoryRule?> victoryRuleFor = mode =>
+            mode == GameMode.SecretMission ? recordingRule : VictoryRules.For(mode);
+        var engine = new GameEngine(dice, victoryRuleFor);
+
+        var result = engine.Execute(state, new AttackCommand(attacker, Alaska, NorthwestTerritory, 1));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        var won = Assert.IsType<GameStatus.Won>(ok.State.Status);
+        Assert.Equal(attacker, won.Winner);
+        Assert.Equal(1, recordingRule.Calls);
     }
 
     [Theory]
@@ -163,7 +233,8 @@ public class SecretMissionWiringTests
     /// <c>VictoryTests.BuildOneTerritoryFromVictoryState</c>, parameterized
     /// by <see cref="GameMode"/>.
     /// </summary>
-    private static GameState BuildOneTerritoryFromVictoryState(PlayerId attacker, PlayerId defender, GameMode mode)
+    private static GameState BuildOneTerritoryFromVictoryState(
+        PlayerId attacker, PlayerId defender, GameMode mode, MissionCard? attackerMission = null)
     {
         var territories = new Dictionary<TerritoryId, TerritoryState>();
         foreach (var territory in WorldMap.Territories)
@@ -176,12 +247,48 @@ public class SecretMissionWiringTests
 
         IReadOnlyList<PlayerState> players =
         [
-            new PlayerState(attacker, [], false, 0),
+            new PlayerState(attacker, [], false, 0, Mission: attackerMission),
             new PlayerState(defender, [], false, 0)
         ];
 
         return new GameState(
             territories, players, new TurnState(attacker, TurnPhase.Attack), Deck.CreateStandard(), [], new GameStatus.InProgress(), Mode: mode);
+    }
+
+    /// <summary>
+    /// Three-player variant of <see cref="BuildOneTerritoryFromVictoryState"/>:
+    /// <paramref name="attacker"/> owns every territory except the
+    /// <paramref name="defender"/>'s sole remaining territory
+    /// (<see cref="NorthwestTerritory"/>) and the <paramref name="bystander"/>'s
+    /// holdout (<see cref="Kamchatka"/>, kept through and after the attack) —
+    /// so <paramref name="attacker"/>'s conquest eliminates
+    /// <paramref name="defender"/> while <paramref name="bystander"/>, who
+    /// took no action, is the one who can win via <paramref name="bystanderMission"/>.
+    /// </summary>
+    private static GameState BuildThreePlayerCrossMissionState(
+        PlayerId bystander, PlayerId defender, PlayerId attacker, MissionCard bystanderMission)
+    {
+        var territories = new Dictionary<TerritoryId, TerritoryState>();
+        foreach (var territory in WorldMap.Territories)
+        {
+            territories[territory.Id] = territory.Id switch
+            {
+                _ when territory.Id == NorthwestTerritory => new TerritoryState(defender, 1),
+                _ when territory.Id == Kamchatka => new TerritoryState(bystander, 1),
+                _ => new TerritoryState(attacker, 1)
+            };
+        }
+        territories[Alaska] = new TerritoryState(attacker, 4);
+
+        IReadOnlyList<PlayerState> players =
+        [
+            new PlayerState(bystander, [], false, 0, Mission: bystanderMission),
+            new PlayerState(defender, [], false, 0),
+            new PlayerState(attacker, [], false, 0)
+        ];
+
+        return new GameState(
+            territories, players, new TurnState(attacker, TurnPhase.Attack), Deck.CreateStandard(), [], new GameStatus.InProgress(), Mode: GameMode.SecretMission);
     }
 
     /// <summary>

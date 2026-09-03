@@ -23,13 +23,6 @@ public sealed class GameEngine : IGameEngine
 {
     private const int MandatoryTradeThreshold = 5;
 
-    /// <summary>
-    /// <see cref="GameMode.SecretMission"/>'s <see cref="IVictoryRule"/>.
-    /// Static, not constructor-injected, per design D3 — a full mode
-    /// resolver is deferred until a second mode is wired.
-    /// </summary>
-    private static readonly IVictoryRule SecretMissionVictory = new SecretMissionVictoryRule();
-
     private readonly IDiceRoller dice;
     private readonly Func<GameMode, IVictoryRule?> victoryRuleFor;
 
@@ -669,20 +662,12 @@ public sealed class GameEngine : IGameEngine
                 }
             }
 
-            if (state.Mode == GameMode.SecretMission)
+            if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
             {
-                var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
-                if (SecretMissionVictory.CheckVictory(postConquest) is { } winner)
-                {
-                    newStatus = new GameStatus.Won(winner);
-                    events.Add(new GameWon(winner));
-                }
-            }
-            else if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
-            {
-                // Classic, via ConquestVictoryRule (item 2.1) — resolved through
-                // VictoryRules.For, not hardcoded, so the test seam (design D5)
-                // can prove this branch is actually reached.
+                // Classic (item 2.1), TwoPlayer (item 4.3), SecretMission
+                // (item 3.3) — all resolved through VictoryRules.For, not
+                // hardcoded, so the test seam (design D5) can prove this
+                // branch is actually reached.
                 var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
                 if (modeVictoryRule.CheckVictory(postConquest) is { } winner)
                 {
@@ -744,7 +729,7 @@ public sealed class GameEngine : IGameEngine
             .ToArray();
     }
 
-    private static CommandResult<GameState, GameEvent> ExecuteOccupy(GameState state, OccupyCommand command)
+    private CommandResult<GameState, GameEvent> ExecuteOccupy(GameState state, OccupyCommand command)
     {
         var pending = state.Turn.PendingOccupation;
         if (pending is null)
@@ -773,12 +758,25 @@ public sealed class GameEngine : IGameEngine
 
         var events = new List<GameEvent> { new TerritoryOccupied(command.Actor, pending.Conquered, command.Troops) };
 
-        var newState = state with
+        var updatedTurn = state.Turn with { PendingOccupation = null };
+        var postOccupation = state with { Territories = updatedTerritories, Turn = updatedTurn };
+
+        // Second victory call site (design 3.3-D7). ExecuteAttack checks after
+        // ownership flips, when the conquered territory still holds 0 troops;
+        // troop-gated missions (every OccupyTerritories card) can only be
+        // satisfied once THIS method sets that territory's troop count. Without
+        // this call a mission completed by a board-clearing final conquest could
+        // never be detected — no legal AttackCommand remains (ExecuteAttack
+        // rejects self-owned targets), so the game would stay InProgress forever.
+        var newStatus = state.Status;
+        if (victoryRuleFor(state.Mode) is { } modeVictoryRule
+            && modeVictoryRule.CheckVictory(postOccupation) is { } winner)
         {
-            Territories = updatedTerritories,
-            Turn = state.Turn with { PendingOccupation = null },
-            Log = [.. state.Log, .. events]
-        };
+            newStatus = new GameStatus.Won(winner);
+            events.Add(new GameWon(winner));
+        }
+
+        var newState = postOccupation with { Status = newStatus, Log = [.. state.Log, .. events] };
 
         return new CommandResult<GameState, GameEvent>.Ok(newState, events);
     }
