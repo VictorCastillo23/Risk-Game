@@ -1,5 +1,6 @@
 using Risk.Domain.Cards;
 using Risk.Domain.Map;
+using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine.State;
 
@@ -21,10 +22,23 @@ namespace Risk.Engine.Views;
 /// <c>Players.All(p =&gt; p.HeadquartersId is not null)</c>, never un-reveals).
 /// Empty before that point and always empty outside Capital mode.
 /// </param>
+/// <param name="OwnEffectiveMission">
+/// The viewer's OWN secret mission, already resolved through
+/// <see cref="Rules.MissionResolution.Effective"/> — so a dealt
+/// <see cref="EliminateArmy"/> naming the viewer's own seat is reported as
+/// <c>OccupyTerritories(24, 1)</c>, exactly what
+/// <see cref="Modes.SecretMissionVictoryRule"/> evaluates. This may therefore
+/// DIFFER from the dealt <see cref="State.PlayerState.Mission"/> for that one
+/// archetype; the name says "Effective" precisely so no caller assumes
+/// equality. Null whenever the viewer holds no mission, which is every mode
+/// except <see cref="State.GameMode.SecretMission"/>. Never populated for
+/// any other player — same redaction category as <see cref="OwnHand"/>.
+/// </param>
 public sealed record PlayerView(
     IReadOnlyDictionary<TerritoryId, TerritoryState> Territories,
     IReadOnlyList<Card> OwnHand,
     IReadOnlyDictionary<PlayerId, int> OtherPlayersCardCounts,
     TurnState Turn,
     TerritoryId? OwnHeadquarters,
-    IReadOnlyDictionary<PlayerId, TerritoryId> RevealedHeadquarters);
+    IReadOnlyDictionary<PlayerId, TerritoryId> RevealedHeadquarters,
+    MissionCard? OwnEffectiveMission);
