@@ -34,11 +34,9 @@ public class HexAdjacencyRegressionTests
     /// audit that produced this test class). Tracked here instead of
     /// silently ignored so the class of bug stays caught for every other
     /// pair while this specific one awaits its own dedicated fix.
+    /// Empty now that Egypt-Congo (Africa) has been fixed as well.
     /// </summary>
-    private static readonly (string A, string B)[] KnownPreExistingFalseAdjacencies =
-    [
-        ("Egypt", "Congo") // Africa continent — not touched by this Asia-layout fix.
-    ];
+    private static readonly (string A, string B)[] KnownPreExistingFalseAdjacencies = [];
 
     private static bool IsKnownPreExisting(TerritoryId a, TerritoryId b) =>
         KnownPreExistingFalseAdjacencies.Any(pair =>
