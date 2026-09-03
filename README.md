@@ -1,6 +1,6 @@
 # Risk-Game
 
-Una implementación completa y jugable del juego de mesa RISK como aplicación web, usando Blazor Server sobre .NET 8. Ver [prompt.md](prompt.md) para la especificación completa del diseño (mapa, turnos, combate, economía de cartas, IA, requisitos de UI).
+Una implementación completa y jugable del juego de mesa RISK como aplicación web, usando Blazor Server sobre .NET 8.
 
 ## Estado del proyecto
 
@@ -8,9 +8,12 @@ Una implementación completa y jugable del juego de mesa RISK como aplicación w
 - **`Risk.Web`** — interfaz jugable en Blazor Server (tablero SVG con grilla hexagonal, panel por fase, cartas, log de eventos, pantalla de victoria).
 - **`Risk.AI`** — no implementada todavía; el motor expone `Observe`/`PlayerView` con vista redactada precisamente para que un cliente de IA se pueda sumar sin acceso a información oculta.
 
+## Producción
+
+La app está desplegada en Azure App Service: [risk-game-bghugbfnhfhjhmh0.mexicocentral-01.azurewebsites.net](https://risk-game-bghugbfnhfhjhmh0.mexicocentral-01.azurewebsites.net)
+
 ## Documentación
 
-- [prompt.md](prompt.md) — especificación de diseño original, fuente de verdad para reglas y arquitectura.
 - [docs/casos-de-uso.md](docs/casos-de-uso.md) — casos de uso del motor de juego, con flujos y códigos de error.
 - [docs/historias-usuario.md](docs/historias-usuario.md) — historias de usuario con criterios de aceptación.
 - [docs/diagrama-relacional.md](docs/diagrama-relacional.md) — diagrama entidad-relación del modelo de datos en memoria.
