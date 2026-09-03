@@ -9,14 +9,15 @@ namespace Risk.Engine.Modes;
 /// if the game continues.
 /// </summary>
 /// <remarks>
-/// Invoked from <c>GameEngine.ExecuteAttack</c> immediately after a conquest
-/// resolves ownership, but <em>before</em> the conquered territory receives
-/// its occupying troops via <c>OccupyCommand</c> — the state passed in still
-/// has the conquered territory at 0 troops. Rules that only read ownership
-/// and elimination state are unaffected; rules that need occupying troop
-/// counts (SecretMission's <c>OccupyTerritories</c> missions) need a second
-/// call site at the end of <c>ExecuteOccupy</c>, not a change to this
-/// interface.
+/// Invoked from two call sites in <c>GameEngine</c>, which together leave no
+/// gap: <c>ExecuteAttack</c> checks immediately after a conquest flips
+/// ownership (the conquered territory still holds 0 troops there), and
+/// <c>ExecuteOccupy</c> checks again once <c>OccupyCommand</c> has set that
+/// territory's troop count. Ownership- and elimination-based rules are decided
+/// by the first call; troop-gated rules (SecretMission's
+/// <c>OccupyTerritories</c> missions) are decided by the second. Implementations
+/// must therefore be pure and idempotent over the state passed in — they are
+/// called twice per conquest and must not assume either position.
 /// </remarks>
 public interface IVictoryRule
 {

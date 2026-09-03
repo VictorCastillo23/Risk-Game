@@ -729,7 +729,7 @@ public sealed class GameEngine : IGameEngine
             .ToArray();
     }
 
-    private static CommandResult<GameState, GameEvent> ExecuteOccupy(GameState state, OccupyCommand command)
+    private CommandResult<GameState, GameEvent> ExecuteOccupy(GameState state, OccupyCommand command)
     {
         var pending = state.Turn.PendingOccupation;
         if (pending is null)
@@ -758,12 +758,25 @@ public sealed class GameEngine : IGameEngine
 
         var events = new List<GameEvent> { new TerritoryOccupied(command.Actor, pending.Conquered, command.Troops) };
 
-        var newState = state with
+        var updatedTurn = state.Turn with { PendingOccupation = null };
+        var postOccupation = state with { Territories = updatedTerritories, Turn = updatedTurn };
+
+        // Second victory call site (design 3.3-D7). ExecuteAttack checks after
+        // ownership flips, when the conquered territory still holds 0 troops;
+        // troop-gated missions (every OccupyTerritories card) can only be
+        // satisfied once THIS method sets that territory's troop count. Without
+        // this call a mission completed by a board-clearing final conquest could
+        // never be detected — no legal AttackCommand remains (ExecuteAttack
+        // rejects self-owned targets), so the game would stay InProgress forever.
+        var newStatus = state.Status;
+        if (victoryRuleFor(state.Mode) is { } modeVictoryRule
+            && modeVictoryRule.CheckVictory(postOccupation) is { } winner)
         {
-            Territories = updatedTerritories,
-            Turn = state.Turn with { PendingOccupation = null },
-            Log = [.. state.Log, .. events]
-        };
+            newStatus = new GameStatus.Won(winner);
+            events.Add(new GameWon(winner));
+        }
+
+        var newState = postOccupation with { Status = newStatus, Log = [.. state.Log, .. events] };
 
         return new CommandResult<GameState, GameEvent>.Ok(newState, events);
     }
