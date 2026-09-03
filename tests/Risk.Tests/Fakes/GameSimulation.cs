@@ -79,8 +79,16 @@ internal static class GameSimulation
     {
         while (TryFindValidSet(state.Players.Single(p => p.Id == actor).Hand, out var set))
         {
+            // Any owned-territory match is an acceptable pick here: callers
+            // only care that the mandatory trade-in succeeds, not which
+            // territory receives the occupied-territory bonus (item 0.2).
+            // The engine requires an explicit choice once 2+ cards in the
+            // set name territories the actor owns.
+            var matches = TerritoryTradeBonus.ResolveMatches(set, state.Territories, actor);
+            TerritoryId? bonusTerritory = matches.Count > 0 ? matches[0] : null;
+
             var result = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
-                engine.Execute(state, new TradeCardsCommand(actor, set)));
+                engine.Execute(state, new TradeCardsCommand(actor, set, bonusTerritory)));
             state = result.State;
         }
 

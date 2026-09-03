@@ -1,9 +1,11 @@
 @using Risk.Domain.Cards
 @using Risk.Domain.Errors
+@using Risk.Domain.Map
 @using Risk.Domain.Players
 @using Risk.Engine.Commands
 @using Risk.Engine.Events
 @using Risk.Engine.Results
+@using Risk.Engine.Rules
 @using Risk.Engine.State
 @using Risk.Web.Components.Shared
 @using Risk.Web.Models
@@ -47,7 +49,23 @@
             }
         </ul>
 
-        <button type="button" disabled="@(!CanTrade(hand))" @onclick="() => OnTradeClicked(hand)">Canjear</button>
+        var bonusMatches = ComputeBonusMatches(hand);
+
+        @if (bonusMatches.Count >= 2)
+        {
+            <label class="card-panel-bonus-picker">
+                Tenés más de un territorio elegible: elegí cuál recibe la bonificación.
+                <select value="@(_bonusTerritory?.Value ?? "")" @onchange="OnBonusTerritoryChanged">
+                    <option value="">Elegí un territorio</option>
+                    @foreach (var territory in bonusMatches)
+                    {
+                        <option value="@territory.Value">@territory.Value</option>
+                    }
+                </select>
+            </label>
+        }
+
+        <button type="button" disabled="@(!CanTrade(hand, bonusMatches))" @onclick="() => OnTradeClicked(hand, bonusMatches)">Canjear</button>
     }
 
     <RejectionMessage Error="_error" />
@@ -70,19 +88,58 @@
     public bool Locked { get; set; }
 
     private CardSelection _selection = CardSelection.Empty;
+    private TerritoryId? _bonusTerritory;
     private GameError? _error;
 
     private void OnToggle(int index)
     {
         _selection = _selection.Toggle(index);
+
+        // The selection changed, so any previously chosen bonus territory
+        // may no longer be one of the (new) matches — force a fresh choice
+        // rather than silently carrying a stale one into the next dispatch.
+        _bonusTerritory = null;
     }
 
-    private bool CanTrade(IReadOnlyList<Card> hand) => !Locked && _selection.IsValidTrade(hand);
+    /// <summary>
+    /// The current 3-card selection's owned-territory matches, reusing the
+    /// engine's own <see cref="TerritoryTradeBonus.ResolveMatches"/> rule
+    /// (design's single-source-of-truth convention) rather than
+    /// reimplementing it client-side. Empty unless the selection is a full,
+    /// valid trade-in set.
+    /// </summary>
+    private IReadOnlyList<TerritoryId> ComputeBonusMatches(IReadOnlyList<Card> hand)
+    {
+        if (!_selection.IsValidTrade(hand) || Session.State is null)
+        {
+            return Array.Empty<TerritoryId>();
+        }
 
-    private void OnTradeClicked(IReadOnlyList<Card> hand)
+        var cards = _selection.SelectedIndices.Select(i => hand[i]).ToArray();
+        return TerritoryTradeBonus.ResolveMatches(cards, Session.State.Territories, CurrentPlayer);
+    }
+
+    private bool CanTrade(IReadOnlyList<Card> hand, IReadOnlyList<TerritoryId> bonusMatches) =>
+        !Locked
+        && _selection.IsValidTrade(hand)
+        && (bonusMatches.Count < 2 || (_bonusTerritory.HasValue && bonusMatches.Contains(_bonusTerritory.Value)));
+
+    private void OnBonusTerritoryChanged(ChangeEventArgs e)
+    {
+        var value = (string?)e.Value;
+        _bonusTerritory = string.IsNullOrEmpty(value) ? null : new TerritoryId(value);
+    }
+
+    private void OnTradeClicked(IReadOnlyList<Card> hand, IReadOnlyList<TerritoryId> bonusMatches)
     {
         var cards = _selection.SelectedIndices.Select(i => hand[i]).ToArray();
-        var result = Session.Execute(new TradeCardsCommand(CurrentPlayer, cards));
+
+        // 0 or 1 match: dispatch null, the engine auto-applies the single
+        // match itself. 2+ matches: CanTrade already guarantees the picker
+        // holds one of the matches before this can be clicked.
+        var bonusTerritory = bonusMatches.Count >= 2 ? _bonusTerritory : null;
+
+        var result = Session.Execute(new TradeCardsCommand(CurrentPlayer, cards, bonusTerritory));
 
         _error = result switch
         {
@@ -97,6 +154,7 @@
         if (result is CommandResult<GameState, GameEvent>.Ok)
         {
             _selection = CardSelection.Empty;
+            _bonusTerritory = null;
         }
     }
 

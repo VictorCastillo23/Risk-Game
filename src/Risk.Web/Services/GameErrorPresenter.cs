@@ -31,6 +31,7 @@ public static class GameErrorPresenter
         GameErrorCode.NoPendingOccupation => "No hay ninguna ocupación pendiente de confirmar.",
         GameErrorCode.ReinforcementIncomplete => "Todavía te quedan tropas de refuerzo por colocar.",
         GameErrorCode.ActorIsNeutral => "El ejército neutral no puede emitir órdenes.",
+        GameErrorCode.InvalidBonusTerritory => "Elegí un territorio propio válido para la bonificación del canje.",
         _ => error.Message
     };
 }
