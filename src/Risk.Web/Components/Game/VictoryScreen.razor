@@ -1,3 +1,4 @@
+@using Risk.Engine.State
 @using Risk.Web.Models
 @using Risk.Web.Services
 @inject GameSessionService Session
@@ -8,6 +9,10 @@
     @if (Session.WinnerMission() is { } mission)
     {
         <p class="victory-mission">Misión cumplida: @MissionDisplay.Label(mission, Session.Players)</p>
+    }
+    @if (Session.State?.Mode == GameMode.Capital)
+    {
+        <p class="victory-capital">Ganó por captura de Cuarteles Generales.</p>
     }
     <button type="button" @onclick="OnRestart">Nueva partida</button>
 </div>

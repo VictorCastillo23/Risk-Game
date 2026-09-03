@@ -1,0 +1,25 @@
+@using Risk.Domain.Errors
+@using Risk.Web.Components.Shared
+
+<div class="select-headquarters-panel panel-frame">
+    <p class="select-headquarters-panel-hint">
+        Hacé click en un territorio propio para convertirlo en tu Cuartel General.
+        La elección es definitiva y permanece secreta hasta que todos hayan elegido.
+    </p>
+
+    <RejectionMessage Error="Error" />
+</div>
+
+@code {
+    /// <summary>
+    /// The most recent rejection from a <c>SelectHeadquarters</c>-phase board
+    /// click, if any — dispatch happens directly from the host page's click
+    /// handler (design D3: a single click designates the headquarters, no
+    /// select-then-confirm step), so this panel is display-only. Mirrors
+    /// <c>SetupPanel</c>'s shape (design D7): no <c>PlayerView</c>, no
+    /// <c>TerritoryId</c> parameter — this panel is structurally incapable of
+    /// naming or leaking the picked territory.
+    /// </summary>
+    [Parameter]
+    public GameError? Error { get; set; }
+}

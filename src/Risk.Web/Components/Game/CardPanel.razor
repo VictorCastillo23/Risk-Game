@@ -17,13 +17,32 @@
         // Design's read convention (D5): the ONE place hidden information
         // matters — OwnHand comes from Observe(), never from raw
         // GameState.Players[x].Hand, so this panel structurally cannot
-        // leak another player's cards.
-        var hand = Session.ObserveCurrentPlayer().OwnHand;
+        // leak another player's cards. Hoisted (roadmap 5.4) so the Capital
+        // HQ tray/warning section below can reuse the same PlayerView.
+        var view = Session.ObserveCurrentPlayer();
+        var hand = view.OwnHand;
     }
 
     @if (hand.Count >= MandatoryTradeThreshold)
     {
         <p class="card-panel-warning" role="alert">Tenés @hand.Count cartas: debés canjear un conjunto válido.</p>
+    }
+
+    @if (Session.State?.Mode == GameMode.Capital && HeadquartersTray.IsRevealed(view))
+    {
+        <div class="card-panel-hq">
+            @if (HeadquartersTray.HasLostOwnHeadquarters(view, CurrentPlayer))
+            {
+                <p class="card-panel-warning" role="alert">Perdiste tu Cuartel General. Podés seguir jugando y recapturarlo.</p>
+            }
+
+            <ul class="card-panel-hq-tray">
+                @foreach (var row in HeadquartersTray.Rows(view))
+                {
+                    <li>@Session.ConfigFor(row.Declarer).Name: @row.Territory.Value — en manos de @(row.Holder is { } holder ? Session.ConfigFor(holder).Name : "nadie")</li>
+                }
+            </ul>
+        </div>
     }
 
     @if (hand.Count == 0)

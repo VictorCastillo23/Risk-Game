@@ -160,6 +160,41 @@ public class GameEventPresenterTests
     }
 
     [Fact]
+    public void Describe_HeadquartersSelected_MentionsPlayerButNoTerritory()
+    {
+        var e = new HeadquartersSelected(PlayerOne);
+
+        var described = GameEventPresenter.Describe(e);
+
+        Assert.False(string.IsNullOrWhiteSpace(described));
+        Assert.DoesNotContain("Ocurrió un evento.", described);
+        Assert.DoesNotContain("Alaska", described);
+        Assert.DoesNotContain("Alberta", described);
+    }
+
+    [Fact]
+    public void Describe_HeadquartersRevealed_AnnouncesTheReveal()
+    {
+        var e = new HeadquartersRevealed(new Dictionary<PlayerId, TerritoryId> { [PlayerOne] = Alaska, [PlayerTwo] = Alberta });
+
+        var described = GameEventPresenter.Describe(e);
+
+        Assert.False(string.IsNullOrWhiteSpace(described));
+        Assert.DoesNotContain("Ocurrió un evento.", described);
+    }
+
+    [Fact]
+    public void Describe_HeadquartersCaptured_NamesAttackerTerritoryAndOriginalOwner()
+    {
+        var e = new HeadquartersCaptured(PlayerTwo, PlayerOne, Alberta);
+
+        var described = GameEventPresenter.Describe(e);
+
+        Assert.Contains("Alberta", described);
+        Assert.DoesNotContain("Ocurrió un evento.", described);
+    }
+
+    [Fact]
     public void Describe_AllTwelveEventTypes_ProduceNonEmptyDistinctMessages()
     {
         var events = new GameEvent[]
