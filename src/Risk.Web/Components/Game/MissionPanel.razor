@@ -1,0 +1,47 @@
+@using Risk.Domain.Players
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject GameSessionService Session
+
+<div class="mission-panel panel-frame">
+    @{
+        // Design's read convention (D5/D7): the ONE place a player's secret
+        // mission is read comes from Observe(), never from raw
+        // GameState.Players[x].Mission, so this panel structurally cannot
+        // leak another player's mission.
+        var mission = Session.ObserveCurrentPlayer().OwnEffectiveMission;
+    }
+
+    @if (mission is { } ownMission)
+    {
+        @if (_reveal.IsRevealedFor(CurrentPlayer))
+        {
+            <p class="mission-panel-text">@MissionDisplay.Label(ownMission, Session.Players)</p>
+            <button type="button" @onclick="OnToggle">Ocultar misión</button>
+        }
+        else
+        {
+            <p class="mission-panel-hint">Tu misión secreta está oculta.</p>
+            <button type="button" @onclick="OnToggle">Espiar misión</button>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The panel's reset key (design 3.4-D3): reveal state is stored as
+    /// "which player revealed it", so no explicit reset step is needed when
+    /// the acting player changes — <c>_reveal.IsRevealedFor(CurrentPlayer)</c>
+    /// is simply false for the new player. Matches <c>CardPanel.razor</c>'s
+    /// <c>[Parameter] PlayerId CurrentPlayer</c> pattern.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public PlayerId CurrentPlayer { get; set; }
+
+    private MissionReveal _reveal = MissionReveal.Hidden;
+
+    private void OnToggle()
+    {
+        _reveal = _reveal.Toggle(CurrentPlayer);
+    }
+}

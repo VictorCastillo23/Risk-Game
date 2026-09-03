@@ -200,4 +200,47 @@ public class GameSessionServiceTests
         var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
         Assert.Equal(GameErrorCode.InvalidPlayerCount, rejection.Error.Code);
     }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void Start_WithSecretMissionMode_SucceedsForEverySeatCountAndDealsEveryoneAMission(int playerCount)
+    {
+        var rows = Enumerable.Range(0, playerCount)
+            .Select(i => new PlayerSetupRow(
+                $"Player{i}",
+                PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
+                false))
+            .ToArray();
+        // SecretMissionSetup never rolls dice (only Classic's TurnOrder.DetermineFirst does).
+        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
+
+        var result = session.Start(rows, GameMode.SecretMission);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        for (var i = 0; i < playerCount; i++)
+        {
+            Assert.NotNull(session.State!.Players.Single(p => p.Id == new PlayerId(i)).Mission);
+        }
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(6)]
+    public void Start_RejectsOutOfRangePlayerCountsUnderSecretMissionMode(int playerCount)
+    {
+        var rows = Enumerable.Range(0, playerCount)
+            .Select(i => new PlayerSetupRow(
+                $"Player{i}",
+                PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
+                false))
+            .ToArray();
+        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
+
+        var result = session.Start(rows, GameMode.SecretMission);
+
+        var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
+        Assert.Equal(GameErrorCode.InvalidPlayerCount, rejection.Error.Code);
+    }
 }

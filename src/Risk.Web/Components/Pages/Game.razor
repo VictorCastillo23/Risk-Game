@@ -60,6 +60,10 @@
                     <FortifyPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
                 }
 
+                @if (state.Mode == GameMode.SecretMission)
+                {
+                    <MissionPanel CurrentPlayer="state.Turn.CurrentPlayer" />
+                }
                 <DicePanel Battle="_lastBattle" />
                 <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
                 <LogPanel Log="state.Log" />
