@@ -62,8 +62,35 @@
     [Parameter]
     public TerritoryId? Destination { get; set; }
 
+    private TerritoryId? _stagedOrigin;
+    private TerritoryId? _stagedDestination;
     private int _diceCount = 1;
     private GameError? _error;
+
+    /// <summary>
+    /// Every time the selected attack (origin/destination pair) changes —
+    /// including the very first selection — re-stage <c>_diceCount</c> at
+    /// the legal maximum (<see cref="AttackDiceOptions.DefaultDiceCount"/>),
+    /// the strongest legal attack by default. The player can still lower it
+    /// manually afterward via <see cref="OnDiceCountChanged"/>; this only
+    /// resets the starting point for a NEW attack, never overrides an
+    /// in-progress manual pick for the same pair.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (Origin == _stagedOrigin && Destination == _stagedDestination)
+        {
+            return;
+        }
+
+        _stagedOrigin = Origin;
+        _stagedDestination = Destination;
+
+        if (Origin is not null)
+        {
+            _diceCount = AttackDiceOptions.DefaultDiceCount(State.Territories[Origin.Value].Troops);
+        }
+    }
 
     private void OnDiceCountChanged(ChangeEventArgs e)
     {

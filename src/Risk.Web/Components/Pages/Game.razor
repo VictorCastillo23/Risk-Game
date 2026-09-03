@@ -27,6 +27,7 @@
     var isWon = state.Status is GameStatus.Won;
 
     <div class="game-shell">
+        <PlayerStatsBar State="state" Players="Session.Players" />
         <PhaseIndicator State="state" Players="Session.Players" />
 
         <div class="game-columns">

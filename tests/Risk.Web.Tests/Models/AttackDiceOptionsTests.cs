@@ -35,4 +35,17 @@ public class AttackDiceOptionsTests
     {
         Assert.Equal(new[] { 1, 2, 3 }, AttackDiceOptions.AvailableDiceCounts(4));
     }
+
+    // A freshly-selected attack (new origin/destination pair) should default
+    // to the maximum legal dice count, not 1 — the player can still lower it
+    // manually afterward, but the starting point is the strongest legal attack.
+
+    [Theory]
+    [InlineData(4, 3)]  // plenty of troops: default starts at the 3-dice ceiling
+    [InlineData(3, 2)]  // exactly enough for 2 dice
+    [InlineData(2, 1)]  // only 2 troops total: default starts at the only legal option, 1
+    public void DefaultDiceCount_IsTheMaximumLegalValue(int attackerTroops, int expectedDefault)
+    {
+        Assert.Equal(expectedDefault, AttackDiceOptions.DefaultDiceCount(attackerTroops));
+    }
 }

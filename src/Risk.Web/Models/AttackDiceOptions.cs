@@ -15,6 +15,13 @@ public static class AttackDiceOptions
     /// <summary>The highest dice count a player could pick, given <paramref name="attackerTroops"/> in the attacking territory.</summary>
     public static int MaxDice(int attackerTroops) => Math.Clamp(attackerTroops - 1, 0, MaxAllowedDice);
 
+    /// <summary>
+    /// The dice count a freshly-selected attack should start at — always the
+    /// legal maximum (strongest legal attack by default). The player can
+    /// still manually lower it afterward via <see cref="AvailableDiceCounts"/>.
+    /// </summary>
+    public static int DefaultDiceCount(int attackerTroops) => MaxDice(attackerTroops);
+
     /// <summary>Every selectable dice count, low to high. Empty when the attacker has only 1 troop (can't attack at all).</summary>
     public static IReadOnlyList<int> AvailableDiceCounts(int attackerTroops)
     {
