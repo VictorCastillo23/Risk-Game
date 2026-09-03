@@ -47,6 +47,10 @@
                 {
                     <SetupPanel Phase="state.Turn.Phase" Error="_placementError" IsPhaseB="TwoPlayerSetupPhase.IsPhaseB(state)" />
                 }
+                else if (state.Turn.Phase == TurnPhase.SelectHeadquarters)
+                {
+                    <SelectHeadquartersPanel Error="_placementError" />
+                }
                 else if (state.Turn.Phase == TurnPhase.Reinforce)
                 {
                     <ReinforcePanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Staging="_staging" OnStagingChanged="staging => _staging = staging" />
@@ -93,11 +97,15 @@
     // BattleResolved actually occurs.
     private BattleResolved? _lastBattle;
 
-    // Claim and Setup both dispatch directly on a single click (no
-    // select-then-confirm step, unlike Reinforce which stages several before
-    // dispatching) — the rejection from that direct dispatch is tracked
-    // here, shared across both phases, since SetupPanel no longer owns any
-    // dispatch of its own.
+    // Claim, Setup, and SelectHeadquarters (roadmap 5.4) all dispatch
+    // directly on a single click (no select-then-confirm step, unlike
+    // Reinforce which stages several before dispatching) — the rejection
+    // from that direct dispatch is tracked here, shared across all three
+    // phases, since SetupPanel/SelectHeadquartersPanel own no dispatch of
+    // their own. Provably safe to share (design D3): a rejection never
+    // mutates state, so a phase can only change on a *successful* dispatch,
+    // which always resets this field to null first — no stale rejection
+    // from one phase can leak into another phase's panel.
     private GameError? _placementError;
 
     protected override void OnInitialized()
@@ -119,7 +127,7 @@
     // While a PendingOccupation gate is active, all board clicks are ignored —
     // mirroring the engine's own OccupationPending rejection as a UX nicety
     // (the engine remains authoritative regardless of what the UI blocks).
-    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Claim, TurnPhase.Setup, TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
+    private static readonly TurnPhase[] ClickablePhases = [TurnPhase.Claim, TurnPhase.Setup, TurnPhase.SelectHeadquarters, TurnPhase.Reinforce, TurnPhase.Attack, TurnPhase.Fortify];
 
     private void OnTerritoryClick(TerritoryId territory)
     {
@@ -172,6 +180,26 @@
 
             var result = Session.Execute(new PlaceTroopsCommand(state.Turn.CurrentPlayer, territory, 1));
             _placementError = result switch
+            {
+                CommandResult<GameState, GameEvent>.Ok => null,
+                CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+                _ => _placementError
+            };
+            return;
+        }
+
+        if (state.Turn.Phase == TurnPhase.SelectHeadquarters)
+        {
+            // Design D3: clones the Claim/Setup branch shape exactly. Unlike
+            // Claim's *unowned* check, a headquarters requires *ownership* —
+            // same pre-filter as Setup Phase A (line 168 above).
+            if (state.Territories[territory].Owner != state.Turn.CurrentPlayer)
+            {
+                return;
+            }
+
+            var hqResult = Session.Execute(new SelectHeadquartersCommand(state.Turn.CurrentPlayer, territory));
+            _placementError = hqResult switch
             {
                 CommandResult<GameState, GameEvent>.Ok => null,
                 CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,

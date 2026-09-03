@@ -80,11 +80,11 @@
 <RejectionMessage Error="_error" />
 
 @code {
-    // Classic, SecretMission (roadmap item 3.4) and TwoPlayer (roadmap item
-    // 4.4) are offered today. The <select> element stays present and
-    // array-driven so a future item can add more modes without
-    // restructuring this markup.
-    private static readonly GameMode[] SelectableModes = [GameMode.Classic, GameMode.SecretMission, GameMode.TwoPlayer];
+    // Classic, SecretMission (roadmap item 3.4), TwoPlayer (roadmap item
+    // 4.4) and Capital (roadmap item 5.4, the last mode) are offered today.
+    // The <select> element stays present and array-driven so a future item
+    // can add more modes without restructuring this markup.
+    private static readonly GameMode[] SelectableModes = [GameMode.Classic, GameMode.SecretMission, GameMode.TwoPlayer, GameMode.Capital];
 
     private GameMode _mode = GameMode.Classic;
 
