@@ -5,6 +5,10 @@
 
 <div class="victory-screen panel-frame" role="alert" aria-live="assertive">
     <h2>@Winner.Name ganó la partida</h2>
+    @if (Session.WinnerMission() is { } mission)
+    {
+        <p class="victory-mission">Misión cumplida: @MissionDisplay.Label(mission, Session.Players)</p>
+    }
     <button type="button" @onclick="OnRestart">Nueva partida</button>
 </div>
 
