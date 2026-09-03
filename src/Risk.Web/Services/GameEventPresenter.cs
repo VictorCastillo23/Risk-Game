@@ -40,6 +40,12 @@ public static class GameEventPresenter
         CardDrawn e => $"{PlayerLabel(e.Actor)} robó una carta.",
         PhaseChanged e => $"Cambio de fase: {PhaseDisplay.Label(e.To)} ({PlayerLabel(e.CurrentPlayer)}).",
         GameWon e => $"¡{PlayerLabel(e.Winner)} ganó la partida!",
+        // Design D6: HeadquartersSelected carries no territory by design
+        // (its own doc comment — GameState.Log is public/unredacted), so
+        // this case physically cannot name one.
+        HeadquartersSelected e => $"{PlayerLabel(e.Player)} eligió su Cuartel General.",
+        HeadquartersRevealed => "Todos los jugadores revelaron sus Cuarteles Generales.",
+        HeadquartersCaptured e => $"{PlayerLabel(e.Attacker)} capturó el Cuartel General de {PlayerLabel(e.OriginalOwner)} en {e.Territory.Value}.",
         _ => "Ocurrió un evento."
     };
 
