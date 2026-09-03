@@ -21,5 +21,6 @@ public enum GameErrorCode
     InvalidTroopCount,
     NoPendingOccupation,
     ReinforcementIncomplete,
-    ActorIsNeutral
+    ActorIsNeutral,
+    InvalidBonusTerritory
 }

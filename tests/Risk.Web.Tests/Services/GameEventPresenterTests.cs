@@ -49,6 +49,18 @@ public class GameEventPresenterTests
     }
 
     [Fact]
+    public void Describe_CardsTraded_WithBonusTerritory_MentionsIt()
+    {
+        var cards = new Card[] { new TerritoryCard(Alaska, CardSymbol.Infantry), new WildCard() };
+        var e = new CardsTraded(PlayerOne, cards, 6, Alaska);
+
+        var described = GameEventPresenter.Describe(e);
+
+        Assert.Contains("Alaska", described);
+        Assert.Contains("6", described);
+    }
+
+    [Fact]
     public void Describe_BattleResolved_MentionsBothTerritoriesAndLosses()
     {
         var e = new BattleResolved(PlayerOne, Alaska, Alberta, [6, 4], [3], 0, 1);
