@@ -67,19 +67,23 @@ public static class TerritoryLayout
         ("Madagascar", "AF", 2, 1),
         ("SouthAfrica", "AF", 0, 2),
 
-        // Asia — the largest continent: wide north tapering to the Middle East / India peninsula
-        ("Ural", "AS", 0, 0),
-        ("Siberia", "AS", 1, 0),
-        ("Yakutsk", "AS", 2, 0),
-        ("Kamchatka", "AS", 3, 0),
-        ("Irkutsk", "AS", 1, 1),
-        ("Mongolia", "AS", 2, 1),
-        ("Japan", "AS", 3, 1),
-        ("Afghanistan", "AS", 0, 2),
-        ("China", "AS", 1, 2),
-        ("Siam", "AS", 2, 2),
-        ("MiddleEast", "AS", 0, 3),
-        ("India", "AS", 1, 3),
+        // Asia — the largest continent: wide north tapering to the Middle East / India peninsula.
+        // Coordinates are deliberately NOT a simple grid: they trace the real WorldMap
+        // adjacency graph as hex-neighbor offsets (each real border is an axial-neighbor
+        // pair) while keeping non-adjacent pairs apart, so no two hexes visually touch
+        // unless WorldMap.AreAdjacent agrees — see HexAdjacencyRegressionTests.
+        ("Ural", "AS", -1, 0),
+        ("Siberia", "AS", 0, 0),
+        ("Yakutsk", "AS", 1, 0),
+        ("Kamchatka", "AS", 1, 1),
+        ("Irkutsk", "AS", 0, 1),
+        ("Mongolia", "AS", 0, 2),
+        ("Japan", "AS", 1, 2),
+        ("Afghanistan", "AS", -2, 3),
+        ("China", "AS", -1, 3),
+        ("Siam", "AS", -1, 4),
+        ("MiddleEast", "AS", -3, 4),
+        ("India", "AS", -2, 4),
 
         // Oceania — Indonesia/New Guinea islands north of the Australian mainland
         ("Indonesia", "OC", 0, 0),
@@ -101,7 +105,7 @@ public static class TerritoryLayout
             ["SA"] = (140, 480),
             ["EU"] = (520, 140),
             ["AF"] = (520, 460),
-            ["AS"] = (860, 120),
+            ["AS"] = (900, 120),
             ["OC"] = (980, 520)
         };
 
