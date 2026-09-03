@@ -1,4 +1,5 @@
 using Risk.Domain.Dice;
+using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
@@ -108,6 +109,24 @@ public sealed class GameSessionService(IGameEngine engine, IDiceRoller dice)
 
         return engine.Observe(State, State.Turn.CurrentPlayer);
     }
+
+    /// <summary>
+    /// The winner's effective mission, for <c>VictoryScreen</c>'s
+    /// rules-mandated reveal (reglasrisk.md:286). Returns <see langword="null"/>
+    /// while the game is <see cref="GameStatus.InProgress"/>, so this method
+    /// is structurally incapable of leaking a live player's hidden mission —
+    /// the reveal gate is the return type's own precondition, not a
+    /// convention the caller has to honour. Also <see langword="null"/> in
+    /// every non-<see cref="GameMode.SecretMission"/> mode, because no
+    /// mission was ever dealt, and reports the resolved (not the dealt)
+    /// mission via <see cref="IGameEngine.Observe"/>, exactly like
+    /// <see cref="ObserveCurrentPlayer"/> — never reads
+    /// <c>GameState.Players[x].Mission</c> directly (design 3.4-D4).
+    /// </summary>
+    public MissionCard? WinnerMission() =>
+        State is { Status: GameStatus.Won won } state
+            ? engine.Observe(state, won.Winner).OwnEffectiveMission
+            : null;
 
     public PlayerConfig ConfigFor(PlayerId id) => Players[id];
 
