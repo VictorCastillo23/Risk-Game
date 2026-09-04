@@ -35,6 +35,28 @@ jobs:
           name: .net-app
           path: ${{env.DOTNET_ROOT}}/myapp
 
+  test:
+    runs-on: windows-latest
+    needs: build
+    permissions:
+      contents: read #This is required for actions/checkout
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # No live DB is required: Risk.Web.Tests only ever needs a
+      # syntactically-valid-but-unreachable connection string (see
+      # AnonymousAccessTests.RiskWebApplicationFactory / AccountPagesTestFixture's
+      # Sqlite in-memory swap) — safe to run in parallel with the migrate job
+      # below, which is the only job that touches the real Azure SQL database.
+      - name: Run tests
+        run: dotnet test Risk.sln --configuration Release
+
   migrate:
     runs-on: windows-latest
     needs: build
@@ -96,7 +118,7 @@ jobs:
 
   deploy:
     runs-on: windows-latest
-    needs: [build, migrate]
+    needs: [build, migrate, test]
     permissions:
       id-token: write #This is required for requesting the JWT
       contents: read #This is required for actions/checkout
