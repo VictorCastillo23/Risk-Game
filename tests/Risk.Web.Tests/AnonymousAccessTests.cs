@@ -46,8 +46,22 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
             "Anonymous GET / must never be challenged into a login redirect.");
     }
 
+    /// <summary>
+    /// PR2 note: this originally asserted the body contained no
+    /// "Account/Login" text at all. PR2's task 2.5 deliberately adds a
+    /// global, always-visible login/register nav to
+    /// <c>MainLayout.razor</c>'s anonymous branch, so that substring now
+    /// legitimately appears on every page, including this one — that is
+    /// the intended UX (auth is optional and reachable everywhere), not a
+    /// login gate. The load-bearing assertion — that anonymous play is
+    /// never challenged into a login redirect — is already covered by
+    /// <see cref="GetRoot_AnonymousRequest_ReturnsOkWithoutAuthRedirect"/>
+    /// above. This test now instead asserts the actual Setup markup still
+    /// renders for an anonymous request, which is the real regression this
+    /// test guards against.
+    /// </summary>
     [Fact]
-    public async Task GetRoot_AnonymousRequest_BodyContainsSetupMarkupNotLoginPrompt()
+    public async Task GetRoot_AnonymousRequest_BodyContainsSetupMarkup()
     {
         var client = _factory.CreateClient();
 
@@ -55,7 +69,28 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
         var body = await response.Content.ReadAsStringAsync();
 
         response.EnsureSuccessStatusCode();
-        Assert.DoesNotContain("Account/Login", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Configurar partida", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Comenzar partida", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Task 2.5's global nav (<c>MainLayout.razor</c>'s <c>AuthorizeView</c>)
+    /// must show the anonymous branch's login/register links on every route,
+    /// including the anonymous Setup page.
+    /// </summary>
+    [Fact]
+    public async Task GetRoot_AnonymousRequest_ShowsLoginAndRegisterNavLinks()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("href=\"/Account/Login\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Iniciar sesión", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("href=\"/Account/Register\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Crear cuenta", body, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

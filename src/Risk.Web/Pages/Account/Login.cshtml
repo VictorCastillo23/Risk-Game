@@ -1,0 +1,31 @@
+@page
+@model Risk.Web.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Iniciar sesión";
+}
+<h1>Iniciar sesión</h1>
+
+<form method="post" asp-route-returnUrl="@Model.ReturnUrl">
+    <div asp-validation-summary="All"></div>
+
+    <div>
+        <label asp-for="Input.Email">Correo electrónico</label>
+        <input asp-for="Input.Email" />
+    </div>
+
+    <div>
+        <label asp-for="Input.Password">Contraseña</label>
+        <input asp-for="Input.Password" type="password" />
+    </div>
+
+    <div>
+        <label>
+            <input asp-for="Input.RememberMe" />
+            Recordarme
+        </label>
+    </div>
+
+    <button type="submit">Iniciar sesión</button>
+</form>
+
+<p><a href="/Account/Register">¿No tenés cuenta? Crear una</a></p>
