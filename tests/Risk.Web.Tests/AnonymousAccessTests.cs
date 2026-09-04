@@ -74,6 +74,26 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
     }
 
     /// <summary>
+    /// Task 2.5's global nav (<c>MainLayout.razor</c>'s <c>AuthorizeView</c>)
+    /// must show the anonymous branch's login/register links on every route,
+    /// including the anonymous Setup page.
+    /// </summary>
+    [Fact]
+    public async Task GetRoot_AnonymousRequest_ShowsLoginAndRegisterNavLinks()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("href=\"/Account/Login\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Iniciar sesión", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("href=\"/Account/Register\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Crear cuenta", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Overrides the connection string with a syntactically valid,
     /// unreachable placeholder so <c>UseSqlServer</c>/host build never needs
     /// a live database, per Fix 1's constraint of not adding a real DB
