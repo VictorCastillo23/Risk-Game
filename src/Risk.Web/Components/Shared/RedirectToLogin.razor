@@ -1,0 +1,12 @@
+@inject NavigationManager Navigation
+
+@code {
+    // Fires from Routes.razor's <NotAuthorized> — currently unreachable
+    // because no page carries [Authorize] yet (that lands on /saved in
+    // PR6). Kept here now so PR1's Routes.razor wiring is exercised end
+    // to end without waiting on a page that needs it.
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo($"/Account/Login?returnUrl={Uri.EscapeDataString(Navigation.Uri)}", forceLoad: true);
+    }
+}
