@@ -374,6 +374,61 @@ public sealed class GameSessionService(
         }
     }
 
+    /// <summary>
+    /// Task 6.2's confirm-before-overwrite pre-check: asks the store
+    /// directly for the signed-in user's saved row WITHOUT touching this
+    /// session's own state, unlike <see cref="HasPersistedSave"/> (which
+    /// only reflects a save/resume this exact session already performed).
+    /// A signed-in user who never saved from this particular circuit still
+    /// gets an accurate "you already have a save" signal — needed so
+    /// <c>SavePanel</c> can show its confirm-before-overwrite prompt BEFORE
+    /// calling <see cref="SaveAsync"/>, not after.
+    ///
+    /// Same failure-safe contract as <see cref="SaveAsync"/>/<see cref="ResumeAsync"/>:
+    /// returns <see langword="null"/> (same as "no save exists") on any
+    /// <see cref="store"/> failure rather than throwing — a confirm-before-overwrite
+    /// pre-check must never be able to crash the save button.
+    /// </summary>
+    public async Task<SavedGameSummary?> GetSaveSummaryAsync(CancellationToken ct = default)
+    {
+        var userId = await CurrentUserIdAsync();
+        if (userId is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await store.GetSummaryAsync(userId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Task 6.4's anonymous-save-then-login completion, as one seam on this
+    /// service (its own "single stateful seam" convention) rather than
+    /// duplicated Razor code-behind logic: composes <see cref="LoadFrom"/>
+    /// then <see cref="SaveAsync"/> — <c>Game.razor</c>'s pending-save
+    /// rehydration calls this once, instead of the same two-step sequence
+    /// spread across component code.
+    ///
+    /// Deliberately loads <paramref name="snapshot"/> even if the
+    /// subsequent save fails: the caller just authenticated specifically to
+    /// finish saving a game they were actively playing seconds earlier
+    /// (design D2's stash-then-redirect flow) — silently discarding that
+    /// game locally because of an infra hiccup on the save would be
+    /// strictly worse than a failed save alone (mirrors <see cref="SaveAsync"/>'s
+    /// own "still playable" guarantee on failure).
+    /// </summary>
+    public async Task<SaveOutcome> RehydrateAndSaveAsync(GameSnapshot snapshot, CancellationToken ct = default)
+    {
+        LoadFrom(snapshot);
+        return await SaveAsync(ct);
+    }
+
     private async Task<string?> CurrentUserIdAsync()
     {
         var authState = await authStateProvider.GetAuthenticationStateAsync();

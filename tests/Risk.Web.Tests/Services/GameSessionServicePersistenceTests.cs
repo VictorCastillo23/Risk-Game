@@ -364,4 +364,120 @@ public class GameSessionServicePersistenceTests
         Assert.Null(session.OwnerUserId);
         Assert.False(session.HasPersistedSave);
     }
+
+    /// <summary>
+    /// Task 6.2's confirm-before-overwrite pre-check: unlike
+    /// <see cref="GameSessionService.HasPersistedSave"/> (this session's own
+    /// successful save/resume), <see cref="GameSessionService.GetSaveSummaryAsync"/>
+    /// asks the store directly for the signed-in ACCOUNT's saved row, so
+    /// <c>SavePanel</c> gets an accurate "you already have a save" signal
+    /// even on a session that never itself saved before.
+    /// </summary>
+    [Fact]
+    public async Task GetSaveSummaryAsync_Anonymous_ReturnsNull_AndNeverTouchesStore()
+    {
+        var store = new FakeGameStore();
+        var session = NewSession(store, StubAuthenticationStateProvider.Anonymous());
+
+        var summary = await session.GetSaveSummaryAsync();
+
+        Assert.Null(summary);
+        Assert.Null(store.LastUserId);
+    }
+
+    [Fact]
+    public async Task GetSaveSummaryAsync_SignedInNoSave_ReturnsNull()
+    {
+        var store = new FakeGameStore();
+        var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var summary = await session.GetSaveSummaryAsync();
+
+        Assert.Null(summary);
+    }
+
+    [Fact]
+    public async Task GetSaveSummaryAsync_SignedInWithSave_ReturnsSummary()
+    {
+        var store = new FakeGameStore();
+        var saver = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        saver.Start(TwoValidRows, GameMode.TwoPlayer);
+        await saver.SaveAsync();
+
+        var checker = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        var summary = await checker.GetSaveSummaryAsync();
+
+        Assert.NotNull(summary);
+        Assert.True(summary!.IsCompatible);
+        Assert.Equal(GameMode.TwoPlayer, summary.Mode);
+    }
+
+    /// <summary>
+    /// Same failure-safe contract as <see cref="SaveAsync_StoreThrows_ReturnsFailed_AndLeavesStateAndOwnerUnchanged"/>:
+    /// a confirm-before-overwrite pre-check must never crash the save
+    /// button — an infra hiccup here should read the same as "no
+    /// conflicting save known", not throw.
+    /// </summary>
+    [Fact]
+    public async Task GetSaveSummaryAsync_StoreThrows_ReturnsNull_WithoutThrowing()
+    {
+        var store = new ThrowingGameStore(new FakeGameStore()) { ThrowOnGetSummary = true };
+        var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var summary = await session.GetSaveSummaryAsync();
+
+        Assert.Null(summary);
+    }
+
+    /// <summary>
+    /// Task 6.4: completes the anonymous-save-then-login flow in one call —
+    /// <c>Game.razor</c>'s pending-save rehydration composes exactly
+    /// <see cref="GameSessionService.LoadFrom"/> then
+    /// <see cref="GameSessionService.SaveAsync"/>, but as one seam on
+    /// <see cref="GameSessionService"/> itself (this codebase's "single
+    /// stateful seam" convention) rather than duplicated Razor code-behind
+    /// logic, and so it's unit-testable without any Razor/JS-interop
+    /// machinery.
+    /// </summary>
+    [Fact]
+    public async Task RehydrateAndSaveAsync_LoadsSnapshotAndPersistsIt_ReturnsCreated()
+    {
+        var store = new FakeGameStore();
+        var producer = NewSession(store, StubAuthenticationStateProvider.Anonymous());
+        producer.Start(TwoValidRows, GameMode.TwoPlayer);
+        var snapshot = producer.Snapshot();
+
+        var consumer = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var outcome = await consumer.RehydrateAndSaveAsync(snapshot);
+
+        Assert.Equal(SaveOutcome.Created, outcome);
+        Assert.True(consumer.IsStarted);
+        Assert.Equal("user-1", consumer.OwnerUserId);
+        Assert.Equal("Ana", consumer.ConfigFor(new PlayerId(0)).Name);
+        Assert.Equal(1, store.SaveCount);
+    }
+
+    /// <summary>
+    /// The rehydrated game must stay playable even if the completing save
+    /// fails (BLOCKER-fix parity, PR5): the player just logged in to save a
+    /// game they were actively playing — losing it locally on a save
+    /// failure would be strictly worse than a failed save alone.
+    /// </summary>
+    [Fact]
+    public async Task RehydrateAndSaveAsync_StoreThrows_StillLoadsState_ButReturnsFailed()
+    {
+        var store = new ThrowingGameStore(new FakeGameStore()) { ThrowOnSave = true };
+        var producer = NewSession(new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+        producer.Start(TwoValidRows, GameMode.TwoPlayer);
+        var snapshot = producer.Snapshot();
+
+        var consumer = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var outcome = await consumer.RehydrateAndSaveAsync(snapshot);
+
+        Assert.Equal(SaveOutcome.Failed, outcome);
+        Assert.True(consumer.IsStarted);
+        Assert.Null(consumer.OwnerUserId);
+    }
 }
