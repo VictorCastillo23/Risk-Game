@@ -9,6 +9,7 @@ using Risk.Web.Models;
 using Risk.Web.Persistence;
 using Risk.Web.Services;
 using Risk.Web.Tests.Fakes;
+using Risk.Web.Tests.Persistence;
 
 namespace Risk.Web.Tests.Services;
 
@@ -25,10 +26,14 @@ namespace Risk.Web.Tests.Services;
 /// resumes, and asserts the resumed state is structurally equivalent to what
 /// was saved — never <c>.Equals</c>/<c>==</c> on <see cref="GameState"/>
 /// itself (this codebase's documented reference-equality gotcha, per
-/// <c>Persistence/GameStateAssertions.cs</c>), and this test lives in
-/// <c>Services/</c> rather than <c>Persistence/</c> since that assertion
-/// helper is <see langword="internal"/> to a different logical layer's test
-/// namespace — reimplemented inline at the field level instead.
+/// <c>Persistence/GameStateAssertions.cs</c>). Reuses
+/// <see cref="GameStateAssertions.AssertStructurallyEqual"/> rather than a
+/// local reimplementation (readability fix, PR5 fix pass): <see langword="internal"/>
+/// in C# is assembly-scoped, not namespace-scoped, and this test class lives
+/// in the same <c>Risk.Web.Tests</c> assembly, so there was never a
+/// visibility reason to duplicate it — the duplicate was also strictly less
+/// thorough (missing <c>IsNeutral</c>/<c>HeadquartersId</c>/<c>Mission</c>/
+/// turn-flags/<c>PendingOccupation</c>/<c>Won</c> details).
 /// </summary>
 public class GameSessionServiceSaveResumeIntegrationTests
 {
@@ -81,7 +86,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
 
         Assert.Equal(ResumeOutcome.Resumed, resumed);
         Assert.Equal(UserId, freshSession.OwnerUserId);
-        AssertStructurallyEquivalent(stateBeforeSave, freshSession.State!);
+        GameStateAssertions.AssertStructurallyEqual(stateBeforeSave, freshSession.State!);
         // TwoPlayer mode's engine-created neutral army (design D2's own
         // PlayerConfig, synthesized in Start) is a 3rd PlayerConfig on top
         // of the 2 human rows.
@@ -119,38 +124,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
         var resumed = await session.ResumeAsync();
 
         Assert.Equal(ResumeOutcome.Resumed, resumed);
-        AssertStructurallyEquivalent(stateBeforeSave, session.State!);
-    }
-
-    private static void AssertStructurallyEquivalent(GameState expected, GameState actual)
-    {
-        Assert.Equal(expected.Mode, actual.Mode);
-        Assert.Equal(expected.Turn.CurrentPlayer, actual.Turn.CurrentPlayer);
-        Assert.Equal(expected.Turn.Phase, actual.Turn.Phase);
-        Assert.Equal(expected.Status.GetType(), actual.Status.GetType());
-        Assert.Equal(expected.Deck.Count, actual.Deck.Count);
-        Assert.Equal(expected.Log.Count, actual.Log.Count);
-        for (var i = 0; i < expected.Log.Count; i++)
-        {
-            Assert.Equal(expected.Log[i].GetType(), actual.Log[i].GetType());
-        }
-
-        Assert.Equal(expected.Territories.Count, actual.Territories.Count);
-        foreach (var (territoryId, territoryState) in expected.Territories)
-        {
-            var resumed = actual.Territories[territoryId];
-            Assert.Equal(territoryState.Owner, resumed.Owner);
-            Assert.Equal(territoryState.Troops, resumed.Troops);
-        }
-
-        Assert.Equal(expected.Players.Count, actual.Players.Count);
-        for (var i = 0; i < expected.Players.Count; i++)
-        {
-            Assert.Equal(expected.Players[i].Id, actual.Players[i].Id);
-            Assert.Equal(expected.Players[i].TroopsRemaining, actual.Players[i].TroopsRemaining);
-            Assert.Equal(expected.Players[i].IsEliminated, actual.Players[i].IsEliminated);
-            Assert.Equal(expected.Players[i].Hand.Count, actual.Players[i].Hand.Count);
-        }
+        GameStateAssertions.AssertStructurallyEqual(stateBeforeSave, session.State!);
     }
 
     private static void PlaceOneStartingTroop(GameSessionService session)
