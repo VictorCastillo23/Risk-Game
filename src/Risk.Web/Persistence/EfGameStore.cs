@@ -46,6 +46,20 @@ public sealed class EfGameStore(RiskDbContext db) : IGameStore
             return null;
         }
 
+        if (row.SchemaVersion != GameSnapshot.CurrentSchemaVersion)
+        {
+            // CRITICAL #2 (PR5 fix pass): SchemaVersion/IsCompatible existed
+            // to let a caller detect an incompatible/stale row BEFORE
+            // deserializing, but this check was never wired up — an old or
+            // corrupted StateJson/PlayersJson blob would throw a bare
+            // JsonException straight out of LoadAsync. Reuse the existing
+            // "no save found" signal rather than inventing a new one:
+            // GameSessionService.ResumeAsync already treats a null snapshot
+            // as "nothing to resume", which is the correct caller-facing
+            // behavior for an incompatible row too.
+            return null;
+        }
+
         var state = GameSnapshotSerializer.DeserializeState(row.StateJson);
         var players = GameSnapshotSerializer.DeserializePlayers(row.PlayersJson);
         return new GameSnapshot(state, players);

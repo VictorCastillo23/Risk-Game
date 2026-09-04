@@ -163,6 +163,37 @@ public sealed class EfGameStoreTests : IDisposable
     }
 
     /// <summary>
+    /// CRITICAL #2 (PR5 fix pass): a saved row written by an incompatible
+    /// schema version must never reach the deserializer — seeds a row with
+    /// a mismatched <see cref="GameSnapshot.CurrentSchemaVersion"/> AND
+    /// deliberately invalid JSON payloads, so a passing assertion here is
+    /// proof the schema-version guard runs first (if <see cref="EfGameStore.LoadAsync"/>
+    /// tried to deserialize "not-valid-json" it would throw a
+    /// <see cref="System.Text.Json.JsonException"/> instead of returning null).
+    /// </summary>
+    [Fact]
+    public async Task LoadAsync_SchemaVersionMismatch_ReturnsNullWithoutDeserializing()
+    {
+        SeedUser("user-1");
+        _db.SavedGames.Add(new SavedGame
+        {
+            OwnerId = "user-1",
+            StateJson = "not-valid-json",
+            PlayersJson = "not-valid-json",
+            Mode = GameMode.TwoPlayer.ToString(),
+            PlayerCount = 2,
+            Phase = TurnPhase.Setup.ToString(),
+            SavedAtUtc = DateTime.UtcNow,
+            SchemaVersion = GameSnapshot.CurrentSchemaVersion + 1,
+        });
+        await _db.SaveChangesAsync();
+
+        var loaded = await _store.LoadAsync("user-1");
+
+        Assert.Null(loaded);
+    }
+
+    /// <summary>
     /// Security-relevant invariant (explicitly required): one account must
     /// never be able to load another account's save even if it queries by
     /// its own (different) id while another user's row exists.

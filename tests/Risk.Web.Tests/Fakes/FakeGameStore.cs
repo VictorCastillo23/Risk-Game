@@ -21,7 +21,7 @@ namespace Risk.Web.Tests.Fakes;
 /// </summary>
 internal sealed class FakeGameStore : IGameStore
 {
-    private sealed record StoredRow(string StateJson, string PlayersJson, DateTime SavedAtUtc);
+    private sealed record StoredRow(string StateJson, string PlayersJson, DateTime SavedAtUtc, int SchemaVersion);
 
     private readonly Dictionary<string, StoredRow> _saves = new();
 
@@ -38,6 +38,20 @@ internal sealed class FakeGameStore : IGameStore
         if (!_saves.TryGetValue(userId, out var row))
         {
             return Task.FromResult<SavedGameSummary?>(null);
+        }
+
+        var isCompatible = row.SchemaVersion == GameSnapshot.CurrentSchemaVersion;
+        if (!isCompatible)
+        {
+            // Matches EfGameStore.GetSummaryAsync: the denormalized
+            // SchemaVersion column alone drives IsCompatible, never a full
+            // deserialize (PR5 fix pass).
+            return Task.FromResult<SavedGameSummary?>(new SavedGameSummary(
+                default,
+                0,
+                default,
+                row.SavedAtUtc,
+                IsCompatible: false));
         }
 
         var state = GameSnapshotSerializer.DeserializeState(row.StateJson);
@@ -61,6 +75,15 @@ internal sealed class FakeGameStore : IGameStore
             return Task.FromResult<GameSnapshot?>(null);
         }
 
+        if (row.SchemaVersion != GameSnapshot.CurrentSchemaVersion)
+        {
+            // Matches EfGameStore.LoadAsync: an incompatible/stale schema
+            // version is reported as "no save found" rather than attempting
+            // a doomed deserialize of a shape that may not parse at all
+            // (PR5 fix pass, CRITICAL #2).
+            return Task.FromResult<GameSnapshot?>(null);
+        }
+
         var state = GameSnapshotSerializer.DeserializeState(row.StateJson);
         var players = GameSnapshotSerializer.DeserializePlayers(row.PlayersJson);
         return Task.FromResult<GameSnapshot?>(new GameSnapshot(state, players));
@@ -75,9 +98,24 @@ internal sealed class FakeGameStore : IGameStore
         _saves[userId] = new StoredRow(
             GameSnapshotSerializer.SerializeState(snapshot.State),
             GameSnapshotSerializer.SerializePlayers(snapshot.Players),
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            GameSnapshot.CurrentSchemaVersion);
 
         return Task.FromResult(overwritten);
+    }
+
+    /// <summary>
+    /// Test-only seam: seeds a row with a mismatched
+    /// <see cref="GameSnapshot.CurrentSchemaVersion"/> and deliberately
+    /// invalid JSON payloads, so a test can prove <see cref="LoadAsync"/>/
+    /// <see cref="GetSummaryAsync"/> never attempt to deserialize an
+    /// incompatible row (PR5 fix pass, CRITICAL #2) — if either method tried
+    /// to deserialize "not-valid-json" it would throw, so a passing test
+    /// here is proof the schema-version guard runs first.
+    /// </summary>
+    public void SeedIncompatibleSave(string userId, int schemaVersion)
+    {
+        _saves[userId] = new StoredRow("not-valid-json", "not-valid-json", DateTime.UtcNow, schemaVersion);
     }
 
     public Task DeleteAsync(string userId, CancellationToken ct = default)
