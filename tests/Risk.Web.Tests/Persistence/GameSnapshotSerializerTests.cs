@@ -260,6 +260,37 @@ public class GameSnapshotSerializerTests
     }
 
     /// <summary>
+    /// Fix pass (post-review CRITICAL finding): <see cref="GameStatus.Won"/> —
+    /// the second, PlayerId-carrying variant of the <see cref="GameStatus"/>
+    /// closed hierarchy registered by <see cref="ClosedHierarchyResolver"/> —
+    /// was never actually round-tripped by any test in this PR; every other
+    /// round-trip test here stops at <see cref="TurnPhase.Reinforce"/> or
+    /// <see cref="TurnPhase.SelectHeadquarters"/> with <see cref="GameStatus.InProgress"/>
+    /// still in effect. Rather than simulate an entire game to natural
+    /// victory (slow, complex, and orthogonal to what this test needs to
+    /// prove), this takes an already-built in-progress <see cref="GameState"/>
+    /// and swaps in a <see cref="GameStatus.Won"/> via a record <c>with</c>
+    /// expression — same direct-construction precedent as task 4.2's
+    /// <see cref="GameEventRoundTripTests"/>. Exercises both the canonical-
+    /// JSON equality check and <see cref="GameStateAssertions.AssertStructurallyEqual"/>'s
+    /// <see cref="GameStatus.Won"/> branch, which no other test in the suite
+    /// reaches.
+    /// </summary>
+    [Fact]
+    public void Won_status_round_trips_with_winner_PlayerId_intact()
+    {
+        var state = BuildInProgressClassicGame();
+        var winner = state.Turn.CurrentPlayer;
+        var wonState = state with { Status = new GameStatus.Won(winner) };
+
+        var deserialized = GameStateAssertions.RoundTripThroughCanonicalJson(wonState);
+        GameStateAssertions.AssertStructurallyEqual(wonState, deserialized);
+
+        var won = Assert.IsType<GameStatus.Won>(deserialized.Status);
+        Assert.Equal(winner, won.Winner);
+    }
+
+    /// <summary>
     /// Shared Setup-phase driver for the round-trip tests above. Handles
     /// every mode uniformly: while the current player still has troops of
     /// their own left, places <see cref="GameMode.TwoPlayer"/>'s 2-per-turn
