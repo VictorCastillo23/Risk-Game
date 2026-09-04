@@ -56,3 +56,9 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+// Exposes the top-level-statement-generated Program class to
+// WebApplicationFactory<Program> in tests/Risk.Web.Tests.
+public partial class Program
+{
+}
