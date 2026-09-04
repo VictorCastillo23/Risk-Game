@@ -37,15 +37,23 @@ public sealed class LoginModel(SignInManager<ApplicationUser> signInManager) : P
         }
 
         var result = await signInManager.PasswordSignInAsync(
-            Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+            Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
 
-        if (!result.Succeeded)
+        if (result.Succeeded)
         {
-            ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+            return LocalRedirect(SafeReturnUrl(returnUrl));
+        }
+
+        if (result.IsLockedOut)
+        {
+            ModelState.AddModelError(
+                string.Empty,
+                "This account has been locked out due to multiple failed login attempts. Try again later.");
             return Page();
         }
 
-        return LocalRedirect(SafeReturnUrl(returnUrl));
+        ModelState.AddModelError(string.Empty, "Invalid login attempt.");
+        return Page();
     }
 
     private string SafeReturnUrl(string? returnUrl) =>

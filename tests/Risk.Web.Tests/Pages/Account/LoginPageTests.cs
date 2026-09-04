@@ -76,6 +76,36 @@ public sealed class LoginPageTests : IClassFixture<AccountPagesTestFixture>
         Assert.Equal("/", response.Headers.Location?.ToString());
     }
 
+    /// <summary>
+    /// `lockoutOnFailure: true` (fix pass) engages the default
+    /// <c>IdentityOptions.Lockout</c> policy (<c>MaxFailedAccessAttempts = 5</c>,
+    /// never overridden in <c>Program.cs</c>, so the framework default applies).
+    /// ASP.NET Core Identity locks the account out on the very failed attempt
+    /// that reaches the threshold — no extra attempt is needed to observe it.
+    /// </summary>
+    [Fact]
+    public async Task Login_FailedAttemptsReachMaxThreshold_LocksOutWithDistinctMessage()
+    {
+        var email = await SeedUserAsync();
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        HttpResponseMessage response = null!;
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            response = await PostLoginAsync(client, email, "definitely-wrong", returnUrl: null);
+        }
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("locked out", body, StringComparison.OrdinalIgnoreCase);
+
+        // Even the correct password must be rejected while locked out.
+        var correctPasswordAttempt = await PostLoginAsync(client, email, Password, returnUrl: null);
+        Assert.Equal(HttpStatusCode.OK, correctPasswordAttempt.StatusCode);
+        Assert.False(AntiForgeryTestHelper.HasSetCookieContaining(
+            correctPasswordAttempt, ".AspNetCore.Identity.Application"));
+    }
+
     private async Task<string> SeedUserAsync()
     {
         var email = $"user-{Guid.NewGuid():N}@example.com";
