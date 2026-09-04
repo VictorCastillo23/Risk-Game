@@ -1,8 +1,13 @@
+using System.Text.Json;
 using Risk.Domain.Cards;
+using Risk.Domain.Map;
 using Risk.Domain.Missions;
 using Risk.Engine.Events;
+using Risk.Engine.Results;
+using Risk.Engine.Setup;
 using Risk.Engine.State;
 using Risk.Web.Persistence;
+using Risk.Web.Tests.Fakes;
 
 namespace Risk.Web.Tests.Persistence;
 
@@ -65,5 +70,32 @@ public class ClosedHierarchyCoverageTests
         // on serialize/deserialize (confirmed empirically in PR3's fresh-
         // context review), never silently drop data.
         Assert.False(polymorphism.IgnoreUnrecognizedTypeDiscriminators);
+    }
+
+    /// <summary>
+    /// Fix pass (post-review WARNING): the two tests above only assert
+    /// <c>IgnoreUnrecognizedTypeDiscriminators == false</c> as a
+    /// configuration check — neither ever actually feeds a malformed
+    /// payload through <see cref="GameSnapshotSerializer.DeserializeState"/>
+    /// to prove that setting has the throwing behavior it claims. This
+    /// hand-edits a real, valid serialized <see cref="GameState"/>'s
+    /// <c>"$kind":"InProgress"</c> discriminator (the <see cref="GameStatus"/>
+    /// hierarchy's registered value, per <see cref="ClosedHierarchyResolver.Modify"/>)
+    /// into an unregistered value and asserts deserialization throws
+    /// <see cref="JsonException"/> instead of silently ignoring the unknown
+    /// type or defaulting to something incorrect.
+    /// </summary>
+    [Fact]
+    public void DeserializeState_throws_JsonException_on_unrecognized_discriminator()
+    {
+        var setupResult = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            GameSetup.Create(3, GameMode.Classic, QueuedDiceRoller.ForRollOff(3)));
+        var json = GameSnapshotSerializer.SerializeState(setupResult.State);
+
+        Assert.Contains("\"$kind\":\"InProgress\"", json);
+        var tampered = json.Replace("\"$kind\":\"InProgress\"", "\"$kind\":\"NotARealType\"");
+        Assert.NotEqual(json, tampered);
+
+        Assert.Throws<JsonException>(() => GameSnapshotSerializer.DeserializeState(tampered));
     }
 }
