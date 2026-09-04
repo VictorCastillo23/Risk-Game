@@ -9,6 +9,11 @@ using Risk.Web.Models;
 using Risk.Web.Services;
 using Risk.Web.Tests.Fakes;
 
+// Persistence constructor args (Risk.Web.Persistence.IGameStore /
+// Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider)
+// are irrelevant to this Capital-mode wiring test — a fake store and an
+// anonymous stub keep GameSessionService's constructor satisfied.
+
 namespace Risk.Web.Tests.Services;
 
 /// <summary>
@@ -32,7 +37,7 @@ public class GameSessionServiceCapitalIntegrationTests
     public void Capital_game_stays_secret_through_every_intermediate_pick_then_reveals_and_supports_capture_and_recapture()
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(3));
+        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(3), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
 
         var rows = new List<PlayerSetupRow>
         {
@@ -143,7 +148,7 @@ public class GameSessionServiceCapitalIntegrationTests
     public void Classic_game_never_reveals_or_lists_headquarters()
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(3));
+        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(3), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
 
         var rows = new List<PlayerSetupRow>
         {

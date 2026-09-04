@@ -5,6 +5,7 @@ using Risk.Domain.Dice;
 using Risk.Engine;
 using Risk.Web.Components;
 using Risk.Web.Data;
+using Risk.Web.Persistence;
 using Risk.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,6 +25,7 @@ builder.Services.AddRazorPages();
 // Server circuit, i.e. one hot-seat game per browser tab.
 builder.Services.AddSingleton<IDiceRoller, RandomDiceRoller>();
 builder.Services.AddSingleton<IGameEngine, GameEngine>();
+builder.Services.AddScoped<IGameStore, EfGameStore>();
 builder.Services.AddScoped<GameSessionService>();
 
 // Accounts (design D1/D4): Identity gates only /saved and the future
