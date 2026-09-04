@@ -35,9 +35,68 @@ jobs:
           name: .net-app
           path: ${{env.DOTNET_ROOT}}/myapp
 
-  deploy:
+  migrate:
     runs-on: windows-latest
     needs: build
+    permissions:
+      id-token: write #This is required for requesting the JWT
+      contents: read #This is required for actions/checkout
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Same OIDC login the deploy job below already uses — one Azure
+      # identity/auth mechanism for this workflow, not a second one.
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_0E196D3F5BF3478E8BEAFA25B9DAD350 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B367B3E9459A4576AC9C8355DD1C3AFD }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_11D65988DDBA464EBBBA713145BD216C }}
+
+      # GitHub-hosted runner IPs are dynamic, so "Allow Azure services" isn't
+      # enough and a static allow-list isn't possible: open a firewall rule
+      # scoped to this run's IP and this run's ID, then always close it.
+      - name: Open Azure SQL firewall for this runner
+        shell: pwsh
+        run: |
+          $ip = (Invoke-RestMethod -Uri "https://api.ipify.org?format=json").ip
+          az sql server firewall-rule create `
+            --resource-group risk-game `
+            --server riskgame `
+            --name "gha-$env:GITHUB_RUN_ID" `
+            --start-ip-address $ip `
+            --end-ip-address $ip
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 8.0.11
+
+      # RiskDbContextFactory (design D-connection-string) reads this exact
+      # env var name at design time, matching the same
+      # ConnectionStrings:Default key Program.cs binds at runtime — do not
+      # rename it back to the superseded RISK_DB_CONNECTION.
+      - name: Apply EF Core migrations
+        env:
+          ConnectionStrings__Default: ${{ secrets.CONNECTIONSTRINGS_DEFAULT }}
+        run: dotnet ef database update --project src/Risk.Web/Risk.Web.csproj
+
+      - name: Close Azure SQL firewall for this runner
+        if: always()
+        shell: pwsh
+        run: |
+          az sql server firewall-rule delete `
+            --resource-group risk-game `
+            --server riskgame `
+            --name "gha-$env:GITHUB_RUN_ID"
+
+  deploy:
+    runs-on: windows-latest
+    needs: [build, migrate]
     permissions:
       id-token: write #This is required for requesting the JWT
       contents: read #This is required for actions/checkout
