@@ -79,7 +79,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
 
         var resumed = await freshSession.ResumeAsync();
 
-        Assert.True(resumed);
+        Assert.Equal(ResumeOutcome.Resumed, resumed);
         Assert.Equal(UserId, freshSession.OwnerUserId);
         AssertStructurallyEquivalent(stateBeforeSave, freshSession.State!);
         // TwoPlayer mode's engine-created neutral army (design D2's own
@@ -118,7 +118,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
 
         var resumed = await session.ResumeAsync();
 
-        Assert.True(resumed);
+        Assert.Equal(ResumeOutcome.Resumed, resumed);
         AssertStructurallyEquivalent(stateBeforeSave, session.State!);
     }
 

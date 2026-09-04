@@ -34,8 +34,16 @@ builder.Services.AddScoped<GameSessionService>();
 // Razor Pages in PR2, kept deliberately outside the interactive Blazor
 // router (D1) so App.razor's global InteractiveServer render mode never
 // has to change.
+// EnableRetryOnFailure (fix pass, BLOCKER finding): Azure SQL is prone to
+// brief transient faults (throttling, failover) that a bare connection
+// attempt has no chance to recover from on its own. This only helps with
+// transient blips — GameSessionService's save/resume/delete-on-win methods
+// still need their own try/catch around IGameStore for the non-transient
+// case (DB fully unavailable), which is a separate, already-covered fix.
 builder.Services.AddDbContext<RiskDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("Default"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure()));
 
 builder.Services.AddIdentityCore<ApplicationUser>()
     .AddEntityFrameworkStores<RiskDbContext>()

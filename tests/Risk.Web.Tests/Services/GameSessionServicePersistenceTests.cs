@@ -1,5 +1,6 @@
 using Risk.Domain.Players;
 using Risk.Engine;
+using Risk.Engine.Commands;
 using Risk.Engine.Events;
 using Risk.Engine.Results;
 using Risk.Engine.State;
@@ -28,7 +29,7 @@ public class GameSessionServicePersistenceTests
         new PlayerSetupRow("Beto", "#00FF00", false)
     ];
 
-    private static GameSessionService NewSession(FakeGameStore store, Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth)
+    private static GameSessionService NewSession(IGameStore store, Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth)
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
         return new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, auth);
@@ -122,27 +123,27 @@ public class GameSessionServicePersistenceTests
     }
 
     [Fact]
-    public async Task ResumeAsync_Anonymous_ReturnsFalse_AndNeverTouchesStore()
+    public async Task ResumeAsync_Anonymous_ReturnsNotAuthenticated_AndNeverTouchesStore()
     {
         var store = new FakeGameStore();
         var session = NewSession(store, StubAuthenticationStateProvider.Anonymous());
 
         var resumed = await session.ResumeAsync();
 
-        Assert.False(resumed);
+        Assert.Equal(ResumeOutcome.NotAuthenticated, resumed);
         Assert.Null(store.LastUserId);
         Assert.False(session.IsStarted);
     }
 
     [Fact]
-    public async Task ResumeAsync_SignedInNoSave_ReturnsFalse()
+    public async Task ResumeAsync_SignedInNoSave_ReturnsNoSavedGame()
     {
         var store = new FakeGameStore();
         var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
 
         var resumed = await session.ResumeAsync();
 
-        Assert.False(resumed);
+        Assert.Equal(ResumeOutcome.NoSavedGame, resumed);
         Assert.False(session.IsStarted);
     }
 
@@ -157,10 +158,129 @@ public class GameSessionServicePersistenceTests
         var resumer = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
         var resumed = await resumer.ResumeAsync();
 
-        Assert.True(resumed);
+        Assert.Equal(ResumeOutcome.Resumed, resumed);
         Assert.True(resumer.IsStarted);
         Assert.Equal("user-1", resumer.OwnerUserId);
         Assert.Equal("Ana", resumer.ConfigFor(new PlayerId(0)).Name);
+    }
+
+    /// <summary>
+    /// CRITICAL #2 (PR5 fix pass): a schema-version-incompatible row must
+    /// resolve to the same caller-facing outcome as "no save exists" —
+    /// never a thrown exception from a doomed deserialize.
+    /// </summary>
+    [Fact]
+    public async Task ResumeAsync_IncompatibleSchemaVersion_ReturnsNoSavedGame_WithoutThrowing()
+    {
+        var store = new FakeGameStore();
+        store.SeedIncompatibleSave("user-1", GameSnapshot.CurrentSchemaVersion + 1);
+        var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var resumed = await session.ResumeAsync();
+
+        Assert.Equal(ResumeOutcome.NoSavedGame, resumed);
+        Assert.False(session.IsStarted);
+    }
+
+    /// <summary>
+    /// BLOCKER finding (PR5 fresh-context review): an unhandled infra
+    /// exception (DB down/timeout) from <see cref="IGameStore.LoadAsync"/>
+    /// must never propagate out of <see cref="GameSessionService.ResumeAsync"/>
+    /// — that would fault the entire Blazor Server circuit. Resolves to a
+    /// clean <see cref="ResumeOutcome.Failed"/> instead, leaving the session
+    /// un-started rather than half-initialized.
+    /// </summary>
+    [Fact]
+    public async Task ResumeAsync_StoreThrows_ReturnsFailed_AndDoesNotStartSession()
+    {
+        var store = new ThrowingGameStore(new FakeGameStore()) { ThrowOnLoad = true };
+        var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var resumed = await session.ResumeAsync();
+
+        Assert.Equal(ResumeOutcome.Failed, resumed);
+        Assert.False(session.IsStarted);
+        Assert.Null(session.OwnerUserId);
+    }
+
+    /// <summary>
+    /// BLOCKER finding, save-path counterpart: an unhandled infra exception
+    /// from <see cref="IGameStore.SaveAsync"/> must resolve to
+    /// <see cref="SaveOutcome.Failed"/>, never throw — and the in-progress,
+    /// unsaved game (<see cref="GameSessionService.State"/>) must remain
+    /// exactly as it was, still the same object, still playable.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_StoreThrows_ReturnsFailed_AndLeavesStateAndOwnerUnchanged()
+    {
+        var store = new ThrowingGameStore(new FakeGameStore()) { ThrowOnSave = true };
+        var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        session.Start(TwoValidRows, GameMode.TwoPlayer);
+        var stateBeforeSave = session.State;
+
+        var outcome = await session.SaveAsync();
+
+        Assert.Equal(SaveOutcome.Failed, outcome);
+        Assert.Null(session.OwnerUserId);
+        Assert.False(session.HasPersistedSave);
+        Assert.Same(stateBeforeSave, session.State);
+
+        // Still playable: the failed save must not have corrupted anything
+        // that would prevent a further command from being executed.
+        var actor = session.State!.Turn.CurrentPlayer;
+        var actorPool = session.State!.Players.Single(p => p.Id == actor).TroopsRemaining;
+        var playResult = actorPool > 0
+            ? session.Execute(new PlaceTroopsCommand(actor, session.State!.Territories.First(kv => kv.Value.Owner == actor).Key, 1))
+            : session.Execute(new PlaceNeutralTroopsCommand(
+                actor,
+                session.State!.Territories.First(kv => kv.Value.Owner == session.State!.Players.Single(p => p.IsNeutral).Id).Key,
+                1));
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(playResult);
+    }
+
+    /// <summary>
+    /// BLOCKER finding: a save failure must never clear a previously-set
+    /// <see cref="GameSessionService.OwnerUserId"/> from an earlier
+    /// successful save on the same session.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_StoreThrowsOnSecondSave_DoesNotClearPreviousOwnerUserId()
+    {
+        var store = new ThrowingGameStore(new FakeGameStore());
+        var session = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        session.Start(TwoValidRows, GameMode.TwoPlayer);
+        var firstOutcome = await session.SaveAsync();
+        Assert.Equal(SaveOutcome.Created, firstOutcome);
+        Assert.Equal("user-1", session.OwnerUserId);
+
+        store.ThrowOnSave = true;
+        var secondOutcome = await session.SaveAsync();
+
+        Assert.Equal(SaveOutcome.Failed, secondOutcome);
+        Assert.Equal("user-1", session.OwnerUserId);
+    }
+
+    /// <summary>
+    /// CRITICAL #1 (PR5 fresh-context review): a DB hiccup while deleting a
+    /// now-stale save row after a win must never throw — this is cosmetic
+    /// housekeeping riding on the most important terminal-state UI (the
+    /// victory screen), and must be strictly best-effort.
+    /// </summary>
+    [Fact]
+    public async Task DeleteSaveIfWonAsync_StoreThrows_NeverThrows()
+    {
+        var store = new ThrowingGameStore(new FakeGameStore()) { ThrowOnDelete = true };
+        var engineFake = new FakeGameEngine();
+        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        session.Start(TwoValidRows, GameMode.TwoPlayer);
+        await session.SaveAsync();
+        var wonState = session.State! with { Status = new GameStatus.Won(session.State!.Turn.CurrentPlayer) };
+        engineFake.ExecuteResult = new CommandResult<GameState, GameEvent>.Ok(wonState, []);
+        session.Execute(new EndPhaseCommand(session.State!.Turn.CurrentPlayer));
+
+        var exception = await Record.ExceptionAsync(() => session.DeleteSaveIfWonAsync());
+
+        Assert.Null(exception);
     }
 
     [Fact]

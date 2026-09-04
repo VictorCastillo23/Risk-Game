@@ -30,6 +30,34 @@ public enum SaveOutcome
     NotAuthenticated,
     Created,
     Overwritten,
+
+    /// <summary>
+    /// <see cref="IGameStore.SaveAsync"/> threw (DB down/timeout/pool
+    /// exhaustion, etc.) — PR5 fix pass, BLOCKER finding. The in-progress,
+    /// unsaved game is left completely untouched: <see cref="GameSessionService.State"/>
+    /// and <see cref="GameSessionService.OwnerUserId"/> keep whatever value
+    /// they held immediately before the failed save attempt.
+    /// </summary>
+    Failed,
+}
+
+/// <summary>
+/// Which of the four outcomes <see cref="GameSessionService.ResumeAsync"/>
+/// resolved to. Mirrors <see cref="SaveOutcome"/>'s shape: no signed-in user,
+/// a signed-in user with nothing saved, an unhandled store failure, or a
+/// successful resume. Introduced alongside <see cref="SaveOutcome.Failed"/>
+/// (PR5 fix pass, BLOCKER finding) so a caller gets a distinct signal for
+/// "the store errored" instead of that being indistinguishable from "there
+/// was nothing to resume" — no UI consumes this yet (PR6), so this is the
+/// right time to give it its own shape rather than reusing a bare
+/// <see langword="bool"/>.
+/// </summary>
+public enum ResumeOutcome
+{
+    NotAuthenticated,
+    NoSavedGame,
+    Failed,
+    Resumed,
 }
 
 /// <summary>
@@ -230,6 +258,23 @@ public sealed class GameSessionService(
     /// signed-in user id from <paramref name="authStateProvider"/>'s
     /// server-side principal; returns <see cref="SaveOutcome.NotAuthenticated"/>
     /// without touching <see cref="store"/> at all if nobody is signed in.
+    ///
+    /// BLOCKER fix (PR5 fresh-context review): <see cref="store"/>'s call is
+    /// wrapped in a try/catch. An unhandled exception from a Blazor Server
+    /// event handler faults the entire circuit, which would destroy the
+    /// caller's in-progress, unsaved game outright — strictly worse than
+    /// just failing to save it. On failure this returns
+    /// <see cref="SaveOutcome.Failed"/> and leaves <see cref="State"/>/
+    /// <see cref="OwnerUserId"/> exactly as they were (the assignment to
+    /// <see cref="OwnerUserId"/> below only ever runs after the store call
+    /// has already succeeded). Catches <see cref="Exception"/> broadly
+    /// rather than a store-specific type like <c>DbUpdateException</c>: this
+    /// service only knows <see cref="IGameStore"/>'s abstract contract (design
+    /// D4), never that today's implementation happens to be EF Core, so the
+    /// failure boundary has to be equally opaque. <see cref="OperationCanceledException"/>
+    /// (e.g. the caller's own <paramref name="ct"/> firing) is deliberately
+    /// NOT treated as a save failure — it is allowed to propagate as
+    /// cancellation, not be reported as an infra error.
     /// </summary>
     public async Task<SaveOutcome> SaveAsync(CancellationToken ct = default)
     {
@@ -239,34 +284,59 @@ public sealed class GameSessionService(
             return SaveOutcome.NotAuthenticated;
         }
 
-        var overwritten = await store.SaveAsync(userId, Snapshot(), ct);
+        bool overwritten;
+        try
+        {
+            overwritten = await store.SaveAsync(userId, Snapshot(), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return SaveOutcome.Failed;
+        }
+
         OwnerUserId = userId;
         return overwritten ? SaveOutcome.Overwritten : SaveOutcome.Created;
     }
 
     /// <summary>
     /// Loads the signed-in user's saved game, if any, via <see cref="LoadFrom"/>.
-    /// Returns <see langword="false"/> (spec's "resume with no saved game")
-    /// without mutating <see cref="State"/> if nobody is signed in or no
-    /// save exists.
+    /// Returns <see cref="ResumeOutcome.NoSavedGame"/> (spec's "resume with
+    /// no saved game") without mutating <see cref="State"/> if nobody is
+    /// signed in or no save exists (this also covers an incompatible/stale
+    /// schema version — <see cref="IGameStore.LoadAsync"/> reports that the
+    /// same way, per CRITICAL #2 of the PR5 fresh-context review).
+    ///
+    /// BLOCKER fix (PR5 fresh-context review): same try/catch rationale as
+    /// <see cref="SaveAsync"/> — an unhandled store exception here would
+    /// otherwise fault the circuit instead of leaving the caller with a
+    /// clean "resume didn't work" signal.
     /// </summary>
-    public async Task<bool> ResumeAsync(CancellationToken ct = default)
+    public async Task<ResumeOutcome> ResumeAsync(CancellationToken ct = default)
     {
         var userId = await CurrentUserIdAsync();
         if (userId is null)
         {
-            return false;
+            return ResumeOutcome.NotAuthenticated;
         }
 
-        var snapshot = await store.LoadAsync(userId, ct);
+        GameSnapshot? snapshot;
+        try
+        {
+            snapshot = await store.LoadAsync(userId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return ResumeOutcome.Failed;
+        }
+
         if (snapshot is null)
         {
-            return false;
+            return ResumeOutcome.NoSavedGame;
         }
 
         LoadFrom(snapshot);
         OwnerUserId = userId;
-        return true;
+        return ResumeOutcome.Resumed;
     }
 
     /// <summary>
@@ -275,6 +345,15 @@ public sealed class GameSessionService(
     /// <see cref="HasPersistedSave"/> — never calls <see cref="store"/> in
     /// any other case (including anonymous play, where <see cref="OwnerUserId"/>
     /// is always <see langword="null"/>).
+    ///
+    /// CRITICAL #1 fix (PR5 fresh-context review): this is cosmetic
+    /// housekeeping (deleting a now-stale save row after a win) riding on
+    /// the most important terminal-state UI a player sees. It must never be
+    /// able to disrupt that experience, so any failure from <see cref="store"/>
+    /// is deliberately swallowed — this method's contract is "best-effort,
+    /// never throws", by design. Nothing currently consumes a return value,
+    /// so there is nothing to signal back; a future caller that needs to
+    /// know can be given one without changing this method's core promise.
     /// </summary>
     public async Task DeleteSaveIfWonAsync(CancellationToken ct = default)
     {
@@ -283,7 +362,16 @@ public sealed class GameSessionService(
             return;
         }
 
-        await store.DeleteAsync(OwnerUserId, ct);
+        try
+        {
+            await store.DeleteAsync(OwnerUserId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best-effort by design — see the doc comment above. Swallowed
+            // deliberately, not a bug: the victory screen must render either
+            // way.
+        }
     }
 
     private async Task<string?> CurrentUserIdAsync()
