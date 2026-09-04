@@ -94,6 +94,30 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
     }
 
     /// <summary>
+    /// PR6 regression guard: <c>Game.razor</c> now declares
+    /// <c>@rendermode @(new InteractiveServerRenderMode(prerender: false))</c>
+    /// (needed so <c>ProtectedSessionStorage</c>'s pending-save check in
+    /// <c>OnInitializedAsync</c> never runs during a JS-interop-less
+    /// prerender pass — see that file's own comment). Confirms the page
+    /// still serves a plain 200 (never a 500) for a bare HTTP GET with no
+    /// live Blazor circuit/session — anonymous or not, this route must
+    /// never crash the whole request pipeline just because it no longer
+    /// prerenders synchronously.
+    /// </summary>
+    [Fact]
+    public async Task GetGame_AnonymousRequest_NeverCrashes()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var response = await client.GetAsync("/game");
+
+        Assert.NotEqual(HttpStatusCode.InternalServerError, response.StatusCode);
+    }
+
+    /// <summary>
     /// Overrides the connection string with a syntactically valid,
     /// unreachable placeholder so <c>UseSqlServer</c>/host build never needs
     /// a live database, per Fix 1's constraint of not adding a real DB

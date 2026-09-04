@@ -1,5 +1,6 @@
 @page "/game"
 @implements IDisposable
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using Risk.Domain.Errors
 @using Risk.Domain.Map
 @using Risk.Engine.Commands
@@ -8,9 +9,11 @@
 @using Risk.Engine.State
 @using Risk.Web.Components.Game
 @using Risk.Web.Models
+@using Risk.Web.Persistence
 @using Risk.Web.Services
 @inject GameSessionService Session
 @inject NavigationManager Navigation
+@inject ProtectedSessionStorage SessionStorage
 
 <PageTitle>Risk — Partida</PageTitle>
 
@@ -71,6 +74,11 @@
                 }
                 <DicePanel Battle="_lastBattle" />
                 <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
+                @if (_postLoginSaveMessage is not null)
+                {
+                    <p class="game-post-login-save @(_postLoginSaveFailed ? "game-error" : "")" role="@(_postLoginSaveFailed ? "alert" : "status")">@_postLoginSaveMessage</p>
+                }
+                <SavePanel />
                 <LogPanel Log="state.Log" />
             </div>
         </div>
@@ -109,14 +117,109 @@
     // from one phase can leak into another phase's panel.
     private GameError? _placementError;
 
+    // Task 6.4/design D2: set once OnInitializedAsync rehydrates a pending
+    // anonymous save completed by this login — rendered as a one-time
+    // banner near SavePanel, distinct from a Failed outcome so the player
+    // isn't left thinking their game vanished when only the SAVE (not the
+    // rehydrated game itself, which is loaded either way) failed.
+    private string? _postLoginSaveMessage;
+    private bool _postLoginSaveFailed;
+
+    // Task 6.5: guards DeleteSaveIfWonAsync against firing more than once
+    // per win — OnSessionChanged can re-fire while Status is already Won
+    // (e.g. a later no-op re-render), and DeleteSaveIfWonAsync's own
+    // idempotency only protects the STORE side, not the "don't even call it
+    // twice" intent here.
+    private bool _deletedSaveForWin;
+
+    // Guards Session.Changed against a double subscription: this component
+    // can subscribe from two different places below (OnInitialized, for the
+    // already-started case that never touches JS interop, and
+    // OnAfterRenderAsync's firstRender pass, for the pending-save case) but
+    // must only ever add the handler once per component instance.
+    private bool _subscribedToSessionChanged;
+
+    // Deliberately does NOT touch SessionStorage (ProtectedSessionStorage) —
+    // confirmed empirically (a WebApplicationFactory smoke test threw
+    // InvalidOperationException("JavaScript interop calls cannot be issued
+    // at this time...")) that ASP.NET Core 8's RazorComponentEndpointInvoker
+    // always runs a component's OnInitialized(Async) once synchronously via
+    // StaticHtmlRenderer for ANY fresh HTTP request to an interactive route
+    // — regardless of that page's own @rendermode prerender setting; a
+    // page-level "prerender: false" override does NOT skip this pass, only
+    // OnAfterRenderAsync is documented (and confirmed here) to never run
+    // during it. So the only interop-safe home for the pending-save check
+    // is OnAfterRenderAsync(firstRender), below — see design D2's original
+    // assumption (fixed here) and this file's own apply-progress note for
+    // the fix pass this replaced.
+    //
+    // For the case that never involves a fresh HTTP request at all — the
+    // normal Setup.razor -&gt; Session.Start(...) -&gt; NavigateTo("/game")
+    // handoff, an in-circuit client-side navigation, never a prerendered
+    // static pass — Session.IsStarted is already true here, so subscribing
+    // immediately (rather than waiting for OnAfterRenderAsync) keeps this
+    // path's behavior identical to before PR6.
     protected override void OnInitialized()
     {
+        if (Session.IsStarted)
+        {
+            SubscribeToSessionChanged();
+        }
+    }
+
+    // Task 6.4/design D2, fixed: the pending-save check (and, when nothing
+    // is pending, the "no active game" bounce it used to run ahead of) both
+    // live here instead of OnInitializedAsync — OnAfterRenderAsync is the
+    // one lifecycle method the framework guarantees never runs during the
+    // JS-interop-less static/prerender pass (see OnInitialized's comment
+    // above), which is exactly what a ProtectedSessionStorage call needs.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _subscribedToSessionChanged)
+        {
+            // Already resolved (either by OnInitialized's already-started
+            // branch above, or by an earlier call to this method for the
+            // SAME component instance) — nothing left to do.
+            return;
+        }
+
+        var pendingResult = await SessionStorage.GetAsync<PendingSave>(PendingSave.StorageKey);
+        if (pendingResult.Success && pendingResult.Value is not null)
+        {
+            var outcome = await Session.RehydrateAndSaveAsync(pendingResult.Value.ToSnapshot());
+            await SessionStorage.DeleteAsync(PendingSave.StorageKey);
+
+            (string? Message, bool Failed) result = outcome switch
+            {
+                SaveOutcome.Created or SaveOutcome.Overwritten => ("Tu partida se guardó.", false),
+                SaveOutcome.Failed => ("Iniciaste sesión, pero no se pudo guardar la partida. Podés intentarlo de nuevo con \"Guardar partida\".", true),
+                _ => (null, false)
+            };
+            _postLoginSaveMessage = result.Message;
+            _postLoginSaveFailed = result.Failed;
+
+            SubscribeToSessionChanged();
+            StateHasChanged();
+            return;
+        }
+
         if (!Session.IsStarted)
         {
             Navigation.NavigateTo("/");
             return;
         }
 
+        SubscribeToSessionChanged();
+    }
+
+    private void SubscribeToSessionChanged()
+    {
+        if (_subscribedToSessionChanged)
+        {
+            return;
+        }
+
+        _subscribedToSessionChanged = true;
         Session.Changed += OnSessionChanged;
     }
 
@@ -259,6 +362,18 @@
         }
 
         _lastBattle = BattleEventSelector.MostRecent(Session.LastEvents) ?? _lastBattle;
+
+        // Task 6.5: fire-and-forget — DeleteSaveIfWonAsync never throws (PR5
+        // fix pass, best-effort by design), so the victory screen's render
+        // below never waits on it. Guarded by _deletedSaveForWin so a later
+        // re-render while Status is still Won (e.g. an unrelated Changed
+        // firing again) doesn't call it a second time.
+        if (Session.State?.Status is GameStatus.Won && !_deletedSaveForWin)
+        {
+            _deletedSaveForWin = true;
+            _ = Session.DeleteSaveIfWonAsync();
+        }
+
         InvokeAsync(StateHasChanged);
     }
 

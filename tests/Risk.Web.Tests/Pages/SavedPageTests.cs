@@ -106,7 +106,7 @@ public sealed class SavedPageTests : IClassFixture<AccountPagesTestFixture>
         var db = scope.ServiceProvider.GetRequiredService<RiskDbContext>();
         var user = await db.Users.SingleAsync(u => u.Email == email);
 
-        db.Set<SavedGame>().Add(new SavedGame
+        db.SavedGames.Add(new SavedGame
         {
             OwnerId = user.Id,
             StateJson = "{}",
