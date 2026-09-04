@@ -13,6 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Login/Register/Logout land as Razor Pages (design D1), deliberately
+// outside the Blazor router and MapRazorComponents<App>() below, so they
+// stay plain HTTP endpoints free to issue real redirects + auth cookies
+// without touching the app's single interactive circuit.
+builder.Services.AddRazorPages();
+
 // Composition root (design D1/D2/D3): engine and dice roller are stateless,
 // so they are shared singletons; the session is scoped to one Blazor
 // Server circuit, i.e. one hot-seat game per browser tab.
@@ -93,6 +99,8 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapRazorPages();
 
 app.Run();
 
