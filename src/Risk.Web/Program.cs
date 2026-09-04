@@ -47,6 +47,15 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
 });
 
+// Password/uniqueness policy pinned explicitly (review fix) rather than
+// left to silent framework defaults — this is a hobby app, so no extra
+// complexity rules beyond the framework's own reasonable defaults.
+builder.Services.Configure<IdentityOptions>(options =>
+{
+    options.Password.RequiredLength = 8;
+    options.User.RequireUniqueEmail = true;
+});
+
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 
