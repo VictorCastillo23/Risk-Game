@@ -36,7 +36,7 @@ public sealed class LoginPageTests : IClassFixture<AccountPagesTestFixture>
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("Invalid login attempt", body, StringComparison.OrdinalIgnoreCase);
-        Assert.False(HasSetCookieContaining(response, ".AspNetCore.Identity.Application"));
+        Assert.False(AntiForgeryTestHelper.HasSetCookieContaining(response, ".AspNetCore.Identity.Application"));
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class LoginPageTests : IClassFixture<AccountPagesTestFixture>
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/", response.Headers.Location?.ToString());
-        Assert.True(HasSetCookieContaining(response, ".AspNetCore.Identity.Application"));
+        Assert.True(AntiForgeryTestHelper.HasSetCookieContaining(response, ".AspNetCore.Identity.Application"));
     }
 
     [Fact]
@@ -104,8 +104,4 @@ public sealed class LoginPageTests : IClassFixture<AccountPagesTestFixture>
             ["__RequestVerificationToken"] = token,
         }));
     }
-
-    private static bool HasSetCookieContaining(HttpResponseMessage response, string needle) =>
-        response.Headers.TryGetValues("Set-Cookie", out var cookies) &&
-        cookies.Any(c => c.Contains(needle, StringComparison.OrdinalIgnoreCase));
 }

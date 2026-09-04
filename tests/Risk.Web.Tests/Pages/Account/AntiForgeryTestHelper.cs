@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -51,4 +53,13 @@ internal static class AntiForgeryTestHelper
 
         return valueMatch.Groups[1].Value;
     }
+
+    /// <summary>
+    /// Shared across Register/Login (and any future auth test) so both stop
+    /// duplicating the same "does this response set a cookie whose header
+    /// value contains this substring" check.
+    /// </summary>
+    public static bool HasSetCookieContaining(HttpResponseMessage response, string needle) =>
+        response.Headers.TryGetValues("Set-Cookie", out var cookies) &&
+        cookies.Any(c => c.Contains(needle, StringComparison.OrdinalIgnoreCase));
 }

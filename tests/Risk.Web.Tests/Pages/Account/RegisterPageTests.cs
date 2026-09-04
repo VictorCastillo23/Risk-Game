@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -32,7 +31,7 @@ public sealed class RegisterPageTests : IClassFixture<AccountPagesTestFixture>
         var response = await PostRegisterAsync(client, email, "Str0ngPassw0rd!");
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.True(HasSetCookieContaining(response, ".AspNetCore.Identity.Application"),
+        Assert.True(AntiForgeryTestHelper.HasSetCookieContaining(response, ".AspNetCore.Identity.Application"),
             "A successful registration must sign the user in immediately (no email confirmation step).");
     }
 
@@ -69,8 +68,4 @@ public sealed class RegisterPageTests : IClassFixture<AccountPagesTestFixture>
             ["__RequestVerificationToken"] = token,
         }));
     }
-
-    private static bool HasSetCookieContaining(HttpResponseMessage response, string needle) =>
-        response.Headers.TryGetValues("Set-Cookie", out var cookies) &&
-        cookies.Any(c => c.Contains(needle, StringComparison.OrdinalIgnoreCase));
 }
