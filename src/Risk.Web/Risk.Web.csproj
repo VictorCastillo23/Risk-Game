@@ -4,6 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The Blazor Web App template only compiles .razor Components by
+         default; Login/Register/Logout (design D1) are classic Razor Pages
+         (.cshtml/.cshtml.cs) living outside the Blazor router, which needs
+         this switch to enable the MVC/Razor Pages view-compilation pipeline
+         (tag helpers, PageModel binding, etc.) alongside it. -->
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
   </PropertyGroup>
 
   <ItemGroup>
