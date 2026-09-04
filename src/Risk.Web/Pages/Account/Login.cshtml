@@ -3,39 +3,29 @@
 @{
     ViewData["Title"] = "Iniciar sesión";
 }
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"]</title>
-</head>
-<body>
-    <h1>Iniciar sesión</h1>
+<h1>Iniciar sesión</h1>
 
-    <form method="post" asp-route-returnUrl="@Model.ReturnUrl">
-        <div asp-validation-summary="All"></div>
+<form method="post" asp-route-returnUrl="@Model.ReturnUrl">
+    <div asp-validation-summary="All"></div>
 
-        <div>
-            <label asp-for="Input.Email">Correo electrónico</label>
-            <input asp-for="Input.Email" />
-        </div>
+    <div>
+        <label asp-for="Input.Email">Correo electrónico</label>
+        <input asp-for="Input.Email" />
+    </div>
 
-        <div>
-            <label asp-for="Input.Password">Contraseña</label>
-            <input asp-for="Input.Password" type="password" />
-        </div>
+    <div>
+        <label asp-for="Input.Password">Contraseña</label>
+        <input asp-for="Input.Password" type="password" />
+    </div>
 
-        <div>
-            <label>
-                <input asp-for="Input.RememberMe" />
-                Recordarme
-            </label>
-        </div>
+    <div>
+        <label>
+            <input asp-for="Input.RememberMe" />
+            Recordarme
+        </label>
+    </div>
 
-        <button type="submit">Iniciar sesión</button>
-    </form>
+    <button type="submit">Iniciar sesión</button>
+</form>
 
-    <p><a href="/Account/Register">¿No tenés cuenta? Crear una</a></p>
-</body>
-</html>
+<p><a href="/Account/Register">¿No tenés cuenta? Crear una</a></p>
