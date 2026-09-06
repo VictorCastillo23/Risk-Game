@@ -183,15 +183,57 @@
             return;
         }
 
-        var pendingResult = await SessionStorage.GetAsync<PendingSave>(PendingSave.StorageKey);
-        if (pendingResult.Success && pendingResult.Value is not null)
+        // BLOCKER fix (PR6 fresh-context review): this whole block runs on
+        // firstRender for EVERY visit to /game, not just an anonymous-save-
+        // then-login flow — a corrupted/tampered stash, disabled session
+        // storage, or any other JS interop hiccup must never fault the
+        // circuit for a player who never touched the save feature at all.
+        // On any failure this degrades to "no pending save" and falls
+        // through to the same normal render flow below, exactly as if
+        // pendingResult.Value had been null. GameSnapshot.ToSnapshot()'s
+        // deserialize is included in the same try — a stashed value that
+        // reads back but doesn't parse into a valid snapshot is just as
+        // unusable, and just as unable to be allowed to crash the circuit.
+        GameSnapshot? snapshot = null;
+        try
         {
-            var outcome = await Session.RehydrateAndSaveAsync(pendingResult.Value.ToSnapshot());
-            await SessionStorage.DeleteAsync(PendingSave.StorageKey);
+            var pendingResult = await SessionStorage.GetAsync<PendingSave>(PendingSave.StorageKey);
+            if (pendingResult.Success && pendingResult.Value is not null)
+            {
+                snapshot = pendingResult.Value.ToSnapshot();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best-effort cleanup of a stash that just failed to read/parse,
+            // so a corrupted key doesn't keep failing on every future visit
+            // either — itself guarded, since a second interop failure here
+            // must not escalate an already-handled problem into a crash.
+            await TryDeleteStashAsync();
+        }
+
+        if (snapshot is not null)
+        {
+            var outcome = await Session.RehydrateAndSaveAsync(snapshot);
+            await TryDeleteStashAsync();
+
+            // Task 6.4/design D2 CRITICAL fix (PR6 fresh-context review):
+            // RehydrateAndSaveAsync itself now deletes a just-persisted Won
+            // save (see its own doc comment for why relying on Changed/
+            // OnSessionChanged's timing doesn't work for this specific call
+            // path) — mirror that here in the guard so a later OnSessionChanged
+            // firing for an unrelated reason never attempts a second delete.
+            _deletedSaveForWin = Session.State?.Status is GameStatus.Won;
 
             (string? Message, bool Failed) result = outcome switch
             {
-                SaveOutcome.Created or SaveOutcome.Overwritten => ("Tu partida se guardó.", false),
+                SaveOutcome.Created => ("Tu partida se guardó.", false),
+                // Warning fix (PR6 fresh-context review): a silent overwrite
+                // must be visibly disclosed, not folded into the same
+                // message as a brand-new save — the player already committed
+                // to saving before the login redirect, so this doesn't need
+                // to block/confirm, just tell them plainly what happened.
+                SaveOutcome.Overwritten => ("Se sobrescribió tu partida guardada anterior con esta.", false),
                 SaveOutcome.Failed => ("Iniciaste sesión, pero no se pudo guardar la partida. Podés intentarlo de nuevo con \"Guardar partida\".", true),
                 _ => (null, false)
             };
@@ -210,6 +252,24 @@
         }
 
         SubscribeToSessionChanged();
+    }
+
+    /// <summary>
+    /// Best-effort clear of the pending-save stash — itself guarded, since a
+    /// second interop failure while cleaning up after a first one must not
+    /// escalate an already-handled problem into a crash (BLOCKER fix, PR6
+    /// fresh-context review).
+    /// </summary>
+    private async Task TryDeleteStashAsync()
+    {
+        try
+        {
+            await SessionStorage.DeleteAsync(PendingSave.StorageKey);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Nothing further to do — this was already best-effort.
+        }
     }
 
     private void SubscribeToSessionChanged()
