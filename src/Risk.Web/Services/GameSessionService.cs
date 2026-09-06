@@ -422,11 +422,30 @@ public sealed class GameSessionService(
     /// game locally because of an infra hiccup on the save would be
     /// strictly worse than a failed save alone (mirrors <see cref="SaveAsync"/>'s
     /// own "still playable" guarantee on failure).
+    ///
+    /// CRITICAL fix (PR6 fresh-context review): also cleans up a just-saved
+    /// row when <paramref name="snapshot"/> is already <see cref="GameStatus.Won"/>
+    /// (e.g. an anonymous player won, then clicked "Guardar partida" and
+    /// completed the login redirect). This can't be left to <c>Game.razor</c>'s
+    /// <c>OnSessionChanged</c>/<see cref="DeleteSaveIfWonAsync"/> hookup the
+    /// way a mid-session win is: <see cref="LoadFrom"/> raises <see cref="Changed"/>
+    /// synchronously, before the caller has had a chance to subscribe to it
+    /// for this specific rehydration, so that event can't be relied on here.
+    /// Calling <see cref="DeleteSaveIfWonAsync"/> directly, after <see cref="SaveAsync"/>
+    /// has had a chance to set <see cref="OwnerUserId"/>, makes this
+    /// self-contained and independent of any caller's subscription timing.
     /// </summary>
     public async Task<SaveOutcome> RehydrateAndSaveAsync(GameSnapshot snapshot, CancellationToken ct = default)
     {
         LoadFrom(snapshot);
-        return await SaveAsync(ct);
+        var outcome = await SaveAsync(ct);
+
+        if (State?.Status is GameStatus.Won)
+        {
+            await DeleteSaveIfWonAsync(ct);
+        }
+
+        return outcome;
     }
 
     private async Task<string?> CurrentUserIdAsync()

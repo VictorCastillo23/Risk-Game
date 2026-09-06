@@ -480,4 +480,68 @@ public class GameSessionServicePersistenceTests
         Assert.True(consumer.IsStarted);
         Assert.Null(consumer.OwnerUserId);
     }
+
+    /// <summary>
+    /// PR6 fix pass, CRITICAL finding: an anonymous player who wins, then
+    /// clicks "Guardar partida" and completes the post-login redirect, would
+    /// otherwise have their already-Won game persisted and NEVER cleaned up
+    /// — <c>Game.razor</c>'s <c>OnSessionChanged</c> (the only place that
+    /// previously called <see cref="GameSessionService.DeleteSaveIfWonAsync"/>)
+    /// isn't subscribed yet when <see cref="GameSessionService.LoadFrom"/>
+    /// raises <see cref="GameSessionService.Changed"/> synchronously inside
+    /// this same call, and <see cref="GameSessionService.OwnerUserId"/> is
+    /// still <see langword="null"/> at that exact moment anyway (it's only
+    /// set by <see cref="GameSessionService.SaveAsync"/>, which runs after
+    /// <see cref="GameSessionService.LoadFrom"/>). Fixed by having
+    /// <see cref="GameSessionService.RehydrateAndSaveAsync"/> itself clean up
+    /// a just-persisted Won save, instead of relying on an event subscription
+    /// whose timing this specific call path can't guarantee.
+    /// </summary>
+    [Fact]
+    public async Task RehydrateAndSaveAsync_WonSnapshot_DeletesAnyPriorSave()
+    {
+        var store = new FakeGameStore();
+        var producer = NewSession(store, StubAuthenticationStateProvider.Anonymous());
+        producer.Start(TwoValidRows, GameMode.TwoPlayer);
+        var wonState = producer.State! with { Status = new GameStatus.Won(producer.State!.Turn.CurrentPlayer) };
+        var wonSnapshot = new GameSnapshot(wonState, producer.Players.Values.ToList());
+
+        var consumer = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var outcome = await consumer.RehydrateAndSaveAsync(wonSnapshot);
+
+        Assert.Equal(SaveOutcome.Created, outcome);
+        Assert.Equal(1, store.SaveCount);
+        Assert.Equal(1, store.DeleteCount);
+
+        // The row must be genuinely gone, not merely deleted-then-recreated —
+        // a second, independent lookup for the same account proves it.
+        var checker = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        var summary = await checker.GetSaveSummaryAsync();
+        Assert.Null(summary);
+    }
+
+    /// <summary>
+    /// Companion to <see cref="RehydrateAndSaveAsync_WonSnapshot_DeletesAnyPriorSave"/>:
+    /// an in-progress (not Won) rehydrated snapshot must NOT trigger a
+    /// delete — this is the same "never call the store outside a real win"
+    /// contract <see cref="GameSessionService.DeleteSaveIfWonAsync"/> already
+    /// has, just re-asserted through the composed <see cref="GameSessionService.RehydrateAndSaveAsync"/>
+    /// path.
+    /// </summary>
+    [Fact]
+    public async Task RehydrateAndSaveAsync_InProgressSnapshot_DoesNotDelete()
+    {
+        var store = new FakeGameStore();
+        var producer = NewSession(store, StubAuthenticationStateProvider.Anonymous());
+        producer.Start(TwoValidRows, GameMode.TwoPlayer);
+        var snapshot = producer.Snapshot();
+
+        var consumer = NewSession(store, StubAuthenticationStateProvider.SignedIn("user-1"));
+
+        var outcome = await consumer.RehydrateAndSaveAsync(snapshot);
+
+        Assert.Equal(SaveOutcome.Created, outcome);
+        Assert.Equal(0, store.DeleteCount);
+    }
 }
