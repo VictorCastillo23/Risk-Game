@@ -102,11 +102,34 @@
     /// (design D1) and tears down this circuit — exactly why the game must
     /// be safely stashed in browser session storage first, not left only in
     /// this about-to-be-destroyed <see cref="GameSessionService"/> instance.
+    ///
+    /// BLOCKER fix (PR6 fresh-context review): <see cref="SessionStorage"/>'s
+    /// call is wrapped in a try/catch. If session storage is disabled/
+    /// blocked or any JS interop error occurs, this previously threw
+    /// unhandled, faulting the whole Blazor circuit and destroying the
+    /// player's in-progress, unsaved game outright — exactly the failure
+    /// mode <see cref="GameSessionService.SaveAsync"/>/<see cref="GameSessionService.ResumeAsync"/>/
+    /// <see cref="GameSessionService.DeleteSaveIfWonAsync"/> were already
+    /// hardened against (PR5 fix pass), just not yet extended to this
+    /// interop surface. On failure the player stays on <c>/game</c> with
+    /// their game completely untouched — no navigation happens, only an
+    /// error message is shown, matching this panel's existing <see cref="SaveOutcome.Failed"/>
+    /// error-display pattern.
     /// </summary>
     private async Task OnSaveAnonymousClicked()
     {
         var pending = PendingSave.From(Session.Snapshot());
-        await SessionStorage.SetAsync(PendingSave.StorageKey, pending);
+
+        try
+        {
+            await SessionStorage.SetAsync(PendingSave.StorageKey, pending);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = "No se pudo guardar la partida. Probá de nuevo.";
+            return;
+        }
+
         Navigation.NavigateTo("/Account/Login?returnUrl=/game", forceLoad: true);
     }
 }
