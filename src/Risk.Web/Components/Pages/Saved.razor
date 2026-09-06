@@ -1,0 +1,90 @@
+@page "/saved"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Risk.Web.Models
+@using Risk.Web.Persistence
+@using Risk.Web.Services
+@inject GameSessionService Session
+@inject NavigationManager Navigation
+
+<PageTitle>Risk — Partida guardada</PageTitle>
+
+<h1>Partida guardada</h1>
+
+@if (_loading)
+{
+    <p>Cargando…</p>
+}
+else if (_summary is null)
+{
+    <p class="saved-empty">No tenés ninguna partida guardada.</p>
+}
+else
+{
+    @* This repo supports at most ONE saved game per account (SavedGame's
+       OwnerId is both the primary key and the FK to AspNetUsers.Id, design's
+       Schema section) — a single "resume your game" card, not a list. *@
+    <div class="saved-card panel-frame">
+        <p>Modo: @GameModeDisplay.Label(_summary.Mode)</p>
+        <p>Jugadores: @_summary.PlayerCount</p>
+        <p>Fase: @_summary.Phase</p>
+        <p>Guardada: @_summary.SavedAtUtc.ToLocalTime()</p>
+
+        @if (!_summary.IsCompatible)
+        {
+            <p class="saved-incompatible" role="alert">Esta partida guardada ya no es compatible y no se puede reanudar.</p>
+        }
+        else
+        {
+            <button type="button" @onclick="OnResume" disabled="@_resuming">Reanudar</button>
+        }
+    </div>
+}
+
+@if (_resumeError is not null)
+{
+    <p class="saved-error" role="alert">@_resumeError</p>
+}
+
+@code {
+    private SavedGameSummary? _summary;
+    private bool _loading = true;
+    private bool _resuming;
+    private string? _resumeError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _summary = await Session.GetSaveSummaryAsync();
+        _loading = false;
+    }
+
+    private async Task OnResume()
+    {
+        _resuming = true;
+        _resumeError = null;
+
+        var outcome = await Session.ResumeAsync();
+
+        switch (outcome)
+        {
+            case ResumeOutcome.Resumed:
+                Navigation.NavigateTo("/game");
+                return;
+            case ResumeOutcome.NoSavedGame:
+                _resumeError = "No se encontró ninguna partida guardada.";
+                break;
+            case ResumeOutcome.NotAuthenticated:
+                // Defensive only: unreachable in practice — this page's own
+                // [Authorize] attribute (via Routes.razor's
+                // AuthorizeRouteView) already redirects an unauthenticated
+                // visitor before this component ever renders.
+                _resumeError = "Tenés que iniciar sesión para reanudar.";
+                break;
+            case ResumeOutcome.Failed:
+                _resumeError = "No se pudo reanudar la partida. Probá de nuevo.";
+                break;
+        }
+
+        _resuming = false;
+    }
+}

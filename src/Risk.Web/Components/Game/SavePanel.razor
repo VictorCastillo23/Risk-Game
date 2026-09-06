@@ -1,0 +1,135 @@
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Risk.Web.Persistence
+@using Risk.Web.Services
+@inject GameSessionService Session
+@inject NavigationManager Navigation
+@inject ProtectedSessionStorage SessionStorage
+
+<div class="save-panel panel-frame">
+    <AuthorizeView>
+        <Authorized>
+            @if (_confirmingOverwrite)
+            {
+                <p class="save-panel-confirm" role="alert">Ya tenés una partida guardada. ¿Querés sobrescribirla?</p>
+                <div class="save-panel-actions">
+                    <button type="button" @onclick="OnConfirmOverwrite" disabled="@_saving">Sí, sobrescribir</button>
+                    <button type="button" @onclick="OnCancelOverwrite" disabled="@_saving">Cancelar</button>
+                </div>
+            }
+            else
+            {
+                <button type="button" @onclick="OnSaveClicked" disabled="@_saving">Guardar partida</button>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <button type="button" @onclick="OnSaveAnonymousClicked">Guardar partida</button>
+        </NotAuthorized>
+    </AuthorizeView>
+
+    @if (_message is not null)
+    {
+        <p class="save-panel-message" role="status">@_message</p>
+    }
+    @if (_error is not null)
+    {
+        <p class="save-panel-error" role="alert">@_error</p>
+    }
+</div>
+
+@code {
+    private bool _saving;
+    private bool _confirmingOverwrite;
+    private string? _message;
+    private string? _error;
+
+    /// <summary>
+    /// Task 6.2: checks whether the signed-in account already has a saved
+    /// game BEFORE ever calling <see cref="GameSessionService.SaveAsync"/> —
+    /// <see cref="GameSessionService.GetSaveSummaryAsync"/> asks the store
+    /// directly (not this session's own <see cref="GameSessionService.HasPersistedSave"/>),
+    /// so the confirm prompt is accurate even for a session that never
+    /// itself saved before.
+    /// </summary>
+    private async Task OnSaveClicked()
+    {
+        _message = null;
+        _error = null;
+
+        var existing = await Session.GetSaveSummaryAsync();
+        if (existing is not null)
+        {
+            _confirmingOverwrite = true;
+            return;
+        }
+
+        await PerformSaveAsync();
+    }
+
+    private void OnCancelOverwrite() => _confirmingOverwrite = false;
+
+    private async Task OnConfirmOverwrite()
+    {
+        _confirmingOverwrite = false;
+        await PerformSaveAsync();
+    }
+
+    private async Task PerformSaveAsync()
+    {
+        _saving = true;
+        var outcome = await Session.SaveAsync();
+        _saving = false;
+
+        (string? Message, string? Error) result = outcome switch
+        {
+            SaveOutcome.Created => ("Partida guardada.", null),
+            SaveOutcome.Overwritten => ("Partida guardada (se sobrescribió la anterior).", null),
+            SaveOutcome.Failed => (null, "No se pudo guardar la partida. Probá de nuevo."),
+            // Defensive only: AuthorizeView's Authorized branch already
+            // guarantees a signed-in user by the time this runs.
+            SaveOutcome.NotAuthenticated => (null, "Tenés que iniciar sesión para guardar."),
+            _ => (null, null)
+        };
+        _message = result.Message;
+        _error = result.Error;
+    }
+
+    /// <summary>
+    /// Task 6.3, design D2: stashes the in-progress game (as a <see cref="PendingSave"/>
+    /// — see its own doc comment for why a raw <see cref="Risk.Web.Persistence.GameSnapshot"/>
+    /// can't be stashed directly) into <c>ProtectedSessionStorage</c>, then
+    /// <c>forceLoad</c>-navigates to the Login Razor Page. <c>forceLoad</c>
+    /// is required because that page lives outside the interactive router
+    /// (design D1) and tears down this circuit — exactly why the game must
+    /// be safely stashed in browser session storage first, not left only in
+    /// this about-to-be-destroyed <see cref="GameSessionService"/> instance.
+    ///
+    /// BLOCKER fix (PR6 fresh-context review): <see cref="SessionStorage"/>'s
+    /// call is wrapped in a try/catch. If session storage is disabled/
+    /// blocked or any JS interop error occurs, this previously threw
+    /// unhandled, faulting the whole Blazor circuit and destroying the
+    /// player's in-progress, unsaved game outright — exactly the failure
+    /// mode <see cref="GameSessionService.SaveAsync"/>/<see cref="GameSessionService.ResumeAsync"/>/
+    /// <see cref="GameSessionService.DeleteSaveIfWonAsync"/> were already
+    /// hardened against (PR5 fix pass), just not yet extended to this
+    /// interop surface. On failure the player stays on <c>/game</c> with
+    /// their game completely untouched — no navigation happens, only an
+    /// error message is shown, matching this panel's existing <see cref="SaveOutcome.Failed"/>
+    /// error-display pattern.
+    /// </summary>
+    private async Task OnSaveAnonymousClicked()
+    {
+        var pending = PendingSave.From(Session.Snapshot());
+
+        try
+        {
+            await SessionStorage.SetAsync(PendingSave.StorageKey, pending);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _error = "No se pudo guardar la partida. Probá de nuevo.";
+            return;
+        }
+
+        Navigation.NavigateTo("/Account/Login?returnUrl=/game", forceLoad: true);
+    }
+}
