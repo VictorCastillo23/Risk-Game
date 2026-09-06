@@ -1,0 +1,20 @@
+/* PR6 fix pass (warning): Blazor's per-component CSS isolation means these
+   classes — used directly in Saved.razor's own markup — need their own
+   scoped rules. .saved-error/.saved-incompatible mirror SavePanel.razor.css's
+   .save-panel-error styling for visual consistency across the app's
+   save/resume error banners; .saved-empty is a plain informational message,
+   not an error, so it stays muted like the other panels' --ink-soft text. */
+.saved-empty {
+    color: var(--ink-soft);
+}
+
+.saved-error,
+.saved-incompatible {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    font-weight: 600;
+    margin: 0.6rem 0 0;
+}

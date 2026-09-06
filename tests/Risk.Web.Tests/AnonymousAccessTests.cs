@@ -94,15 +94,30 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
     }
 
     /// <summary>
-    /// PR6 regression guard: <c>Game.razor</c> now declares
-    /// <c>@rendermode @(new InteractiveServerRenderMode(prerender: false))</c>
-    /// (needed so <c>ProtectedSessionStorage</c>'s pending-save check in
-    /// <c>OnInitializedAsync</c> never runs during a JS-interop-less
-    /// prerender pass — see that file's own comment). Confirms the page
-    /// still serves a plain 200 (never a 500) for a bare HTTP GET with no
-    /// live Blazor circuit/session — anonymous or not, this route must
-    /// never crash the whole request pipeline just because it no longer
-    /// prerenders synchronously.
+    /// PR6 regression guard for the original crash mode: an earlier attempt
+    /// placed the pending-save check in <c>OnInitializedAsync</c> behind a
+    /// page-level <c>@rendermode @(new InteractiveServerRenderMode(prerender: false))</c>
+    /// override, which still threw an unhandled <c>InvalidOperationException</c>
+    /// ("JavaScript interop calls cannot be issued at this time...") for any
+    /// fresh HTTP request — ASP.NET Core 8 always runs a component's
+    /// <c>OnInitialized(Async)</c> once synchronously via <c>StaticHtmlRenderer</c>
+    /// for a fresh request, regardless of that page's own render-mode
+    /// prerender flag. The actual fix (no <c>@rendermode</c> override; the
+    /// pending-save check moved to <c>OnAfterRenderAsync(firstRender)</c>,
+    /// the one lifecycle method the framework guarantees never runs during
+    /// that static pass) is what's shipped today — see <c>Game.razor</c>'s
+    /// own comments on <c>OnInitialized</c>/<c>OnAfterRenderAsync</c>.
+    ///
+    /// Honest scope note (PR6 fix pass, reliability review): a plain
+    /// <see cref="WebApplicationFactory{TEntryPoint}"/> HTTP GET never
+    /// establishes a live Blazor circuit, so this test does NOT exercise
+    /// <c>OnAfterRenderAsync</c>'s rehydration logic at all — it only proves
+    /// the page doesn't 500 at the HTTP/prerender level. That is still a
+    /// real and valuable regression guard for the crash mode described
+    /// above, just not a complete proof that the rehydration code path
+    /// (including its own try/catch guards, PR6 fix pass) behaves correctly
+    /// under a real circuit — that needs either bUnit or manual browser
+    /// verification, neither of which this test suite has today.
     /// </summary>
     [Fact]
     public async Task GetGame_AnonymousRequest_NeverCrashes()
