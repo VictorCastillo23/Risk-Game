@@ -127,6 +127,75 @@ public class GameSessionServiceSaveResumeIntegrationTests
         GameStateAssertions.AssertStructurallyEqual(stateBeforeSave, session.State!);
     }
 
+    /// <summary>
+    /// Task 6.6: exercises the FULL anonymous-save-then-login flow
+    /// (design D2) end-to-end at the level just below the actual
+    /// <c>ProtectedSessionStorage</c> call (see <see cref="PendingSave"/>'s
+    /// own doc comment for why that boundary needs a browser/JS interop and
+    /// can't be driven from here): anonymous session plays a bit and takes a
+    /// <see cref="GameSessionService.Snapshot"/>, that snapshot is wrapped
+    /// into a <see cref="PendingSave"/> and round-tripped through
+    /// <see cref="System.Text.Json.JsonSerializer"/> using PLAIN default
+    /// options (simulating exactly what <c>ProtectedSessionStorage</c> does
+    /// to the stashed value — see <see cref="PendingSaveTests"/> for the
+    /// dedicated regression guard on that specific shape), then a brand-new
+    /// signed-in <see cref="GameSessionService"/> instance (simulating the
+    /// fresh, authenticated circuit the login-redirect lands on) calls
+    /// <see cref="GameSessionService.RehydrateAndSaveAsync"/> — the same
+    /// composition <c>Game.razor</c>'s <c>OnAfterRenderAsync</c> calls.
+    /// </summary>
+    [Fact]
+    public async Task AnonymousSaveThenLoginRedirectFlow_RehydratesAndPersistsTheSameGame()
+    {
+        var store = new FakeGameStore();
+        var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
+        var anonymousSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.Anonymous());
+
+        var rows = new List<PlayerSetupRow>
+        {
+            new("Ana", "#E53935", false),
+            new("Beto", "#1E88E5", false)
+        };
+        anonymousSession.Start(rows, GameMode.TwoPlayer);
+        while (anonymousSession.State!.Turn.Phase == TurnPhase.Setup)
+        {
+            PlaceOneStartingTroop(anonymousSession);
+        }
+
+        var stateBeforeStash = anonymousSession.State!;
+
+        // "Guardar partida" clicked while anonymous (SavePanel's anonymous
+        // branch): stash into what would be ProtectedSessionStorage. Using
+        // JsonSerializer directly with NO custom options here is the whole
+        // point — that's exactly what ProtectedSessionStorage does, and is
+        // precisely the constraint PendingSave exists to satisfy.
+        var stashedJson = System.Text.Json.JsonSerializer.Serialize(PendingSave.From(anonymousSession.Snapshot()));
+
+        // forceLoad navigation to /Account/Login tears down anonymousSession's
+        // circuit entirely — nothing from it survives except stashedJson.
+
+        // Login succeeds, browser redirects back to /game with a brand-new,
+        // authenticated circuit/GameSessionService instance.
+        var retrieved = System.Text.Json.JsonSerializer.Deserialize<PendingSave>(stashedJson);
+        Assert.NotNull(retrieved);
+
+        var authenticatedSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var outcome = await authenticatedSession.RehydrateAndSaveAsync(retrieved!.ToSnapshot());
+
+        Assert.Equal(SaveOutcome.Created, outcome);
+        Assert.True(authenticatedSession.IsStarted);
+        Assert.Equal(UserId, authenticatedSession.OwnerUserId);
+        GameStateAssertions.AssertStructurallyEqual(stateBeforeStash, authenticatedSession.State!);
+
+        // The save actually landed in the store too, not just this
+        // session's in-memory State — a second, independent session can
+        // resume it.
+        var resumerSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var resumed = await resumerSession.ResumeAsync();
+        Assert.Equal(ResumeOutcome.Resumed, resumed);
+        GameStateAssertions.AssertStructurallyEqual(stateBeforeStash, resumerSession.State!);
+    }
+
     private static void PlaceOneStartingTroop(GameSessionService session)
     {
         var state = session.State!;

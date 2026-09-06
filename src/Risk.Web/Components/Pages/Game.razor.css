@@ -25,3 +25,19 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* PR6 fix pass (warning): Blazor's per-component CSS isolation means
+   RejectionMessage.razor.css's .game-error rule doesn't apply here — this
+   class is used directly in Game.razor's own markup (the post-login
+   save-outcome banner), not inside <RejectionMessage>, so it needs its own
+   scoped rule. Mirrors SavePanel.razor.css's .save-panel-error styling for
+   visual consistency across the app's error banners. */
+.game-error {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    font-weight: 600;
+    margin: 0.6rem 0 0;
+}
