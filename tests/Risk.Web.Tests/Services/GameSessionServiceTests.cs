@@ -2,12 +2,14 @@ using Risk.Domain.Errors;
 using Risk.Domain.Map;
 using Risk.Domain.Missions;
 using Risk.Domain.Players;
+using Risk.Engine;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
 using Risk.Engine.Results;
 using Risk.Engine.State;
 using Risk.Engine.Views;
 using Risk.Web.Models;
+using Risk.Web.Persistence;
 using Risk.Web.Services;
 using Risk.Web.Tests.Fakes;
 
@@ -15,6 +17,17 @@ namespace Risk.Web.Tests.Services;
 
 public class GameSessionServiceTests
 {
+    /// <summary>
+    /// Every test here exercises <see cref="GameSessionService"/>'s
+    /// engine/dice wiring, not persistence — an anonymous
+    /// <see cref="StubAuthenticationStateProvider"/> plus an unused
+    /// <see cref="FakeGameStore"/> keep the constructor satisfied without
+    /// adding persistence assertions to tests that aren't about it (those
+    /// live in <see cref="GameSessionServicePersistenceTests"/>).
+    /// </summary>
+    private static GameSessionService NewSession(IGameEngine engine, Risk.Domain.Dice.IDiceRoller dice) =>
+        new(engine, dice, new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+
     private static readonly IReadOnlyList<PlayerSetupRow> TwoValidRows =
     [
         new PlayerSetupRow("Ana", "#FF0000", false),
@@ -24,7 +37,7 @@ public class GameSessionServiceTests
     [Fact]
     public void Start_WithValidRows_SetsStateAndPlayersAndRaisesChanged()
     {
-        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
         var raised = false;
         session.Changed += () => raised = true;
 
@@ -43,7 +56,7 @@ public class GameSessionServiceTests
     {
         // Rejected before dice is ever touched (1 player is illegal for the
         // default Classic mode), so an empty roller is safe here.
-        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
+        var session = NewSession(new FakeGameEngine(), new QueuedDiceRoller());
         var raised = false;
         session.Changed += () => raised = true;
 
@@ -59,7 +72,7 @@ public class GameSessionServiceTests
     public void Execute_Ok_MutatesStateAndRaisesChanged()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(2));
+        var session = NewSession(engine, QueuedDiceRoller.ForRollOff(2));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         var stateAfterStart = session.State!;
         var newState = stateAfterStart with { TradesCompleted = 1 };
@@ -80,7 +93,7 @@ public class GameSessionServiceTests
     public void Execute_Rejected_LeavesStateUnchangedAndDoesNotRaiseChanged()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(2));
+        var session = NewSession(engine, QueuedDiceRoller.ForRollOff(2));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         var stateAfterStart = session.State!;
         engine.ExecuteResult = new CommandResult<GameState, GameEvent>.Rejected(
@@ -98,7 +111,7 @@ public class GameSessionServiceTests
     [Fact]
     public void Reset_ClearsState()
     {
-        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
 
         session.Reset();
@@ -121,7 +134,7 @@ public class GameSessionServiceTests
                 PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
                 false))
             .ToArray();
-        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(playerCount));
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(playerCount));
 
         var result = session.Start(rows, mode);
 
@@ -143,7 +156,7 @@ public class GameSessionServiceTests
                 PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
                 false))
             .ToArray();
-        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(3));
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(3));
 
         var result = session.Start(rows, GameMode.Classic);
 
@@ -154,7 +167,7 @@ public class GameSessionServiceTests
     [Fact]
     public void Start_WithTwoPlayerMode_SynthesizesNeutralPlayerConfig()
     {
-        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
 
         var result = session.Start(TwoValidRows, GameMode.TwoPlayer);
 
@@ -175,7 +188,7 @@ public class GameSessionServiceTests
                 PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
                 false))
             .ToArray();
-        var session = new GameSessionService(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(3));
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(3));
 
         var result = session.Start(rows, GameMode.Classic);
 
@@ -195,7 +208,7 @@ public class GameSessionServiceTests
             .ToArray();
         // Rejected before dice is ever touched (6 players is illegal for
         // Classic), so an empty roller is safe here.
-        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
+        var session = NewSession(new FakeGameEngine(), new QueuedDiceRoller());
 
         var result = session.Start(rows, GameMode.Classic);
 
@@ -216,7 +229,7 @@ public class GameSessionServiceTests
                 false))
             .ToArray();
         // SecretMissionSetup never rolls dice (only Classic's TurnOrder.DetermineFirst does).
-        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
+        var session = NewSession(new FakeGameEngine(), new QueuedDiceRoller());
 
         var result = session.Start(rows, GameMode.SecretMission);
 
@@ -238,7 +251,7 @@ public class GameSessionServiceTests
                 PlayerPalette.Swatches[i % PlayerPalette.Swatches.Count],
                 false))
             .ToArray();
-        var session = new GameSessionService(new FakeGameEngine(), new QueuedDiceRoller());
+        var session = NewSession(new FakeGameEngine(), new QueuedDiceRoller());
 
         var result = session.Start(rows, GameMode.SecretMission);
 
@@ -276,7 +289,7 @@ public class GameSessionServiceTests
     public void WinnerMission_ReturnsNull_WhileInProgress()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine, new QueuedDiceRoller());
+        var session = NewSession(engine, new QueuedDiceRoller());
         session.Start(ThreeValidRows, GameMode.SecretMission);
 
         var result = session.WinnerMission();
@@ -292,7 +305,7 @@ public class GameSessionServiceTests
     public void WinnerMission_ReturnsWinnersEffectiveMission_OnceWon()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine, new QueuedDiceRoller());
+        var session = NewSession(engine, new QueuedDiceRoller());
         session.Start(ThreeValidRows, GameMode.SecretMission);
         var winner = session.State!.Turn.CurrentPlayer;
         var wonState = session.State! with { Status = new GameStatus.Won(winner) };
@@ -316,7 +329,7 @@ public class GameSessionServiceTests
     public void WinnerMission_ReturnsNull_AfterReset()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine, new QueuedDiceRoller());
+        var session = NewSession(engine, new QueuedDiceRoller());
         session.Start(ThreeValidRows, GameMode.SecretMission);
         var winner = session.State!.Turn.CurrentPlayer;
         var wonState = session.State! with { Status = new GameStatus.Won(winner) };
@@ -334,7 +347,7 @@ public class GameSessionServiceTests
     public void WinnerMission_ReturnsNull_InWonClassicGame()
     {
         var engine = new FakeGameEngine();
-        var session = new GameSessionService(engine, QueuedDiceRoller.ForRollOff(3));
+        var session = NewSession(engine, QueuedDiceRoller.ForRollOff(3));
         session.Start(ThreeValidRows, GameMode.Classic);
         var winner = session.State!.Turn.CurrentPlayer;
         var wonState = session.State! with { Status = new GameStatus.Won(winner) };
