@@ -1,5 +1,23 @@
 ﻿@inherits LayoutComponentBase
 
+<AuthorizeView>
+    <Authorized>
+        <div class="main-layout-account-bar">
+            <span>@context.User.Identity?.Name</span>
+            <form method="post" action="/Account/Logout">
+                <AntiforgeryToken />
+                <button type="submit">Cerrar sesión</button>
+            </form>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="main-layout-account-bar">
+            <a href="/Account/Login">Iniciar sesión</a>
+            <a href="/Account/Register">Crear cuenta</a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
 @Body
 
 <div id="blazor-error-ui">

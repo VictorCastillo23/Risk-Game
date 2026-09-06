@@ -9,6 +9,9 @@ using Risk.Web.Models;
 using Risk.Web.Services;
 using Risk.Web.Tests.Fakes;
 
+// Persistence constructor args are irrelevant to this Setup-phase parity
+// test — a fake store and an anonymous stub keep the constructor satisfied.
+
 namespace Risk.Web.Tests.Services;
 
 /// <summary>
@@ -29,7 +32,7 @@ public class TwoPlayerSetupPhaseParityTests
     public void PlaceNeutralTroopsCommand_IsAcceptedIfAndOnlyIf_IsPhaseB_AtEverySetupStep()
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller());
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
         var rows = new List<PlayerSetupRow>
         {
             new("Ana", "#E53935", false),

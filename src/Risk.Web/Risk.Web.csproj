@@ -4,11 +4,26 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The Blazor Web App template only compiles .razor Components by
+         default; Login/Register/Logout (design D1) are classic Razor Pages
+         (.cshtml/.cshtml.cs) living outside the Blazor router, which needs
+         this switch to enable the MVC/Razor Pages view-compilation pipeline
+         (tag helpers, PageModel binding, etc.) alongside it. -->
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Risk.Domain\Risk.Domain.csproj" />
     <ProjectReference Include="..\Risk.Engine\Risk.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.11" />
   </ItemGroup>
 
 </Project>
