@@ -12,7 +12,10 @@
 
 <PageTitle>Risk — Configurar partida</PageTitle>
 
-<h1>Configurar partida</h1>
+<div class="setup-header">
+    <h1>Configurar partida</h1>
+    <button type="button" @onclick="@(() => Navigation.NavigateTo("/saved"))">Ver partida guardada</button>
+</div>
 
 <div class="setup-game-mode">
     <label for="game-mode">Modo de juego</label>
