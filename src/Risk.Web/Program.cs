@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -138,8 +139,34 @@ builder.Services.AddOptions<RateLimiterOptions>()
         {
             context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             context.HttpContext.Response.ContentType = "text/plain";
-            await context.HttpContext.Response.WriteAsync(
-                "Too many requests. Please try again later.", cancellationToken);
+
+            // Fix pass (CRITICAL): surface the fixed-window limiter's own
+            // retry-after metadata rather than leaving the client to guess.
+            // Full themed-error-page integration into Login/Register's
+            // ModelState-driven UI is a larger change than this fix pass
+            // covers — the header plus a message that states the actual
+            // wait is the target bar here.
+            string message;
+            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            {
+                var retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+                context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                message = $"Too many requests. Please try again in about {retryAfterSeconds} seconds.";
+            }
+            else
+            {
+                message = "Too many requests. Please try again later.";
+            }
+
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Risk.Web.RateLimiting");
+            logger.LogWarning(
+                "Rate limit exceeded for {Path} from {PartitionKey}.",
+                context.HttpContext.Request.Path,
+                context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+
+            await context.HttpContext.Response.WriteAsync(message, cancellationToken);
         };
 
         rateLimiterOptions.AddPolicy(RateLimitPolicies.AuthEndpoints, httpContext =>

@@ -91,6 +91,26 @@ public sealed class RateLimitingTests
     }
 
     [Fact]
+    public async Task Post_Register_Exceeding_ReturnsRetryAfterHeaderAndClearMessage()
+    {
+        using var factory = new RateLimitingTestFixture(PermitLimit);
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        for (var i = 0; i < PermitLimit; i++)
+        {
+            await PostRegisterAsync(client, $"user{i}-{Guid.NewGuid():N}@example.com");
+        }
+
+        var limited = await PostRegisterAsync(client, $"over-{Guid.NewGuid():N}@example.com");
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.True(limited.Headers.RetryAfter is not null, "429 response is missing a Retry-After header.");
+
+        var body = await limited.Content.ReadAsStringAsync();
+        Assert.Contains("seconds", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Get_Register_IsNeverRateLimited()
     {
         using var factory = new RateLimitingTestFixture(PermitLimit);
