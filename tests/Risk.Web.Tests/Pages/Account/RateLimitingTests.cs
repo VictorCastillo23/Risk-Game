@@ -58,6 +58,39 @@ public sealed class RateLimitingTests
     }
 
     [Fact]
+    public async Task Post_Register_DifferentForwardedForClients_AreRateLimitedIndependently()
+    {
+        // Validates the Fix 1 forwarded-headers fix: WebApplicationFactory's
+        // in-process TestServer does not populate Connection.RemoteIpAddress
+        // by default, so without a trusted ForwardedHeadersMiddleware
+        // rewriting it from X-Forwarded-For, every request here would fall
+        // back to the same "unknown" partition key regardless of which
+        // simulated client sent it — exactly the site-wide-lockout failure
+        // mode Fix 1 addresses. This test sends two distinct
+        // X-Forwarded-For values (simulating two real clients behind Azure's
+        // edge) and asserts they get independent quotas.
+        using var factory = new RateLimitingTestFixture(PermitLimit);
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        const string clientAIp = "203.0.113.1";
+        const string clientBIp = "203.0.113.2";
+
+        for (var i = 0; i < PermitLimit; i++)
+        {
+            var response = await PostRegisterAsync(client, $"a{i}-{Guid.NewGuid():N}@example.com", clientAIp);
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, response.StatusCode);
+        }
+
+        var clientARejected = await PostRegisterAsync(client, $"a-over-{Guid.NewGuid():N}@example.com", clientAIp);
+        Assert.Equal(HttpStatusCode.TooManyRequests, clientARejected.StatusCode);
+
+        // Client B has never sent a request before — if it shared client A's
+        // partition (the pre-fix bug), this would also be 429.
+        var clientBResponse = await PostRegisterAsync(client, $"b-{Guid.NewGuid():N}@example.com", clientBIp);
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, clientBResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Get_Register_IsNeverRateLimited()
     {
         using var factory = new RateLimitingTestFixture(PermitLimit);
@@ -83,17 +116,28 @@ public sealed class RateLimitingTests
         }
     }
 
-    private static async Task<HttpResponseMessage> PostRegisterAsync(HttpClient client, string email)
+    private static async Task<HttpResponseMessage> PostRegisterAsync(
+        HttpClient client, string email, string? forwardedFor = null)
     {
         var token = await AntiForgeryTestHelper.GetTokenAsync(client, "/Account/Register");
 
-        return await client.PostAsync("/Account/Register", new FormUrlEncodedContent(new Dictionary<string, string>
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/Account/Register")
         {
-            ["Input.Email"] = email,
-            ["Input.Password"] = "Str0ngPassw0rd!",
-            ["Input.ConfirmPassword"] = "Str0ngPassw0rd!",
-            ["__RequestVerificationToken"] = token,
-        }));
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["Input.Email"] = email,
+                ["Input.Password"] = "Str0ngPassw0rd!",
+                ["Input.ConfirmPassword"] = "Str0ngPassw0rd!",
+                ["__RequestVerificationToken"] = token,
+            }),
+        };
+
+        if (forwardedFor is not null)
+        {
+            request.Headers.Add("X-Forwarded-For", forwardedFor);
+        }
+
+        return await client.SendAsync(request);
     }
 
     private static async Task<HttpResponseMessage> PostLoginAsync(HttpClient client, string email)

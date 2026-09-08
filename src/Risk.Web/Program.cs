@@ -91,6 +91,25 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
+
+    // Fix pass (BLOCKER): ForwardedHeadersOptions' *default* KnownNetworks/
+    // KnownProxies only trust loopback, which is never the immediate peer in
+    // front of Kestrel on Azure App Service (Azure's own edge is). Left at
+    // the default, the middleware silently refuses to trust X-Forwarded-For,
+    // so Connection.RemoteIpAddress never gets rewritten from the real
+    // client IP — collapsing the rate limiter's per-IP partitioning above
+    // into a single shared bucket for the whole site. Clearing both lists is
+    // Microsoft's own documented pattern specifically for Azure App Service:
+    // https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer
+    // App Service's network isolates this app so only Azure's trusted
+    // front-end can reach it directly, which makes "trust the immediate
+    // peer's forwarded headers unconditionally" safe *in this specific
+    // hosting model*. This would NOT be safe for an app directly exposed to
+    // arbitrary internet traffic (e.g. self-hosted behind no proxy, or
+    // behind an untrusted/public proxy) — do not copy this pattern there
+    // without a real KnownProxies/KnownNetworks allowlist.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // Hardening (auth-endpoints-rate-limiting): per-IP fixed-window rate limit
