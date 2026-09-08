@@ -1,20 +1,15 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Risk.Web.Data;
 
 namespace Risk.Web.Tests.Pages.Account;
 
 /// <summary>
-/// Same Sqlite-backed host as <see cref="AccountPagesTestFixture"/>, but each
+/// Same Sqlite-backed host as <see cref="AccountPagesTestFixture"/> (inherits
+/// its connection lifecycle and DbContext-swap logic verbatim), but each
 /// test creates and disposes its own instance (rather than sharing one via
 /// <c>IClassFixture</c>) so every test gets a fresh, empty rate-limiter
 /// partition table — no cross-test interference from shared state. The
@@ -23,58 +18,36 @@ namespace Risk.Web.Tests.Pages.Account;
 /// test can cross it with a handful of fast, real HTTP requests and never
 /// needs to sleep for a window to elapse.
 /// </summary>
-public sealed class RateLimitingTestFixture : WebApplicationFactory<Program>
+public sealed class RateLimitingTestFixture : AccountPagesTestFixture
 {
-    private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly int _permitLimit;
 
     public RateLimitingTestFixture(int permitLimit)
     {
         _permitLimit = permitLimit;
-        _connection.Open();
     }
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    protected override IDictionary<string, string?> GetConfigOverrides() => new Dictionary<string, string?>
     {
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["RateLimiting:AuthEndpoints:PermitLimit"] = _permitLimit.ToString(),
-                ["RateLimiting:AuthEndpoints:WindowSeconds"] = "60",
-            });
-        });
+        ["RateLimiting:AuthEndpoints:PermitLimit"] = _permitLimit.ToString(),
+        ["RateLimiting:AuthEndpoints:WindowSeconds"] = "60",
+    };
 
-        builder.ConfigureServices(services =>
-        {
-            var descriptor = services.SingleOrDefault(
-                d => d.ServiceType == typeof(DbContextOptions<RiskDbContext>));
-            if (descriptor is not null)
-            {
-                services.Remove(descriptor);
-            }
-
-            services.AddDbContext<RiskDbContext>(options => options.UseSqlite(_connection));
-
-            using var provider = services.BuildServiceProvider();
-            using var scope = provider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<RiskDbContext>();
-            db.Database.EnsureCreated();
-
-            // WebApplicationFactory's in-process TestServer transport leaves
-            // Connection.RemoteIpAddress null, which is NOT representative
-            // of production (Azure App Service's edge is always a real,
-            // non-loopback peer). An IStartupFilter runs outermost — before
-            // Program.cs's own pipeline, including UseForwardedHeaders — so
-            // this stamps a fake non-loopback "edge" IP onto every request
-            // first, faithfully reproducing the real network topology this
-            // app runs behind. Without this, tests could not tell the
-            // difference between ForwardedHeadersOptions trusting X-Forwarded-For
-            // correctly and defaulting to loopback-only trust (the Fix 1 bug),
-            // because a null RemoteIpAddress does not exercise the same trust
-            // check path as a real one.
-            services.AddTransient<IStartupFilter, SimulateEdgeProxyStartupFilter>();
-        });
+    protected override void ConfigureAdditionalServices(IServiceCollection services)
+    {
+        // WebApplicationFactory's in-process TestServer transport leaves
+        // Connection.RemoteIpAddress null, which is NOT representative
+        // of production (Azure App Service's edge is always a real,
+        // non-loopback peer). An IStartupFilter runs outermost — before
+        // Program.cs's own pipeline, including UseForwardedHeaders — so
+        // this stamps a fake non-loopback "edge" IP onto every request
+        // first, faithfully reproducing the real network topology this
+        // app runs behind. Without this, tests could not tell the
+        // difference between ForwardedHeadersOptions trusting X-Forwarded-For
+        // correctly and defaulting to loopback-only trust (the Fix 1 bug),
+        // because a null RemoteIpAddress does not exercise the same trust
+        // check path as a real one.
+        services.AddTransient<IStartupFilter, SimulateEdgeProxyStartupFilter>();
     }
 
     private sealed class SimulateEdgeProxyStartupFilter : IStartupFilter
@@ -93,14 +66,5 @@ public sealed class RateLimitingTestFixture : WebApplicationFactory<Program>
 
             next(app);
         };
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        if (disposing)
-        {
-            _connection.Dispose();
-        }
     }
 }

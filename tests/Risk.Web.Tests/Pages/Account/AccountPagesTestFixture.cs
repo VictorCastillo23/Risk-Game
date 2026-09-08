@@ -23,8 +23,16 @@ namespace Risk.Web.Tests.Pages.Account;
 /// <c>UserManager</c>/<c>SignInManager</c> behavior end-to-end over actual
 /// HTTP requests (Register/Login/Logout Razor Pages), including antiforgery
 /// and cookie issuance, with no live Azure SQL dependency.
+///
+/// <para>
+/// <see cref="GetConfigOverrides"/> and <see cref="ConfigureAdditionalServices"/>
+/// are the two extension points a subclass overrides to customize the host
+/// (e.g. <see cref="RateLimitingTestFixture"/> tunes the rate-limit
+/// threshold and simulates a real edge proxy) without duplicating the
+/// Sqlite-connection lifecycle or DbContext-swap logic below.
+/// </para>
 /// </summary>
-public sealed class AccountPagesTestFixture : WebApplicationFactory<Program>
+public class AccountPagesTestFixture : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 
@@ -43,14 +51,12 @@ public sealed class AccountPagesTestFixture : WebApplicationFactory<Program>
         // 6). These tests exercise Register/Login/Logout business logic,
         // not the limiter itself (see RateLimitingTests for that, with its
         // own isolated fixture per test and a small deterministic
-        // PermitLimit), so the limit is raised generously here to avoid
-        // false-positive 429s on otherwise-passing test traffic.
+        // PermitLimit), so the default override below raises the limit
+        // generously to avoid false-positive 429s on otherwise-passing test
+        // traffic.
         builder.ConfigureAppConfiguration((_, config) =>
         {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["RateLimiting:AuthEndpoints:PermitLimit"] = "1000",
-            });
+            config.AddInMemoryCollection(GetConfigOverrides());
         });
 
         builder.ConfigureServices(services =>
@@ -68,7 +74,29 @@ public sealed class AccountPagesTestFixture : WebApplicationFactory<Program>
             using var scope = provider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<RiskDbContext>();
             db.Database.EnsureCreated();
+
+            ConfigureAdditionalServices(services);
         });
+    }
+
+    /// <summary>
+    /// Configuration overrides applied via <c>ConfigureAppConfiguration</c>.
+    /// Defaults to a generously high rate-limit <c>PermitLimit</c> (see the
+    /// <c>ConfigureWebHost</c> comment above) — override to tune it for a
+    /// specific test scenario.
+    /// </summary>
+    protected virtual IDictionary<string, string?> GetConfigOverrides() => new Dictionary<string, string?>
+    {
+        ["RateLimiting:AuthEndpoints:PermitLimit"] = "1000",
+    };
+
+    /// <summary>
+    /// Hook for a subclass to register additional test-only services beyond
+    /// the shared Sqlite <see cref="RiskDbContext"/> swap above. No-op by
+    /// default.
+    /// </summary>
+    protected virtual void ConfigureAdditionalServices(IServiceCollection services)
+    {
     }
 
     protected override void Dispose(bool disposing)
