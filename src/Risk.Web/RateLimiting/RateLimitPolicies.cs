@@ -3,8 +3,9 @@ namespace Risk.Web.RateLimiting;
 /// <summary>
 /// Named rate-limiting policies registered against
 /// <c>RateLimiterOptions</c> in <c>Program.cs</c> and referenced via
-/// <c>[EnableRateLimiting]</c> on the specific Razor Page handler methods
-/// that should be throttled.
+/// <c>[EnableRateLimiting]</c> on the Razor Page *classes* that should be
+/// throttled — never on a handler method (e.g. <c>OnPostAsync</c>); see the
+/// remarks on <see cref="AuthEndpoints"/> for why.
 /// </summary>
 public static class RateLimitPolicies
 {

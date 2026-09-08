@@ -116,16 +116,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // Hardening (auth-endpoints-rate-limiting): per-IP fixed-window rate limit
 // applied to /Account/Register and /Account/Login. See
 // RateLimitPolicies.AuthEndpoints for why this is wired at the page-class
-// level and why the policy body itself branches on HTTP method. This is a
-// distinct layer from IdentityOptions.Lockout above: lockout only protects
-// one *existing* account from repeated wrong-password guesses; this stops a
-// single client from spamming brand-new registrations or login attempts
-// across many different emails, which would otherwise keep the serverless
-// Azure SQL Database billing (it only auto-pauses after 15 minutes idle).
-// Partitioned by Connection.RemoteIpAddress, which UseForwardedHeaders
-// (below, run before UseRateLimiter) already rewrites to the real client IP
-// behind Azure App Service's edge proxy — so this keys off the actual
-// client, not Azure's own front-end IP.
+// level and why the policy body itself branches on HTTP method, and
+// AuthRateLimitOptions for the canonical business rationale (why this is a
+// distinct layer from IdentityOptions.Lockout above). Partitioned by
+// Connection.RemoteIpAddress, which UseForwardedHeaders (below, run before
+// UseRateLimiter) rewrites to the real client IP behind Azure App Service's
+// edge proxy — so this keys off the actual client, not Azure's own
+// front-end IP.
 builder.Services.Configure<AuthRateLimitOptions>(
     builder.Configuration.GetSection(AuthRateLimitOptions.SectionName));
 

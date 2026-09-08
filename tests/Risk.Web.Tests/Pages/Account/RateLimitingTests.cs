@@ -6,18 +6,14 @@ using Microsoft.AspNetCore.Mvc.Testing;
 namespace Risk.Web.Tests.Pages.Account;
 
 /// <summary>
-/// Cost-driven hardening: the Azure SQL Database backing this app is
-/// serverless and bills per vCore-hour while active, auto-pausing only after
-/// 15 minutes idle. Unlimited POSTs to <c>/Account/Register</c> or
-/// <c>/Account/Login</c> from a single client can keep it awake indefinitely
-/// even without a real credential-stuffing attempt (Identity's own
-/// lockout policy protects one *existing* account from repeated password
-/// guesses, but does nothing to stop many new registrations or logins with
-/// different emails). These tests exercise the actual
-/// <c>Microsoft.AspNetCore.RateLimiting</c> policy end-to-end, using a small
-/// deterministic <c>PermitLimit</c> (via <see cref="RateLimitingTestFixture"/>)
-/// so the threshold is crossed with a handful of fast requests inside one
-/// fixed window — no real sleeping required.
+/// End-to-end tests for the <c>Microsoft.AspNetCore.RateLimiting</c> policy
+/// applied to <c>/Account/Register</c> and <c>/Account/Login</c> — see
+/// <see cref="Risk.Web.RateLimiting.AuthRateLimitOptions"/> for the
+/// canonical business rationale (why this exists as a layer distinct from
+/// Identity's account lockout). Uses a small deterministic
+/// <c>PermitLimit</c> (via <see cref="RateLimitingTestFixture"/>) so the
+/// threshold is crossed with a handful of fast requests inside one fixed
+/// window — no real sleeping required.
 /// </summary>
 public sealed class RateLimitingTests
 {
