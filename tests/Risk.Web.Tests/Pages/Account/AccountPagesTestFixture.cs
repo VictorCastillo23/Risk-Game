@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Risk.Web.Data;
 
@@ -33,6 +35,24 @@ public sealed class AccountPagesTestFixture : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Hardening (auth-endpoints-rate-limiting): this fixture is shared
+        // per test *class* (IClassFixture), so its rate-limiter state
+        // persists across every test method in that class — some classes
+        // legitimately fire more sequential POSTs than the production
+        // default in one run (e.g. LoginPageTests' lockout test alone sends
+        // 6). These tests exercise Register/Login/Logout business logic,
+        // not the limiter itself (see RateLimitingTests for that, with its
+        // own isolated fixture per test and a small deterministic
+        // PermitLimit), so the limit is raised generously here to avoid
+        // false-positive 429s on otherwise-passing test traffic.
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RateLimiting:AuthEndpoints:PermitLimit"] = "1000",
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             var descriptor = services.SingleOrDefault(

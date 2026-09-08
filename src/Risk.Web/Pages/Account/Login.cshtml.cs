@@ -2,7 +2,9 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.RateLimiting;
 using Risk.Web.Data;
+using Risk.Web.RateLimiting;
 
 namespace Risk.Web.Pages.Account;
 
@@ -14,6 +16,12 @@ namespace Risk.Web.Pages.Account;
 /// avoid an open-redirect vulnerability, defaulting to <c>/</c> when absent
 /// or non-local.
 /// </summary>
+/// <remarks>
+/// Hardening (auth-endpoints-rate-limiting): see
+/// <see cref="RateLimitPolicies.AuthEndpoints"/> for why this attribute
+/// sits on the page class rather than on <see cref="OnPostAsync"/>.
+/// </remarks>
+[EnableRateLimiting(RateLimitPolicies.AuthEndpoints)]
 public sealed class LoginModel(SignInManager<ApplicationUser> signInManager) : PageModel
 {
     [BindProperty]

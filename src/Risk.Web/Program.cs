@@ -1,11 +1,15 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Risk.Domain.Dice;
 using Risk.Engine;
 using Risk.Web.Components;
 using Risk.Web.Data;
 using Risk.Web.Persistence;
+using Risk.Web.RateLimiting;
 using Risk.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -89,6 +93,55 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
 });
 
+// Hardening (auth-endpoints-rate-limiting): per-IP fixed-window rate limit
+// applied to /Account/Register and /Account/Login. See
+// RateLimitPolicies.AuthEndpoints for why this is wired at the page-class
+// level and why the policy body itself branches on HTTP method. This is a
+// distinct layer from IdentityOptions.Lockout above: lockout only protects
+// one *existing* account from repeated wrong-password guesses; this stops a
+// single client from spamming brand-new registrations or login attempts
+// across many different emails, which would otherwise keep the serverless
+// Azure SQL Database billing (it only auto-pauses after 15 minutes idle).
+// Partitioned by Connection.RemoteIpAddress, which UseForwardedHeaders
+// (below, run before UseRateLimiter) already rewrites to the real client IP
+// behind Azure App Service's edge proxy — so this keys off the actual
+// client, not Azure's own front-end IP.
+builder.Services.Configure<AuthRateLimitOptions>(
+    builder.Configuration.GetSection(AuthRateLimitOptions.SectionName));
+
+builder.Services.AddRateLimiter(_ => { });
+builder.Services.AddOptions<RateLimiterOptions>()
+    .Configure<IOptions<AuthRateLimitOptions>>((rateLimiterOptions, authOptions) =>
+    {
+        var settings = authOptions.Value;
+
+        rateLimiterOptions.OnRejected = async (context, cancellationToken) =>
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.HttpContext.Response.ContentType = "text/plain";
+            await context.HttpContext.Response.WriteAsync(
+                "Too many requests. Please try again later.", cancellationToken);
+        };
+
+        rateLimiterOptions.AddPolicy(RateLimitPolicies.AuthEndpoints, httpContext =>
+        {
+            if (!HttpMethods.IsPost(httpContext.Request.Method))
+            {
+                return RateLimitPartition.GetNoLimiter("non-post-auth-request");
+            }
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = settings.PermitLimit,
+                    Window = TimeSpan.FromSeconds(settings.WindowSeconds),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
+        });
+    });
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -105,6 +158,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
