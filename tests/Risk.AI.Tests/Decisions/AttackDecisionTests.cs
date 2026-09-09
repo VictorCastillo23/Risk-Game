@@ -134,4 +134,40 @@ public class AttackDecisionTests
         var attackWith = Assert.IsType<AttackCommand>(withNeutralIdentified);
         Assert.Equal(new TerritoryId("Alberta"), attackWith.To);
     }
+
+    [Fact]
+    public void Decide_attacks_using_a_genuinely_favorable_candidate_even_when_a_higher_scoring_candidate_fails_its_own_gate()
+    {
+        // Candidate A (GreatBritain): self owns 6 of Europe's 7 members, so attacking the
+        // 7th (GreatBritain) carries a huge ContinentPressure bonus that dominates TotalScore
+        // - but the attack itself is militarily bad (1 die vs 2 dice) and raw superiority
+        // fails too (fromTroops-1=1 < toTroops=2), so Candidate A does NOT pass its own
+        // accept gate.
+        //
+        // Candidate B (Kamchatka): no continent bonus at all, but overwhelming combat odds
+        // (3 dice vs 1 die) give it a genuinely positive EV, so it DOES pass the gate on its
+        // own merits - even though its TotalScore is far lower than Candidate A's.
+        //
+        // Selection must pick a candidate that passes ITS OWN gate (Candidate B), never bail
+        // to EndPhaseCommand just because a differently-ranked, non-passing candidate (A)
+        // topped the TotalScore ranking.
+        var view = PlayerViewBuilder.For(Self)
+            .Owns(Self, 2, "Iceland")
+            .Owns(Self, 3, "Scandinavia")
+            .Owns(Self, 3, "NorthernEurope")
+            .Owns(Self, 3, "WesternEurope")
+            .Owns(Self, 3, "SouthernEurope")
+            .Owns(Self, 3, "Ukraine")
+            .Owns(Enemy, 2, "GreatBritain")
+            .Owns(Self, 6, "Alaska")
+            .Owns(Enemy, 1, "Kamchatka")
+            .Phase(TurnPhase.Attack)
+            .Build();
+
+        var command = AttackDecision.Decide(view, Self, BotMemory.Empty);
+
+        var attack = Assert.IsType<AttackCommand>(command);
+        Assert.Equal(new TerritoryId("Alaska"), attack.From);
+        Assert.Equal(new TerritoryId("Kamchatka"), attack.To);
+    }
 }

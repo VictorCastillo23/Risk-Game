@@ -20,31 +20,45 @@ internal static class AttackDecision
     public static GameCommand Decide(PlayerView view, PlayerId self, BotMemory memory)
     {
         var neutral = memory.FindTwoPlayerNeutral(view, self);
-        var candidates = BuildCandidates(view, self, neutral).ToList();
+        var candidates = BuildCandidates(view, self, neutral);
 
-        if (candidates.Count == 0)
+        // Selection and the accept/reject gate MUST use the same candidate set: filter to
+        // only the candidates that would individually pass the gate FIRST, then rank by
+        // TotalScore among those survivors. Picking the highest-TotalScore candidate
+        // regardless of whether IT passes (and only then gate-checking that one candidate)
+        // would let a high-continent/objective-score but combat-unfavorable candidate
+        // "win" the ranking and then fail the gate, discarding a genuinely favorable attack
+        // elsewhere on the board and forcing an unwarranted EndPhaseCommand.
+        var best = candidates
+            .Where(c => PassesAcceptGate(view, c))
+            .OrderByDescending(c => c.TotalScore)
+            .ThenBy(c => TerritoryScoring.IndexOf(c.From))
+            .ThenBy(c => TerritoryScoring.IndexOf(c.To))
+            .Cast<Candidate?>()
+            .FirstOrDefault();
+
+        if (best is not { } candidate)
         {
             return new EndPhaseCommand(self);
         }
 
-        var best = candidates
-            .OrderByDescending(c => c.TotalScore)
-            .ThenBy(c => TerritoryScoring.IndexOf(c.From))
-            .ThenBy(c => TerritoryScoring.IndexOf(c.To))
-            .First();
+        return new AttackCommand(self, candidate.From, candidate.To, candidate.DiceCount);
+    }
 
-        if (best.Ev > 0)
+    /// <summary>
+    /// True when <paramref name="candidate"/> is individually worth attacking: positive
+    /// combat EV, or an objective value clearing <see cref="BotWeights.ObjectiveOverrideThreshold"/>
+    /// with raw troop superiority (<c>fromTroops - 1 &gt;= toTroops</c>) backing it up.
+    /// </summary>
+    private static bool PassesAcceptGate(PlayerView view, Candidate candidate)
+    {
+        if (candidate.Ev > 0)
         {
-            return new AttackCommand(self, best.From, best.To, best.DiceCount);
+            return true;
         }
 
-        var rawSuperiority = view.Territories[best.From].Troops - 1 >= view.Territories[best.To].Troops;
-        if (best.ObjectiveValue > BotWeights.ObjectiveOverrideThreshold && rawSuperiority)
-        {
-            return new AttackCommand(self, best.From, best.To, best.DiceCount);
-        }
-
-        return new EndPhaseCommand(self);
+        var rawSuperiority = view.Territories[candidate.From].Troops - 1 >= view.Territories[candidate.To].Troops;
+        return candidate.ObjectiveValue > BotWeights.ObjectiveOverrideThreshold && rawSuperiority;
     }
 
     private static IEnumerable<Candidate> BuildCandidates(PlayerView view, PlayerId self, PlayerId? neutral)
