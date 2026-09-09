@@ -253,6 +253,85 @@ public class BotMemoryTests
     }
 
     [Fact]
+    public void Empty_has_an_unseeded_reinforce_pool()
+    {
+        Assert.False(BotMemory.Empty.ReinforcePoolSeeded);
+    }
+
+    [Fact]
+    public void Fold_does_not_change_the_seeded_flag_for_a_reinforce_placement()
+    {
+        var memory = BotMemory.Empty with { ReinforcePool = 5, ReinforcePoolSeeded = true };
+        var view = PlayerViewBuilder.For(Self).Phase(TurnPhase.Reinforce).Build();
+        var events = new GameEvent[] { new TroopsPlaced(Self, new TerritoryId("Alaska"), 2) };
+
+        var folded = BotMemory.Fold(memory, Self, view, events);
+
+        Assert.True(folded.ReinforcePoolSeeded);
+    }
+
+    [Fact]
+    public void Fold_resets_the_seeded_flag_to_false_when_the_bots_own_reinforce_phase_ends()
+    {
+        var memory = BotMemory.Empty with { ReinforcePool = 2, ReinforcePoolSeeded = true };
+        var view = PlayerViewBuilder.For(Self).Phase(TurnPhase.Reinforce).Build();
+        var events = new GameEvent[] { new PhaseChanged(TurnPhase.Reinforce, TurnPhase.Attack, Self) };
+
+        var folded = BotMemory.Fold(memory, Self, view, events);
+
+        Assert.False(folded.ReinforcePoolSeeded);
+    }
+
+    [Fact]
+    public void Fold_does_not_reset_the_seeded_flag_when_another_players_reinforce_phase_ends()
+    {
+        var memory = BotMemory.Empty with { ReinforcePool = 2, ReinforcePoolSeeded = true };
+        var view = PlayerViewBuilder.For(Self).Phase(TurnPhase.Reinforce).Build();
+        var events = new GameEvent[] { new PhaseChanged(TurnPhase.Reinforce, TurnPhase.Attack, Other) };
+
+        var folded = BotMemory.Fold(memory, Self, view, events);
+
+        Assert.True(folded.ReinforcePoolSeeded);
+    }
+
+    [Fact]
+    public void FindTwoPlayerNeutral_returns_the_one_party_never_seen_as_current_player()
+    {
+        var neutral = new PlayerId(2);
+        var memory = BotMemory.Empty.WithSeenActor(Self).WithSeenActor(Other);
+        var view = PlayerViewBuilder.For(Self)
+            .OtherHandCount(Other, 3)
+            .OtherHandCount(neutral, 0)
+            .Build();
+
+        Assert.Equal(neutral, memory.FindTwoPlayerNeutral(view, Self));
+    }
+
+    [Fact]
+    public void FindTwoPlayerNeutral_returns_null_when_every_party_has_already_been_seen()
+    {
+        var memory = BotMemory.Empty.WithSeenActor(Self).WithSeenActor(Other);
+        var view = PlayerViewBuilder.For(Self)
+            .OtherHandCount(Other, 3)
+            .Build();
+
+        Assert.Null(memory.FindTwoPlayerNeutral(view, Self));
+    }
+
+    [Fact]
+    public void FindTwoPlayerNeutral_returns_null_when_more_than_one_party_is_unseen()
+    {
+        var thirdParty = new PlayerId(2);
+        var memory = BotMemory.Empty.WithSeenActor(Self);
+        var view = PlayerViewBuilder.For(Self)
+            .OtherHandCount(Other, 3)
+            .OtherHandCount(thirdParty, 0)
+            .Build();
+
+        Assert.Null(memory.FindTwoPlayerNeutral(view, Self));
+    }
+
+    [Fact]
     public void Fold_accumulates_across_a_trade_followed_by_a_placement_in_the_same_reinforce_visit()
     {
         var memory = BotMemory.Empty with { ReinforcePool = 3 };

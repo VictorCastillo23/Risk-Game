@@ -18,11 +18,11 @@ namespace Risk.AI;
 /// that visit; <see langword="null"/> before it starts and reset back to
 /// <see langword="null"/> the instant the bot's own Reinforce phase ends.
 /// The BASE amount (<see cref="Risk.Engine.Rules.Reinforcement.Calculate"/>)
-/// is seeded lazily elsewhere (by the Reinforce decision, not by
+/// is seeded lazily elsewhere (by <c>Decisions.ReinforceDecision</c>, not by
 /// <see cref="Fold"/>) — see the seeding contract note below.
 /// <para>
-/// <b>Seeding contract (binding on whatever code seeds this field, e.g. a
-/// future Reinforce decision):</b> <c>GameEngine</c>'s
+/// <b>Seeding contract (binding on whatever code seeds this field, i.e.
+/// <c>Decisions.ReinforceDecision</c>):</b> <c>GameEngine</c>'s
 /// <c>mandatoryTradeAtTurnStart</c> gate can force a <c>TradeCardsCommand</c>
 /// to be the bot's very FIRST command of a Reinforce visit (whenever the
 /// bot's hand is already 5+ cards at turn start), which can run BEFORE any
@@ -41,8 +41,23 @@ namespace Risk.AI;
 /// value at the first decision point of a visit may be nothing but an
 /// early-banked trade bonus with the base allotment still missing. The base
 /// amount must be ADDED exactly once per visit, not skipped whenever the
-/// pool happens to already be non-null.
+/// pool happens to already be non-null. This is exactly what
+/// <see cref="ReinforcePoolSeeded"/> exists to disambiguate: a non-null pool
+/// alone cannot tell "bonus banked, base still missing" apart from "base
+/// already added, partially spent" — only <see cref="ReinforcePoolSeeded"/> can.
 /// </para>
+/// </param>
+/// <param name="ReinforcePoolSeeded">
+/// Whether the base allotment (<see cref="Risk.Engine.Rules.Reinforcement.Calculate"/>)
+/// has already been added to <see cref="ReinforcePool"/> for the bot's
+/// CURRENT Reinforce visit. Needed because <see cref="ReinforcePool"/> alone
+/// is ambiguous: it can be non-null either because the base was already
+/// seeded (and possibly partially spent), or because only an early-banked
+/// trade bonus landed via <see cref="Fold"/> before the base had a chance to
+/// seed (see the seeding contract above). Reset to <see langword="false"/>
+/// in lockstep with <see cref="ReinforcePool"/> resetting to
+/// <see langword="null"/>, at the same <see cref="PhaseChanged"/>
+/// (Reinforce → Attack, self) boundary.
 /// </param>
 /// <param name="OwnSetupTroopsPlaced">
 /// Cumulative count of troops the bot has placed via <see cref="TroopsPlaced"/>
@@ -57,11 +72,12 @@ namespace Risk.AI;
 /// </param>
 public sealed record BotMemory(
     int? ReinforcePool,
+    bool ReinforcePoolSeeded,
     int OwnSetupTroopsPlaced,
     IReadOnlySet<PlayerId> SeenActors)
 {
     /// <summary>The starting memory for a bot that has observed nothing yet.</summary>
-    public static BotMemory Empty { get; } = new(null, 0, new HashSet<PlayerId>());
+    public static BotMemory Empty { get; } = new(null, false, 0, new HashSet<PlayerId>());
 
     /// <summary>
     /// Returns a memory with <paramref name="actor"/> recorded as seen.
@@ -76,6 +92,25 @@ public sealed record BotMemory(
         }
 
         return this with { SeenActors = new HashSet<PlayerId>(SeenActors) { actor } };
+    }
+
+    /// <summary>
+    /// The TwoPlayer neutral army's <see cref="PlayerId"/>, inferred by
+    /// elimination (design D8): the one party among <paramref name="self"/>
+    /// and every key of <see cref="PlayerView.OtherPlayersCardCounts"/> that
+    /// has never been recorded in <see cref="SeenActors"/> — the neutral army
+    /// never becomes <see cref="TurnState.CurrentPlayer"/>, so it is the only
+    /// party that can never be "seen". Returns <see langword="null"/> unless
+    /// exactly one such party exists (e.g. every party has already been seen,
+    /// as in a 3-player game with no neutral, or more than one party remains
+    /// unseen early in the game before rotation has covered every seat).
+    /// </summary>
+    public PlayerId? FindTwoPlayerNeutral(PlayerView view, PlayerId self)
+    {
+        var parties = new HashSet<PlayerId>(view.OtherPlayersCardCounts.Keys) { self };
+        var unseen = parties.Except(SeenActors).ToList();
+
+        return unseen.Count == 1 ? unseen[0] : null;
     }
 
     /// <summary>
@@ -96,6 +131,7 @@ public sealed record BotMemory(
         IReadOnlyList<GameEvent> events)
     {
         var pool = memory.ReinforcePool;
+        var reinforcePoolSeeded = memory.ReinforcePoolSeeded;
         var ownSetupTroopsPlaced = memory.OwnSetupTroopsPlaced;
         var phase = viewBeforeCommand.Turn.Phase;
 
@@ -123,10 +159,16 @@ public sealed record BotMemory(
 
                 case PhaseChanged(TurnPhase.Reinforce, TurnPhase.Attack, var currentPlayer) when currentPlayer == self:
                     pool = null;
+                    reinforcePoolSeeded = false;
                     break;
             }
         }
 
-        return memory with { ReinforcePool = pool, OwnSetupTroopsPlaced = ownSetupTroopsPlaced };
+        return memory with
+        {
+            ReinforcePool = pool,
+            ReinforcePoolSeeded = reinforcePoolSeeded,
+            OwnSetupTroopsPlaced = ownSetupTroopsPlaced
+        };
     }
 }
