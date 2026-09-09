@@ -30,6 +30,16 @@ public class TerritoryScoringTests
     }
 
     [Fact]
+    public void IndexOf_matches_the_position_in_WorldMap_Territories()
+    {
+        var territories = WorldMap.Territories;
+
+        Assert.Equal(0, TerritoryScoring.IndexOf(territories[0].Id));
+        Assert.Equal(5, TerritoryScoring.IndexOf(territories[5].Id));
+        Assert.Equal(territories.Count - 1, TerritoryScoring.IndexOf(territories[^1].Id));
+    }
+
+    [Fact]
     public void DefenseUrgency_matches_the_closed_form_formula()
     {
         var view = PlayerViewBuilder.For(Self)
