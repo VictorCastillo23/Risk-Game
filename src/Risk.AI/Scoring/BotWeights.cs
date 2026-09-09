@@ -43,6 +43,7 @@ internal static class BotWeights
 
     // Capital scoring.
     public const double EnemyHqCaptureWeight = 3.0;
+    public const double HqDefenseWeight = 3.0;
 
     // BotTurnRunner safety valves (design D5 / Open Questions).
     public const int MaxCommandsPerTurn = 1_000;
