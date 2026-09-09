@@ -25,6 +25,16 @@ internal readonly record struct TerritoryFacts(
 /// </summary>
 internal static class TerritoryScoring
 {
+    private static readonly IReadOnlyDictionary<TerritoryId, int> TerritoryIndexById =
+        WorldMap.Territories.Select((t, index) => (t.Id, index)).ToDictionary(x => x.Id, x => x.index);
+
+    /// <summary>
+    /// The territory's position in <see cref="WorldMap.Territories"/> — the
+    /// total, mode-independent tie-break order every decision uses so
+    /// determinism is free (design's Decision Algorithms intro).
+    /// </summary>
+    public static int IndexOf(TerritoryId id) => TerritoryIndexById[id];
+
     /// <summary>
     /// Neighbor/threat facts for <paramref name="id"/> as seen by
     /// <paramref name="self"/>. Every neighbor is classified as friendly

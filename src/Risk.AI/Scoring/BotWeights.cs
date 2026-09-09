@@ -21,6 +21,11 @@ internal static class BotWeights
     // Shared across Claim/Setup/Headquarters/Reinforce/Attack scoring.
     public const double ContinentBonusWeight = 1.0;
 
+    // SelectHeadquarters-phase scoring (design: Decision Algorithms / SelectHeadquarters).
+    public const double HeadquartersHostileNeighborPenalty = 3.0;
+    public const double HeadquartersFriendlyNeighborBonus = 2.0;
+    public const double HeadquartersTroopsWeight = 0.5;
+
     // Reinforce-phase placement scoring.
     public const double DefenseUrgencyWeight = 1.0;
     public const double AttackLaunchValue = 0.5;
