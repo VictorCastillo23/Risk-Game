@@ -78,4 +78,30 @@ public class FortifyDecisionTests
         Assert.Equal(new TerritoryId("Alaska"), fortify.To);
         Assert.Equal(5, fortify.Troops);
     }
+
+    [Fact]
+    public void Decide_considers_a_higher_troop_non_safest_source_when_it_yields_a_larger_net_gain()
+    {
+        // Alaska, NorthwestTerritory, and Alberta are all mutually adjacent (one component).
+        // Alaska has the LOWEST urgency (0, no hostile neighbor) but only 2 troops to spare.
+        // NorthwestTerritory has nonzero urgency (it borders the same heavy enemy stack) but
+        // 8 troops to spare - far more than Alaska could ever contribute to Alberta's defense.
+        // The best fortify must come from NorthwestTerritory, not from the "safest" Alaska.
+        var view = PlayerViewBuilder.For(Self)
+            .Owns(Self, 2, "Alaska")
+            .Owns(Self, 8, "NorthwestTerritory")
+            .Owns(Self, 1, "Alberta")
+            .Owns(Enemy, 20, "Ontario") // Threatens both NorthwestTerritory and Alberta.
+            .Build();
+
+        var command = FortifyDecision.Decide(view, Self);
+
+        // urgency(Alberta) = max(0, 20-1) = 19. From NorthwestTerritory: troops =
+        // min(fromTroops-1=7, max(1,19)) = 7; netGain = 19 - max(0,20-(1+7)) = 19-12 = 7.
+        // From Alaska: troops = min(1, 19) = 1; netGain = 19 - max(0,20-(1+1)) = 19-18 = 1.
+        var fortify = Assert.IsType<FortifyCommand>(command);
+        Assert.Equal(new TerritoryId("NorthwestTerritory"), fortify.From);
+        Assert.Equal(new TerritoryId("Alberta"), fortify.To);
+        Assert.Equal(7, fortify.Troops);
+    }
 }

@@ -78,38 +78,43 @@ internal static class FortifyDecision
             : TerritoryScoring.IndexOf(candidate.To) < TerritoryScoring.IndexOf(existing.To);
     }
 
+    /// <summary>
+    /// Every legal <c>(from, to)</c> pair within one connected component: any owned
+    /// territory with at least 2 troops as <paramref name="component"/>'s source, paired
+    /// with each of that source's top
+    /// <see cref="BotWeights.FortifyFrontierCandidateLimit"/> most-urgent OTHER frontier
+    /// territories in the same component. Considers every source rather than only the
+    /// single lowest-urgency one (post-review-reliability fix): a higher-troop source that
+    /// is not the absolute safest can still produce a far larger net gain than the "safest"
+    /// source ever could, if that source has little troop surplus to spare. Risk's map is
+    /// small (42 territories, at most a handful of components), so this stays cheap.
+    /// </summary>
     private static IEnumerable<Candidate> CandidatesWithin(PlayerView view, PlayerId self, IReadOnlySet<TerritoryId> component)
     {
-        var fromCandidates = component.Where(id => view.Territories[id].Troops >= 2).ToList();
-        if (fromCandidates.Count == 0)
+        var fromCandidates = component.Where(id => view.Territories[id].Troops >= BotWeights.MinimumSourceTroopsToAct);
+
+        foreach (var from in fromCandidates)
         {
-            yield break;
-        }
+            var fromTroops = view.Territories[from].Troops;
 
-        var from = fromCandidates
-            .OrderBy(id => TerritoryScoring.DefenseUrgency(TerritoryScoring.Facts(view, self, id)))
-            .ThenBy(TerritoryScoring.IndexOf)
-            .First();
+            var frontierTargets = component
+                .Where(id => !id.Equals(from) && TerritoryScoring.Facts(view, self, id).HostileNeighbors > 0)
+                .OrderByDescending(id => TerritoryScoring.DefenseUrgency(TerritoryScoring.Facts(view, self, id)))
+                .ThenBy(TerritoryScoring.IndexOf)
+                .Take(BotWeights.FortifyFrontierCandidateLimit);
 
-        var frontierTargets = component
-            .Where(id => !id.Equals(from) && TerritoryScoring.Facts(view, self, id).HostileNeighbors > 0)
-            .OrderByDescending(id => TerritoryScoring.DefenseUrgency(TerritoryScoring.Facts(view, self, id)))
-            .ThenBy(TerritoryScoring.IndexOf)
-            .Take(5);
+            foreach (var to in frontierTargets)
+            {
+                var facts = TerritoryScoring.Facts(view, self, to);
+                var urgencyBefore = TerritoryScoring.DefenseUrgency(facts);
+                var troops = Math.Min(fromTroops - 1, Math.Max(1, urgencyBefore));
 
-        var fromTroops = view.Territories[from].Troops;
+                var toTroopsAfter = view.Territories[to].Troops + troops;
+                var urgencyAfter = Math.Max(0, facts.HostileNeighborTroops - toTroopsAfter);
+                var netGain = urgencyBefore - urgencyAfter;
 
-        foreach (var to in frontierTargets)
-        {
-            var facts = TerritoryScoring.Facts(view, self, to);
-            var urgencyBefore = TerritoryScoring.DefenseUrgency(facts);
-            var troops = Math.Min(fromTroops - 1, Math.Max(1, urgencyBefore));
-
-            var toTroopsAfter = view.Territories[to].Troops + troops;
-            var urgencyAfter = Math.Max(0, facts.HostileNeighborTroops - toTroopsAfter);
-            var netGain = urgencyBefore - urgencyAfter;
-
-            yield return new Candidate(from, to, troops, netGain);
+                yield return new Candidate(from, to, troops, netGain);
+            }
         }
     }
 }

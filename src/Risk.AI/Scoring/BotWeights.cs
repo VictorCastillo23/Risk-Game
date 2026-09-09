@@ -37,14 +37,31 @@ internal static class BotWeights
     public const double ObjectiveOverrideThreshold = 3.0;
     public const double EliminationBonus = 5.0;
 
+    // Shared across Attack/Fortify candidate generation: the engine requires a territory to
+    // keep at least 1 troop behind for both AttackCommand and FortifyCommand, so a territory
+    // needs at least 2 troops to have any troop free to send.
+    public const int MinimumSourceTroopsToAct = 2;
+
     // Fortify-phase scoring.
     public const double FortifyMinimumGain = 1.0;
+    // Bounds how many of a component's most-urgent frontier targets are evaluated per
+    // candidate source, so widening the search to every (from, to) pair within a component
+    // (post-review-reliability fix: a single fixed "safest source" reservoir was missing
+    // better fortifies from higher-troop, slightly-less-safe sources) stays cheap even
+    // though Risk's map is small (42 territories, at most a handful of components).
+    public const int FortifyFrontierCandidateLimit = 5;
 
     // Mission scoring (bot-objective-awareness).
     public const double MissionOccupyWeight = 2.0;
     public const double MissionTopUpWeight = 2.0;
     public const double MissionContinentWeight = 2.0;
     public const double MissionEliminateWeight = 2.0;
+    // The minimum OccupyTerritories.MinArmiesPerTerritory at which topping up a territory's
+    // garrison is a distinct mission event: every occupied territory already carries at
+    // least 1 troop, so a threshold of 1 could never be "crossed" by a placement. Shared by
+    // MissionScoring (GainForReinforcing) and ReinforceDecision (top-up mode trigger) so the
+    // two never drift out of sync.
+    public const int MinArmiesRequiringTopUp = 2;
 
     // Capital scoring.
     public const double EnemyHqCaptureWeight = 3.0;

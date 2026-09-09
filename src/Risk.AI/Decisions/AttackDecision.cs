@@ -66,7 +66,7 @@ internal static class AttackDecision
         foreach (var from in TerritoryScoring.Owned(view, self))
         {
             var fromTroops = view.Territories[from].Troops;
-            if (fromTroops < 2)
+            if (fromTroops < BotWeights.MinimumSourceTroopsToAct)
             {
                 continue;
             }
