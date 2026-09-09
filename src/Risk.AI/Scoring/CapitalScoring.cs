@@ -5,9 +5,11 @@ using Risk.Engine.Views;
 namespace Risk.AI.Scoring;
 
 /// <summary>
-/// Capital-mode-aware strategic weighting, reading ONLY
+/// Capital-mode-aware strategic weighting, gated on
 /// <see cref="PlayerView.OwnHeadquarters"/> and <see cref="PlayerView.RevealedHeadquarters"/>
-/// (design bot-objective-awareness). Returns <c>0.0</c> outside Capital mode — including the
+/// (design bot-objective-awareness) — never any hidden information, only these two
+/// public-once-selected fields plus the already-visible <see cref="PlayerView.Territories"/>
+/// ownership/troop data. Returns <c>0.0</c> outside Capital mode — including the
 /// pre-selection window where <see cref="PlayerView.OwnHeadquarters"/> is still
 /// <see langword="null"/> — so generic scoring is unaffected there.
 /// </summary>
