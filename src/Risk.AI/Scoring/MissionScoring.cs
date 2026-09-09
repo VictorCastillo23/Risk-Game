@@ -15,14 +15,6 @@ namespace Risk.AI.Scoring;
 internal static class MissionScoring
 {
     /// <summary>
-    /// The minimum <see cref="OccupyTerritories.MinArmiesPerTerritory"/> at which topping
-    /// up a territory's garrison is a distinct mission event — every occupied territory
-    /// already carries at least 1 troop, so a threshold of 1 could never be "crossed" by
-    /// a placement, and 0/1 are structural rather than tunable values (D10).
-    /// </summary>
-    private const int MinArmiesRequiringTopUp = 2;
-
-    /// <summary>
     /// Strategic value of capturing <paramref name="target"/> toward
     /// <paramref name="self"/>'s effective mission. Archetype-specific:
     /// see the design's Mission archetype handling table.
@@ -47,7 +39,7 @@ internal static class MissionScoring
     public static double GainForReinforcing(PlayerView view, PlayerId self, TerritoryId own, int troopsToAdd) =>
         view.OwnEffectiveMission switch
         {
-            OccupyTerritories(_, var minArmies) when minArmies >= MinArmiesRequiringTopUp =>
+            OccupyTerritories(_, var minArmies) when minArmies >= BotWeights.MinArmiesRequiringTopUp =>
                 TopUpGain(view, own, minArmies, troopsToAdd),
             _ => 0.0
         };

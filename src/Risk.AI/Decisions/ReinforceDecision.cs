@@ -16,13 +16,6 @@ namespace Risk.AI.Decisions;
 /// </summary>
 internal static class ReinforceDecision
 {
-    /// <summary>
-    /// Matches <see cref="Scoring.MissionScoring"/>'s own top-up threshold: an
-    /// <see cref="OccupyTerritories.MinArmiesPerTerritory"/> below 2 can never be "crossed"
-    /// by a placement, so top-up mode only makes sense at 2 or above.
-    /// </summary>
-    private const int MinArmiesRequiringTopUp = 2;
-
     public static (GameCommand Command, BotMemory Memory) Decide(PlayerView view, PlayerId self, BotMemory memory)
     {
         var seededMemory = SeedPool(view, self, memory);
@@ -84,7 +77,7 @@ internal static class ReinforceDecision
     {
         result = default;
 
-        if (view.OwnEffectiveMission is not OccupyTerritories(_, var minArmies) || minArmies < MinArmiesRequiringTopUp)
+        if (view.OwnEffectiveMission is not OccupyTerritories(_, var minArmies) || minArmies < BotWeights.MinArmiesRequiringTopUp)
         {
             return false;
         }

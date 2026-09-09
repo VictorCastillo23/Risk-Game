@@ -40,29 +40,14 @@ internal static class ClaimDecision
             !member.Equals(id) && view.Territories.TryGetValue(member, out var state) && state.Owner == self);
         var continentProgress = (double)ownedOtherMembers / continent.Members.Count;
 
-        var ownNeighbors = 0;
-        var hostileNeighbors = 0;
-
-        foreach (var neighborId in WorldMap.NeighborsOf(id))
-        {
-            if (!view.Territories.TryGetValue(neighborId, out var neighbor) || neighbor.Owner is null)
-            {
-                continue;
-            }
-
-            if (neighbor.Owner == self)
-            {
-                ownNeighbors++;
-            }
-            else
-            {
-                hostileNeighbors++;
-            }
-        }
+        // Facts() classifies an unclaimed territory's own owner as null (neither friendly nor
+        // hostile per its own contract); since id is itself unclaimed here, that only affects
+        // Facts.Owner/Troops, not the FriendlyNeighbors/HostileNeighbors counts we need.
+        var facts = TerritoryScoring.Facts(view, self, id);
 
         return BotWeights.ClaimContinentScarcityWeight * continentProgress
-            + BotWeights.ClaimAdjacencyWeight * ownNeighbors
-            - BotWeights.ClaimHostileNeighborPenalty * hostileNeighbors
+            + BotWeights.ClaimAdjacencyWeight * facts.FriendlyNeighbors
+            - BotWeights.ClaimHostileNeighborPenalty * facts.HostileNeighbors
             + BotWeights.ContinentBonusWeight * continent.Bonus / continent.Members.Count;
     }
 }
