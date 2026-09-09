@@ -2,7 +2,9 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.RateLimiting;
 using Risk.Web.Data;
+using Risk.Web.RateLimiting;
 
 namespace Risk.Web.Pages.Account;
 
@@ -14,6 +16,12 @@ namespace Risk.Web.Pages.Account;
 /// new account in immediately via <see cref="SignInManager{TUser}"/> — no
 /// separate confirmation step.
 /// </summary>
+/// <remarks>
+/// Hardening (auth-endpoints-rate-limiting): see
+/// <see cref="RateLimitPolicies.AuthEndpoints"/> for why this attribute
+/// sits on the page class rather than on <see cref="OnPostAsync"/>.
+/// </remarks>
+[EnableRateLimiting(RateLimitPolicies.AuthEndpoints)]
 public sealed class RegisterModel(
     UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager) : PageModel

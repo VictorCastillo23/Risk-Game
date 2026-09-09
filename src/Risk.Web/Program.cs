@@ -1,11 +1,16 @@
+using System.Globalization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Risk.Domain.Dice;
 using Risk.Engine;
 using Risk.Web.Components;
 using Risk.Web.Data;
 using Risk.Web.Persistence;
+using Risk.Web.RateLimiting;
 using Risk.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -87,7 +92,98 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
+
+    // Fix pass (BLOCKER): ForwardedHeadersOptions' *default* KnownNetworks/
+    // KnownProxies only trust loopback, which is never the immediate peer in
+    // front of Kestrel on Azure App Service (Azure's own edge is). Left at
+    // the default, the middleware silently refuses to trust X-Forwarded-For,
+    // so Connection.RemoteIpAddress never gets rewritten from the real
+    // client IP — collapsing the rate limiter's per-IP partitioning above
+    // into a single shared bucket for the whole site. Clearing both lists is
+    // Microsoft's own documented pattern specifically for Azure App Service:
+    // https://learn.microsoft.com/aspnet/core/host-and-deploy/proxy-load-balancer
+    // App Service's network isolates this app so only Azure's trusted
+    // front-end can reach it directly, which makes "trust the immediate
+    // peer's forwarded headers unconditionally" safe *in this specific
+    // hosting model*. This would NOT be safe for an app directly exposed to
+    // arbitrary internet traffic (e.g. self-hosted behind no proxy, or
+    // behind an untrusted/public proxy) — do not copy this pattern there
+    // without a real KnownProxies/KnownNetworks allowlist.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
+
+// Hardening (auth-endpoints-rate-limiting): per-IP fixed-window rate limit
+// applied to /Account/Register and /Account/Login. See
+// RateLimitPolicies.AuthEndpoints for why this is wired at the page-class
+// level and why the policy body itself branches on HTTP method, and
+// AuthRateLimitOptions for the canonical business rationale (why this is a
+// distinct layer from IdentityOptions.Lockout above). Partitioned by
+// Connection.RemoteIpAddress, which UseForwardedHeaders (below, run before
+// UseRateLimiter) rewrites to the real client IP behind Azure App Service's
+// edge proxy — so this keys off the actual client, not Azure's own
+// front-end IP.
+builder.Services.Configure<AuthRateLimitOptions>(
+    builder.Configuration.GetSection(AuthRateLimitOptions.SectionName));
+
+builder.Services.AddRateLimiter(_ => { });
+builder.Services.AddOptions<RateLimiterOptions>()
+    .Configure<IOptions<AuthRateLimitOptions>>((rateLimiterOptions, authOptions) =>
+    {
+        var settings = authOptions.Value;
+
+        rateLimiterOptions.OnRejected = async (context, cancellationToken) =>
+        {
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.HttpContext.Response.ContentType = "text/plain";
+
+            // Fix pass (CRITICAL): surface the fixed-window limiter's own
+            // retry-after metadata rather than leaving the client to guess.
+            // Full themed-error-page integration into Login/Register's
+            // ModelState-driven UI is a larger change than this fix pass
+            // covers — the header plus a message that states the actual
+            // wait is the target bar here.
+            string message;
+            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            {
+                var retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+                context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                message = $"Too many requests. Please try again in about {retryAfterSeconds} seconds.";
+            }
+            else
+            {
+                message = "Too many requests. Please try again later.";
+            }
+
+            var logger = context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Risk.Web.RateLimiting");
+            logger.LogWarning(
+                "Rate limit exceeded for {Path} from {PartitionKey}.",
+                context.HttpContext.Request.Path,
+                context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+
+            await context.HttpContext.Response.WriteAsync(message, cancellationToken);
+        };
+
+        rateLimiterOptions.AddPolicy(RateLimitPolicies.AuthEndpoints, httpContext =>
+        {
+            if (!HttpMethods.IsPost(httpContext.Request.Method))
+            {
+                return RateLimitPartition.GetNoLimiter("non-post-auth-request");
+            }
+
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = settings.PermitLimit,
+                    Window = TimeSpan.FromSeconds(settings.WindowSeconds),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
+        });
+    });
 
 var app = builder.Build();
 
@@ -105,6 +201,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
