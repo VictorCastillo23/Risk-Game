@@ -113,6 +113,26 @@ public class BotMemoryTests
     }
 
     [Fact]
+    public void Fold_banks_the_trade_bonus_even_when_the_pool_has_not_been_seeded_yet()
+    {
+        // Regression test: GameEngine's mandatoryTradeAtTurnStart gate can
+        // force a TradeCardsCommand to be the bot's very first command of a
+        // Reinforce visit, before anything seeds ReinforcePool from
+        // Reinforcement.Calculate. A lifted `+=` on a null pool would
+        // silently discard the bonus instead of banking it.
+        var memory = BotMemory.Empty; // ReinforcePool is null: not yet seeded this visit.
+        var view = PlayerViewBuilder.For(Self).Phase(TurnPhase.Reinforce).Build();
+        var events = new GameEvent[]
+        {
+            new CardsTraded(Self, new Card[] { AlaskaInfantry, AlbertaInfantry, OntarioInfantry }, 6),
+        };
+
+        var folded = BotMemory.Fold(memory, Self, view, events);
+
+        Assert.Equal(6, folded.ReinforcePool);
+    }
+
+    [Fact]
     public void Fold_increments_the_pool_when_a_card_trade_happens_during_the_bots_own_reinforce_visit()
     {
         var memory = BotMemory.Empty with { ReinforcePool = 3 };

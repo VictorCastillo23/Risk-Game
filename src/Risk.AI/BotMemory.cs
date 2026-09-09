@@ -17,10 +17,32 @@ namespace Risk.AI;
 /// bot's CURRENT Reinforce visit (design D2). Non-null only while inside
 /// that visit; <see langword="null"/> before it starts and reset back to
 /// <see langword="null"/> the instant the bot's own Reinforce phase ends.
-/// Lazily seeded elsewhere (by the Reinforce decision, not by
-/// <see cref="Fold"/>) from <see cref="Risk.Engine.Rules.Reinforcement.Calculate"/>;
-/// <see cref="Fold"/> only ever decrements, increments, or nulls an
-/// already-seeded value.
+/// The BASE amount (<see cref="Risk.Engine.Rules.Reinforcement.Calculate"/>)
+/// is seeded lazily elsewhere (by the Reinforce decision, not by
+/// <see cref="Fold"/>) — see the seeding contract note below.
+/// <para>
+/// <b>Seeding contract (binding on whatever code seeds this field, e.g. a
+/// future Reinforce decision):</b> <c>GameEngine</c>'s
+/// <c>mandatoryTradeAtTurnStart</c> gate can force a <c>TradeCardsCommand</c>
+/// to be the bot's very FIRST command of a Reinforce visit (whenever the
+/// bot's hand is already 5+ cards at turn start), which can run BEFORE any
+/// code gets a chance to seed this field from
+/// <see cref="Risk.Engine.Rules.Reinforcement.Calculate"/>. To make sure
+/// that early trade's bonus is never lost, <see cref="Fold"/> ALWAYS banks a
+/// qualifying <see cref="CardsTraded"/> bonus additively — treating a
+/// <see langword="null"/> pool as 0 rather than using a lifted
+/// <c>+=</c>/<c>??</c>, which would otherwise silently discard the bonus
+/// (a lifted nullable <c>+=</c> evaluates to <see langword="null"/> whenever
+/// either operand is <see langword="null"/>). Consequently, whatever seeds
+/// this field from <see cref="Risk.Engine.Rules.Reinforcement.Calculate"/>
+/// MUST NOT unconditionally coalesce
+/// (<c>memory.ReinforcePool ?? Reinforcement.Calculate(...)</c>) and treat a
+/// non-null read as "already fully seeded, nothing to add" — a non-null
+/// value at the first decision point of a visit may be nothing but an
+/// early-banked trade bonus with the base allotment still missing. The base
+/// amount must be ADDED exactly once per visit, not skipped whenever the
+/// pool happens to already be non-null.
+/// </para>
 /// </param>
 /// <param name="OwnSetupTroopsPlaced">
 /// Cumulative count of troops the bot has placed via <see cref="TroopsPlaced"/>
@@ -90,7 +112,13 @@ public sealed record BotMemory(
                     break;
 
                 case CardsTraded(var actor, _, var bonus, _) when actor == self && phase == TurnPhase.Reinforce:
-                    pool += bonus;
+                    // Additive, never a lifted `+=`/`??`: the pool may still
+                    // be null here (not yet seeded from Reinforcement.Calculate)
+                    // when a mandatory trade-at-turn-start fires before any
+                    // seeding step runs. A lifted `+=` on a null pool would
+                    // silently discard this bonus — see the seeding contract
+                    // note on the ReinforcePool parameter above.
+                    pool = (pool ?? 0) + bonus;
                     break;
 
                 case PhaseChanged(TurnPhase.Reinforce, TurnPhase.Attack, var currentPlayer) when currentPlayer == self:
