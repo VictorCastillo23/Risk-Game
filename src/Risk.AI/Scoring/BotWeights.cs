@@ -44,6 +44,11 @@ internal static class BotWeights
     // Capital scoring.
     public const double EnemyHqCaptureWeight = 3.0;
     public const double HqDefenseWeight = 3.0;
+    // Deliberately higher than EnemyHqCaptureWeight's maximum possible value
+    // (EnemyHqCaptureWeight / 1, the weakest-garrison case): CapitalVictoryRule makes
+    // holding your OWN headquarters a hard precondition for winning, so recapturing it
+    // once lost must always outrank hunting any enemy headquarters, regardless of tuning.
+    public const double RecaptureOwnHqWeight = 10.0;
 
     // BotTurnRunner safety valves (design D5 / Open Questions).
     public const int MaxCommandsPerTurn = 1_000;

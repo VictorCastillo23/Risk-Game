@@ -14,15 +14,37 @@ namespace Risk.AI.Scoring;
 internal static class CapitalScoring
 {
     /// <summary>
-    /// Strategic value of attacking <paramref name="target"/> once every player's
-    /// headquarters is revealed: scores the enemy headquarters among
-    /// <see cref="PlayerView.RevealedHeadquarters"/> inversely by its garrison, so the
-    /// weakest-defended enemy HQ receives the highest weight. Zero before full reveal,
-    /// zero for any territory that is not a revealed enemy headquarters.
+    /// Strategic value of attacking <paramref name="target"/>. Two distinct rules, checked
+    /// in this order:
+    /// <list type="number">
+    /// <item>Recapturing the bot's OWN lost headquarters (<paramref name="target"/> equals
+    /// <see cref="PlayerView.OwnHeadquarters"/> but is no longer owned by
+    /// <paramref name="self"/>) always scores <see cref="BotWeights.RecaptureOwnHqWeight"/>,
+    /// regardless of reveal state — <c>Risk.Engine.Modes.CapitalVictoryRule</c> makes
+    /// holding your own headquarters a hard precondition for winning, so this must outrank
+    /// every other candidate, including hunting an enemy headquarters.</item>
+    /// <item>Otherwise, once every player's headquarters is revealed: scores enemy
+    /// headquarters among <see cref="PlayerView.RevealedHeadquarters"/> inversely by their
+    /// garrison, so the weakest-defended enemy HQ receives the highest weight. Zero before
+    /// full reveal, zero for any territory that is not a revealed enemy headquarters.</item>
+    /// </list>
+    /// Zero outside Capital mode in both cases.
     /// </summary>
     public static double GainForCapturing(PlayerView view, PlayerId self, TerritoryId target)
     {
-        if (view.OwnHeadquarters is null || view.RevealedHeadquarters.Count == 0)
+        if (view.OwnHeadquarters is not { } ownHeadquarters)
+        {
+            return 0.0;
+        }
+
+        if (target.Equals(ownHeadquarters) &&
+            view.Territories.TryGetValue(target, out var ownHqState) &&
+            ownHqState.Owner != self)
+        {
+            return BotWeights.RecaptureOwnHqWeight;
+        }
+
+        if (view.RevealedHeadquarters.Count == 0)
         {
             return 0.0;
         }

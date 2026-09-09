@@ -91,6 +91,17 @@ internal static class MissionScoring
     /// <paramref name="required"/>, the one where <paramref name="self"/> already owns
     /// the highest fraction of members, tie-broken by <see cref="ContinentId"/> ordinal.
     /// </summary>
+    /// <remarks>
+    /// Assumes at most one wildcard slot. This method has no memory of already-satisfied
+    /// wildcard picks, so once the top-ranked continent reaches full ownership it stays
+    /// "the" wildcard forever, and <see cref="ConquerContinentsCapturingGain"/> would keep
+    /// scoring every other non-required continent at <c>0.0</c> even if a second wildcard
+    /// slot still needed filling. Currently safe: <see cref="Risk.Domain.Missions.MissionDeck.CreateStandard"/>
+    /// only ever deals <c>WildcardCount</c> <c>0</c> or <c>1</c>. If the mission deck is
+    /// ever extended to deal <c>WildcardCount &gt;= 2</c>, this method needs slot-tracking
+    /// (e.g. excluding already-picked wildcard continents from subsequent picks) to stay
+    /// correct.
+    /// </remarks>
     private static ContinentId? WildcardContinent(PlayerView view, PlayerId self, IReadOnlyList<ContinentId> required) =>
         Continents.All
             .Where(c => !required.Contains(c.Id))

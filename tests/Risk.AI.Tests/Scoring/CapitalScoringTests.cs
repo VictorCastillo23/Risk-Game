@@ -127,4 +127,45 @@ public class CapitalScoringTests
 
         Assert.Equal(0, CapitalScoring.GainForCapturing(view, Self, new TerritoryId("NorthwestTerritory")));
     }
+
+    [Fact]
+    public void GainForCapturing_prioritizes_recapturing_a_lost_own_headquarters_above_hunting_any_enemy_hq()
+    {
+        // Alaska is self's OwnHeadquarters, captured by Enemy. Enemy's OWN declared HQ is
+        // the separate territory Alberta; OtherEnemy's declared HQ, Ukraine, is garrisoned
+        // at just 1 troop — the weakest possible garrison, which gives the generic
+        // hunt-weakest-HQ formula its maximum possible score
+        // (BotWeights.EnemyHqCaptureWeight / 1). Recapturing your OWN lost HQ must still
+        // outscore that ceiling, since CapitalVictoryRule makes holding it a hard
+        // precondition for winning regardless of how many enemy HQs are held.
+        var view = PlayerViewBuilder.For(Self)
+            .Owns(Enemy, 1, "Alaska")
+            .Owns(Enemy, 4, "Alberta")
+            .Owns(OtherEnemy, 1, "Ukraine")
+            .OwnHeadquarters("Alaska")
+            .RevealedHeadquarters((Self, "Alaska"), (Enemy, "Alberta"), (OtherEnemy, "Ukraine"))
+            .Build();
+
+        var recaptureWeight = CapitalScoring.GainForCapturing(view, Self, new TerritoryId("Alaska"));
+        var maxPossibleHuntWeight = CapitalScoring.GainForCapturing(view, Self, new TerritoryId("Ukraine"));
+
+        Assert.True(recaptureWeight > 0);
+        Assert.True(recaptureWeight > maxPossibleHuntWeight,
+            $"Expected recapture weight ({recaptureWeight}) to exceed the hunt-weight ceiling ({maxPossibleHuntWeight})");
+    }
+
+    [Fact]
+    public void GainForCapturing_does_not_apply_recapture_priority_when_self_still_owns_its_own_headquarters()
+    {
+        var view = PlayerViewBuilder.For(Self)
+            .Owns(Self, 3, "Alaska")
+            .Owns(Enemy, 2, "Alberta")
+            .OwnHeadquarters("Alaska")
+            .Build();
+
+        // Pre-reveal, no threat data implies this: self's own HQ, still self-owned, is
+        // not itself an attack target, so it must fall through to the normal (zero)
+        // pre-reveal capturing result, not the recapture-priority branch.
+        Assert.Equal(0, CapitalScoring.GainForCapturing(view, Self, new TerritoryId("Alaska")));
+    }
 }
