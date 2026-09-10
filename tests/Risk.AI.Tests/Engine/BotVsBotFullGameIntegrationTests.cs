@@ -476,4 +476,106 @@ public class BotVsBotFullGameIntegrationTests
             "starts failing after a dice-content or weight retune, re-run the exploratory search and pin " +
             "a new CapitalRecaptureDiceSequence rather than deleting the assertion.");
     }
+
+    /// <summary>
+    /// TwoPlayer's own <c>Random.Shared</c>-based territory deal
+    /// (<see cref="Risk.Engine.Modes.TwoPlayerSetupStrategy"/>, same lever
+    /// <see cref="SecretMissionScenarios"/> already relies on for board
+    /// variation) means each of these 3 dice-sequence variants already runs
+    /// against a genuinely different random board — <see cref="ClassicScenarios"/>'s
+    /// player-count dimension does not apply here, since
+    /// <see cref="Risk.Engine.Setup.GameSetup.PlayerCountRange"/> fixes
+    /// TwoPlayer at exactly 2.
+    /// </summary>
+    public static IEnumerable<object[]> TwoPlayerScenarios()
+    {
+        for (var variant = 0; variant < DiceSequenceVariants.Length; variant++)
+        {
+            yield return [variant];
+        }
+    }
+
+    /// <summary>
+    /// The fourth and final blocking DoD test (design D9, spec's "All four
+    /// GameMode bot-vs-bot integration tests are blocking" requirement) — and
+    /// the mode every prior phase's risk notes have flagged as the most
+    /// fragile: it is the only mode with a synthetic third "neutral" army
+    /// (<see cref="PlayerState.IsNeutral"/>) that never takes a real turn but
+    /// must still be correctly identified by both real bots
+    /// (<see cref="BotMemory.FindTwoPlayerNeutral"/>, design D8) so its
+    /// territories are treated as attackable-but-passive rather than
+    /// confused with the real opponent, and it has a unique two-phase Setup
+    /// (Phase A: both humans place their own remaining troops; Phase B:
+    /// humans place the NEUTRAL's remaining troops one at a time via
+    /// <see cref="PlaceNeutralTroopsCommand"/>, detected via the 26-troop
+    /// boundary). Same zero-<c>Rejected</c> reasoning as every other test in
+    /// this file: reaching <see cref="BotRunResult.Completed"/> is itself
+    /// sufficient proof of zero <c>Rejected</c> results anywhere in the run.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(TwoPlayerScenarios))]
+    public void A_full_bot_vs_bot_TwoPlayer_game_reaches_a_valid_win_with_zero_rejected_commands(int diceVariant)
+    {
+        const int playerCount = 2;
+        var dice = new SequenceDiceRoller(DiceSequenceVariants[diceVariant]);
+        var harness = GameHarness.Start(GameMode.TwoPlayer, playerCount, dice);
+        IReadOnlyList<IBotPlayer> bots = harness.State.Players
+            .Where(p => !p.IsNeutral)
+            .Select(p => (IBotPlayer)new BotPlayer(p.Id))
+            .ToArray();
+        var runner = new BotTurnRunner(harness.Engine);
+
+        var result = runner.RunGame(harness.State, bots);
+
+        var completed = Assert.IsType<BotRunResult.Completed>(result);
+        Assert.True(completed.CommandsIssued < BotWeights.MaxCommandsPerGame,
+            $"Game reached the {BotWeights.MaxCommandsPerGame}-command budget without a Won state — treat as a stalemate, not a pass.");
+
+        var won = Assert.IsType<GameStatus.Won>(completed.State.Status);
+        var winner = completed.State.Players.Single(p => p.Id == won.Winner);
+        Assert.False(winner.IsEliminated);
+        Assert.False(winner.IsNeutral);
+
+        // TwoPlayer's real victory rule, called directly on the final state —
+        // mirrors the Classic/SecretMission/Capital tests' pattern, so this
+        // assertion can never silently drift from the rule it claims to
+        // verify.
+        Assert.Equal(won.Winner, new TwoPlayerVictoryRule().CheckVictory(completed.State));
+
+        // Independent re-verification, NOT delegating back to
+        // TwoPlayerVictoryRule: TwoPlayer has exactly one real opponent, so
+        // "won" and "the sole other real (non-neutral) player is eliminated"
+        // are the same fact — cross-checked here directly from raw
+        // PlayerState rather than trusting GameStatus.Won fired.
+        var loser = completed.State.Players.Single(p => !p.IsNeutral && p.Id != won.Winner);
+        Assert.True(loser.IsEliminated);
+
+        // --- Setup Phase A/B boundary (design D8), exercised across a FULL
+        // game, not just Phase 8's short synthetic sequence. Every
+        // PlaceNeutralTroopsCommand SetupDecision emits places exactly 1
+        // troop, so the neutral's own Setup budget (40 starting - 14 dealt =
+        // 26, TwoPlayerSetupStrategy/GameSetup) must drain to EXACTLY 26
+        // NeutralTroopsPlaced troops, and BOTH real seats must appear as a
+        // Placer at least once — proving turn alternation genuinely
+        // exercised both bots' SetupDecision Phase-B dispatch, not just one.
+        var neutralPlacements = completed.State.Log.OfType<NeutralTroopsPlaced>().ToList();
+        Assert.NotEmpty(neutralPlacements);
+        Assert.Equal(26, neutralPlacements.Sum(e => e.Troops));
+        Assert.All(bots, bot => Assert.Contains(neutralPlacements, e => e.Placer == bot.Id));
+
+        // --- Neutral-by-elimination detection (design D8), proven to hold
+        // for a full game's worth of turns: re-derive BOTH real bots'
+        // inferred neutral identity directly from their OWN final
+        // BotMemory (SeenActors accumulated over the entire game) using the
+        // exact production function every SetupDecision/AttackDecision call
+        // relied on throughout, and assert it matches the ACTUAL
+        // engine-assigned neutral PlayerId.
+        var actualNeutral = completed.State.Players.Single(p => p.IsNeutral).Id;
+        foreach (var bot in bots)
+        {
+            var finalView = harness.Engine.Observe(completed.State, bot.Id);
+            var inferredNeutral = completed.Memories[bot.Id].FindTwoPlayerNeutral(finalView, bot.Id);
+            Assert.Equal(actualNeutral, inferredNeutral);
+        }
+    }
 }
