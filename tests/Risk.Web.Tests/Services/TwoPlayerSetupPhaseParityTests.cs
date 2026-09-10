@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Errors;
 using Risk.Domain.Players;
 using Risk.Engine;
@@ -32,7 +33,7 @@ public class TwoPlayerSetupPhaseParityTests
     public void PlaceNeutralTroopsCommand_IsAcceptedIfAndOnlyIf_IsPhaseB_AtEverySetupStep()
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
         var rows = new List<PlayerSetupRow>
         {
             new("Ana", "#E53935", false),

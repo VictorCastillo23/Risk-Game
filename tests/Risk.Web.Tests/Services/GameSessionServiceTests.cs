@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Errors;
 using Risk.Domain.Map;
 using Risk.Domain.Missions;
@@ -26,7 +27,7 @@ public class GameSessionServiceTests
     /// live in <see cref="GameSessionServicePersistenceTests"/>).
     /// </summary>
     private static GameSessionService NewSession(IGameEngine engine, Risk.Domain.Dice.IDiceRoller dice) =>
-        new(engine, dice, new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+        new(engine, dice, new FakeGameStore(), StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
 
     private static readonly IReadOnlyList<PlayerSetupRow> TwoValidRows =
     [

@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Risk.Domain\Risk.Domain.csproj" />
     <ProjectReference Include="..\Risk.Engine\Risk.Engine.csproj" />
+    <ProjectReference Include="..\Risk.AI\Risk.AI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

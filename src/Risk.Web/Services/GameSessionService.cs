@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
+using Risk.AI;
 using Risk.Domain.Dice;
 using Risk.Domain.Missions;
 using Risk.Domain.Players;
@@ -80,7 +81,8 @@ public sealed class GameSessionService(
     IGameEngine engine,
     IDiceRoller dice,
     IGameStore store,
-    AuthenticationStateProvider authStateProvider)
+    AuthenticationStateProvider authStateProvider,
+    BotTurnRunner botRunner)
 {
     public GameState? State { get; private set; }
 

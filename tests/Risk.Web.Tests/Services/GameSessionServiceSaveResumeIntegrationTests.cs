@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Map;
 using Risk.Domain.Players;
 using Risk.Engine;
@@ -44,7 +45,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
     {
         var store = new FakeGameStore();
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId), new BotTurnRunner(engine));
 
         var rows = new List<PlayerSetupRow>
         {
@@ -79,7 +80,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
         // for a fresh circuit) rather than reusing `session` after Reset —
         // this is the strongest possible proof that resume does not depend
         // on any in-memory state surviving.
-        var freshSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var freshSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId), new BotTurnRunner(engine));
         Assert.False(freshSession.IsStarted);
 
         var resumed = await freshSession.ResumeAsync();
@@ -100,7 +101,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
     {
         var store = new FakeGameStore();
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId), new BotTurnRunner(engine));
 
         var rows = new List<PlayerSetupRow>
         {
@@ -149,7 +150,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
     {
         var store = new FakeGameStore();
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        var anonymousSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.Anonymous());
+        var anonymousSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
 
         var rows = new List<PlayerSetupRow>
         {
@@ -179,7 +180,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
         var retrieved = System.Text.Json.JsonSerializer.Deserialize<PendingSave>(stashedJson);
         Assert.NotNull(retrieved);
 
-        var authenticatedSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var authenticatedSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId), new BotTurnRunner(engine));
         var outcome = await authenticatedSession.RehydrateAndSaveAsync(retrieved!.ToSnapshot());
 
         Assert.Equal(SaveOutcome.Created, outcome);
@@ -190,7 +191,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
         // The save actually landed in the store too, not just this
         // session's in-memory State — a second, independent session can
         // resume it.
-        var resumerSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId));
+        var resumerSession = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn(UserId), new BotTurnRunner(engine));
         var resumed = await resumerSession.ResumeAsync();
         Assert.Equal(ResumeOutcome.Resumed, resumed);
         GameStateAssertions.AssertStructurallyEqual(stateBeforeStash, resumerSession.State!);
