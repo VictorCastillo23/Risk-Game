@@ -1,7 +1,7 @@
 using Risk.AI.Scoring;
 using Risk.AI.Tests.Fakes;
-using Risk.Domain.Map;
 using Risk.Engine;
+using Risk.Engine.Modes;
 using Risk.Engine.State;
 
 namespace Risk.AI.Tests.Engine;
@@ -76,11 +76,11 @@ public class BotVsBotFullGameIntegrationTests
         var winner = completed.State.Players.Single(p => p.Id == won.Winner);
         Assert.False(winner.IsEliminated);
 
-        // Classic's real victory rule (ConquestVictoryRule): the winner must
-        // own every territory on the board. Verified directly against
-        // ConquestVictoryRule.CheckVictory rather than assumed.
-        var winnerOwnedTerritories = completed.State.Territories.Values.Count(t => t.Owner == won.Winner);
-        Assert.Equal(WorldMap.Territories.Count, winnerOwnedTerritories);
+        // Classic's real victory rule: call ConquestVictoryRule.CheckVictory
+        // directly (not a reimplementation of its "owns every territory"
+        // logic) so this assertion can never silently drift from the rule
+        // it claims to verify.
+        Assert.Equal(won.Winner, new ConquestVictoryRule().CheckVictory(completed.State));
 
         // Every other real player must be eliminated — Classic has no
         // neutral seat, so full map control and "every other party
