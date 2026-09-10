@@ -1,3 +1,4 @@
+using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine.Commands;
 using Risk.Engine.State;
@@ -149,5 +150,18 @@ public class GameHarnessTests
         var view = harness.ViewFor(harness.State.Turn.CurrentPlayer);
 
         Assert.Equal(harness.State.Turn, view.Turn);
+    }
+
+    [Fact]
+    public void WithMissions_overrides_only_the_specified_seats_missions()
+    {
+        var harness = GameHarness.Start(GameMode.SecretMission, 3, new SequenceDiceRoller());
+        var forced = new OccupyTerritories(18, MinArmiesPerTerritory: 2);
+        var untouchedBefore = harness.ViewFor(new PlayerId(1)).OwnEffectiveMission;
+
+        harness.WithMissions(new Dictionary<PlayerId, MissionCard> { [new PlayerId(0)] = forced });
+
+        Assert.Equal(forced, harness.ViewFor(new PlayerId(0)).OwnEffectiveMission);
+        Assert.Equal(untouchedBefore, harness.ViewFor(new PlayerId(1)).OwnEffectiveMission);
     }
 }
