@@ -18,18 +18,69 @@ namespace Risk.AI.Tests.Engine;
 /// <see cref="BotPlayer"/> from the very first Claim command all the way to
 /// <see cref="GameStatus.Won"/>, via <see cref="BotTurnRunner.RunGame"/>.
 ///
-/// Because <see cref="Risk.Engine.Setup.GameSetup.Create"/> deals territories
-/// via <c>Random.Shared</c> (a known, documented testability gap — see the
-/// design's Verified Engine Facts table), this test asserts INVARIANTS over
-/// the real engine's phase machinery (design D9), never a specific board
-/// layout: the game must terminate within budget, end in a genuine
-/// <see cref="GameStatus.Won"/> (not <c>Rejected</c>/<c>Exhausted</c>), and
-/// the winner must satisfy Classic mode's own <see cref="Risk.Engine.Modes.ConquestVictoryRule"/>
-/// (full map control by a non-eliminated player — verified directly against
-/// <c>ConquestVictoryRule.CheckVictory</c>, not assumed).
+/// <para>
+/// <b>Determinism, verified directly against the engine (correcting an
+/// earlier, inaccurate claim in this file's history):</b> for
+/// <see cref="GameMode.Classic"/> specifically, <see cref="Risk.Engine.Setup.GameSetup.Create"/>
+/// never touches <c>Random.Shared</c> — that only exists in
+/// <c>TwoPlayerSetupStrategy</c>/<c>SecretMissionSetupStrategy</c>, neither
+/// of which this test exercises. Classic starts every territory unclaimed
+/// and deals none of them up front; the only randomness-shaped input is
+/// <c>TurnOrder.DetermineFirst</c>'s roll-off, which consumes the
+/// constructor-injected, fully deterministic <see cref="SequenceDiceRoller"/>.
+/// Territory ownership itself comes entirely from the deterministic Claim
+/// phase (<c>ClaimDecision</c>'s scoring, no randomness at all). The
+/// practical consequence: a fixed dice sequence reproduces the exact same
+/// game, move for move, every run — there is no hidden nondeterminism to
+/// average over here. Invariant-style assertions (termination bound, a
+/// genuine <see cref="GameStatus.Won"/>, the real victory rule) are used
+/// anyway because they are simply the correct shape of assertion for a
+/// multi-turn combat simulation — robust to future dice-content or
+/// scoring-constant tuning without needing a golden-master board — not
+/// because this specific mode's setup is randomized. To actually exercise
+/// more than one game trajectory, this test varies the INJECTED DICE
+/// SEQUENCE itself across theory cases (see <see cref="ClassicScenarios"/>)
+/// — that is the only lever that changes anything in this fully
+/// deterministic pipeline.
+/// </para>
 /// </summary>
 public class BotVsBotFullGameIntegrationTests
 {
+    /// <summary>
+    /// Three fixed, cycling dice sequences (all prime length, per
+    /// <see cref="SequenceDiceRoller"/>'s own convention, so a cycle never
+    /// phases in lockstep with the fixed 1/2/3-attacker/1/2-defender dice
+    /// counts) with deliberately different value distributions, so each
+    /// drives a genuinely different sequence of battle outcomes — and
+    /// therefore a genuinely different game trajectory — rather than
+    /// replaying the same recorded game under a different label.
+    /// </summary>
+    private static readonly IReadOnlyList<int>[] DiceSequenceVariants =
+    [
+        [6, 5, 4, 3, 2, 1, 6, 4, 2, 5, 3, 1, 6, 6, 1, 4, 3], // length 17 (SequenceDiceRoller's own default)
+        [1, 3, 5, 2, 4, 6, 1, 6, 2, 5, 3, 4, 6, 1, 5, 2, 4, 3, 6], // length 19, different distribution/order
+        [2, 6, 1, 5, 3, 4, 6, 2, 5, 1, 4, 3, 6, 2, 1, 5, 4, 3, 6, 2, 5, 1, 4], // length 23, different again
+    ];
+
+    /// <summary>
+    /// Cross product of Classic's full supported player-count range (3-5,
+    /// per <see cref="Risk.Engine.Setup.GameSetup.PlayerCountRange"/>) and
+    /// the three dice-sequence variants above: 9 cases total, each a
+    /// genuinely distinct game trajectory (different party size AND
+    /// different combat outcomes), not a cosmetic duplication of one
+    /// recorded run.
+    /// </summary>
+    public static IEnumerable<object[]> ClassicScenarios()
+    {
+        foreach (var playerCount in new[] { 3, 4, 5 })
+        {
+            for (var variant = 0; variant < DiceSequenceVariants.Length; variant++)
+            {
+                yield return [playerCount, variant];
+            }
+        }
+    }
+
     /// <summary>
     /// Reaching <see cref="BotRunResult.Completed"/> (rather than
     /// <see cref="BotRunResult.Rejected"/>) is itself the proof of the
@@ -44,21 +95,12 @@ public class BotVsBotFullGameIntegrationTests
     /// TYPE is <c>Completed</c> is sufficient to prove zero <c>Rejected</c>
     /// results occurred anywhere in the run — no separate counter is needed
     /// or possible to observe from outside the runner.
-    ///
-    /// Runs across Classic's full supported player-count range (3-5, per
-    /// <see cref="Risk.Engine.Setup.GameSetup.PlayerCountRange"/>) so the
-    /// invariant isn't proven for one lucky party size only — each player
-    /// count meaningfully changes the board's territory-per-player ratio and
-    /// therefore the termination dynamics design's own Open Questions
-    /// section flags as unproven before this test existed.
     /// </summary>
     [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    public void A_full_bot_vs_bot_Classic_game_reaches_a_valid_win_with_zero_rejected_commands(int playerCount)
+    [MemberData(nameof(ClassicScenarios))]
+    public void A_full_bot_vs_bot_Classic_game_reaches_a_valid_win_with_zero_rejected_commands(int playerCount, int diceVariant)
     {
-        var dice = new SequenceDiceRoller();
+        var dice = new SequenceDiceRoller(DiceSequenceVariants[diceVariant]);
         var harness = GameHarness.Start(GameMode.Classic, playerCount, dice);
         IReadOnlyList<IBotPlayer> bots = harness.State.Players
             .Where(p => !p.IsNeutral)
