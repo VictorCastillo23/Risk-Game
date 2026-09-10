@@ -61,6 +61,28 @@ public class GameHarnessTests
         Assert.Equal(TurnPhase.SelectHeadquarters, harness.State.Turn.Phase);
     }
 
+    [Fact]
+    public void FastForwardToSetup_throws_a_clear_distinguishable_exception_when_the_iteration_cap_is_exceeded()
+    {
+        // Classic's Claim phase needs 42 ClaimTerritoryCommands to complete;
+        // a cap of 2 proves the safety valve fires well before any
+        // legitimate fast-forward could ever need it. (A genuinely
+        // non-terminating LEGAL command sequence isn't reachable through any
+        // of Claim/Setup/SelectHeadquarters's current commands — each one
+        // consumes a strictly-decreasing resource: remaining unclaimed
+        // territories, a player's own troop pool, or a one-shot headquarters
+        // pick, verified directly against GameEngine's own validation for
+        // each — so this test proves the MECHANISM via a deliberately tiny
+        // cap rather than via a contrived infinite-loop stub bot.)
+        var harness = GameHarness.Start(GameMode.Classic, 3, new SequenceDiceRoller(), maxFastForwardIterations: 2);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => { harness.FastForwardToSetup(); });
+
+        Assert.Contains("exceeded", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("2", exception.Message);
+        Assert.DoesNotContain("rejected", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(GameMode.Classic, 3)]
     [InlineData(GameMode.SecretMission, 3)]

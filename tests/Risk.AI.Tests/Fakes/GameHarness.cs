@@ -21,12 +21,36 @@ namespace Risk.AI.Tests.Fakes;
 /// </summary>
 internal sealed class GameHarness
 {
-    private readonly Dictionary<PlayerId, BotMemory> _driverMemories;
+    /// <summary>
+    /// A safety valve for the fast-forward loops below, mirroring
+    /// <see cref="BotTurnRunner"/>'s own <c>maxCommands</c> budgets: sized
+    /// comfortably above anything a legitimate fast-forward could ever need
+    /// (worst case, Classic/5-players: ~42 Claim commands + ~85 Setup
+    /// commands ≈ 130), not <see cref="Scoring.BotWeights.MaxCommandsPerGame"/>'s
+    /// 250,000, which is sized for a full game, not a setup fast-forward.
+    /// Configurable per-instance (see <see cref="Start"/>'s optional
+    /// parameter) so a test can deliberately lower it to prove the cap fires
+    /// without needing a genuinely non-terminating command sequence — which,
+    /// verified directly against every Claim/Setup/SelectHeadquarters
+    /// command's engine-side validation, does not exist for a LEGAL command
+    /// today (every one of them consumes a strictly-decreasing resource:
+    /// remaining unclaimed territories, a player's own troop pool, or a
+    /// one-shot headquarters pick). This cap exists for the FUTURE: a
+    /// not-yet-written `Decisions.*` path (e.g. Capital's
+    /// `SelectHeadquarters`, SecretMission's Setup) could still introduce a
+    /// legal-but-non-progressing bug that a bare `while` loop would hang on
+    /// forever instead of failing loudly.
+    /// </summary>
+    private const int DefaultMaxFastForwardIterations = 500;
 
-    private GameHarness(GameState state, IGameEngine engine)
+    private readonly Dictionary<PlayerId, BotMemory> _driverMemories;
+    private readonly int _maxFastForwardIterations;
+
+    private GameHarness(GameState state, IGameEngine engine, int maxFastForwardIterations)
     {
         State = state;
         Engine = engine;
+        _maxFastForwardIterations = maxFastForwardIterations;
         _driverMemories = state.Players
             .Where(p => !p.IsNeutral)
             .ToDictionary(p => p.Id, _ => BotMemory.Empty);
@@ -40,9 +64,15 @@ internal sealed class GameHarness
     /// Creates a fresh game via the real <see cref="GameSetup.Create"/>.
     /// Throws if <paramref name="playerCount"/>/<paramref name="mode"/> is an
     /// illegal combination — a fixture setup mistake, not something a test
-    /// should ever need to assert on.
+    /// should ever need to assert on. <paramref name="maxFastForwardIterations"/>
+    /// is test-only tuning for the fast-forward loops below; production-style
+    /// callers never need to override the default.
     /// </summary>
-    public static GameHarness Start(GameMode mode, int playerCount, IDiceRoller dice)
+    public static GameHarness Start(
+        GameMode mode,
+        int playerCount,
+        IDiceRoller dice,
+        int maxFastForwardIterations = DefaultMaxFastForwardIterations)
     {
         var engine = new GameEngine(dice);
         var result = GameSetup.Create(playerCount, mode, dice);
@@ -54,7 +84,7 @@ internal sealed class GameHarness
         }
 
         var ok = (CommandResult<GameState, GameEvent>.Ok)result;
-        return new GameHarness(ok.State, engine);
+        return new GameHarness(ok.State, engine, maxFastForwardIterations);
     }
 
     /// <summary>
@@ -65,11 +95,7 @@ internal sealed class GameHarness
     /// </summary>
     public GameHarness FastForwardToSetup()
     {
-        while (State.Turn.Phase == TurnPhase.Claim)
-        {
-            DriveOneCommand();
-        }
-
+        DriveWhile(phase => phase == TurnPhase.Claim, "Setup (draining Claim)");
         return this;
     }
 
@@ -81,12 +107,7 @@ internal sealed class GameHarness
     public GameHarness FastForwardToSelectHeadquarters()
     {
         FastForwardToSetup();
-
-        while (State.Turn.Phase == TurnPhase.Setup)
-        {
-            DriveOneCommand();
-        }
-
+        DriveWhile(phase => phase == TurnPhase.Setup, "SelectHeadquarters (draining Setup)");
         return this;
     }
 
@@ -99,12 +120,7 @@ internal sealed class GameHarness
     public GameHarness FastForwardToFirstReinforce()
     {
         FastForwardToSetup();
-
-        while (State.Turn.Phase is TurnPhase.Setup or TurnPhase.SelectHeadquarters)
-        {
-            DriveOneCommand();
-        }
-
+        DriveWhile(phase => phase is TurnPhase.Setup or TurnPhase.SelectHeadquarters, "Reinforce (draining Setup/SelectHeadquarters)");
         return this;
     }
 
@@ -131,29 +147,45 @@ internal sealed class GameHarness
     public PlayerView ViewFor(PlayerId viewer) => Engine.Observe(State, viewer);
 
     /// <summary>
+    /// Drives <see cref="DriveOneCommand"/> while <paramref name="shouldContinue"/>
+    /// holds on the current <see cref="TurnState.Phase"/>, capped at
+    /// <see cref="_maxFastForwardIterations"/> so a non-progressing legal
+    /// command loop (see <see cref="DefaultMaxFastForwardIterations"/>'s
+    /// remarks) fails loudly and immediately instead of hanging the test
+    /// process.
+    /// </summary>
+    private void DriveWhile(Func<TurnPhase, bool> shouldContinue, string targetPhaseDescription)
+    {
+        var iterations = 0;
+
+        while (shouldContinue(State.Turn.Phase))
+        {
+            if (iterations++ >= _maxFastForwardIterations)
+            {
+                throw new InvalidOperationException(
+                    $"GameHarness exceeded {_maxFastForwardIterations} iterations fast-forwarding to " +
+                    $"{targetPhaseDescription} — likely a non-progressing legal command loop (a " +
+                    "FirstLegalBot decision that never advances the phase).");
+            }
+
+            DriveOneCommand();
+        }
+    }
+
+    /// <summary>
     /// Advances one command via <see cref="FirstLegalBot"/> for whoever's
-    /// turn it currently is, threading every tracked player's
-    /// <see cref="BotMemory"/> through <see cref="BotMemory.WithSeenActor"/>
-    /// on every iteration (design D8's data-flow diagram) — this fixture
-    /// needs the same seen-actor bookkeeping the production
-    /// <see cref="BotTurnRunner"/> maintains, since <see cref="FirstLegalBot"/>'s
-    /// own TwoPlayer Phase B detection depends on it exactly like
-    /// <c>Decisions.SetupDecision</c>'s does.
+    /// turn it currently is. Delegates the actual observe/decide/execute/fold
+    /// sequence to <see cref="BotTurnStep.Advance"/> — the same step
+    /// <see cref="BotTurnRunner"/> uses, including its <see cref="BotMemory.WithSeenActor"/>
+    /// threading (design D8) — so this fixture's driving loop and the
+    /// production runner can never silently drift apart.
     /// </summary>
     private void DriveOneCommand()
     {
         var actor = State.Turn.CurrentPlayer;
-
-        foreach (var id in _driverMemories.Keys.ToArray())
-        {
-            _driverMemories[id] = _driverMemories[id].WithSeenActor(actor);
-        }
-
         var bot = new FirstLegalBot(actor);
-        var view = Engine.Observe(State, actor);
-        var (command, decidedMemory) = bot.DecideNextCommand(view, _driverMemories[actor]);
 
-        var result = Engine.Execute(State, command);
+        var (result, _, nextState) = BotTurnStep.Advance(Engine, State, actor, bot, _driverMemories);
 
         if (result is CommandResult<GameState, GameEvent>.Rejected rejected)
         {
@@ -163,8 +195,6 @@ internal sealed class GameHarness
                 "FirstLegalBot, not in whatever this fixture is being used to test.");
         }
 
-        var ok = (CommandResult<GameState, GameEvent>.Ok)result;
-        _driverMemories[actor] = BotMemory.Fold(decidedMemory, actor, view, ok.Events);
-        State = ok.State;
+        State = nextState;
     }
 }

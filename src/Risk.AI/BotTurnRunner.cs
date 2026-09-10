@@ -22,11 +22,15 @@ namespace Risk.AI;
 /// follows.
 /// </summary>
 /// <remarks>
-/// <see cref="BotTurnRunner"/> and <see cref="BotRunResult"/> are the only
-/// two <c>Risk.AI</c> types allowed to name <see cref="GameState"/> (design
-/// D1) — and even here, only <see cref="GameState.Status"/> and
-/// <see cref="GameState.Turn"/>.<see cref="TurnState.CurrentPlayer"/> are
-/// ever read directly (both are also present on <see cref="Views.PlayerView"/>);
+/// <see cref="BotTurnRunner"/>, <see cref="BotRunResult"/>, and the shared
+/// <see cref="BotTurnStep"/> stepping primitive are the only three
+/// <c>Risk.AI</c> types allowed to name <see cref="GameState"/> (design D1;
+/// <see cref="BotTurnStep"/> was extracted post-Phase-8 so this class'
+/// stepping sequence and <c>Risk.AI.Tests</c>' <c>GameHarness</c> fixture
+/// never drift apart, but it is pure orchestration plumbing with the exact
+/// same D1 posture as this class) — and even across all three, only
+/// <see cref="GameState.Status"/> and <see cref="GameState.Turn"/>.<see cref="TurnState.CurrentPlayer"/>
+/// are ever read directly (both are also present on <see cref="Views.PlayerView"/>);
 /// the rest of <see cref="GameState"/> is passed through opaquely to
 /// <see cref="IGameEngine.Observe"/>/<see cref="IGameEngine.Execute"/>. No
 /// <see cref="GameState"/> value, nor any fragment of one beyond those two
@@ -54,7 +58,7 @@ public sealed class BotTurnRunner
         var bots = new Dictionary<PlayerId, IBotPlayer> { [bot.Id] = bot };
         var memories = new Dictionary<PlayerId, BotMemory> { [bot.Id] = memory };
 
-        return Run(state, bots, memories, maxCommands, stopWhen: s => s.Turn.CurrentPlayer != turnOwner);
+        return Drive(state, bots, memories, maxCommands, stopWhen: s => s.Turn.CurrentPlayer != turnOwner);
     }
 
     /// <summary>
@@ -73,21 +77,18 @@ public sealed class BotTurnRunner
         var botsById = bots.ToDictionary(b => b.Id);
         var memories = bots.ToDictionary(b => b.Id, _ => BotMemory.Empty);
 
-        return Run(state, botsById, memories, maxCommands, stopWhen: static _ => false);
+        return Drive(state, botsById, memories, maxCommands, stopWhen: static _ => false);
     }
 
     /// <summary>
     /// The shared stepping loop behind both <see cref="RunTurn"/> and
-    /// <see cref="RunGame"/> (design's data flow diagram): on every
-    /// iteration, every registered bot's memory observes the current actor
-    /// via <see cref="BotMemory.WithSeenActor"/> (design D8 — the binding
-    /// contract this class exists to fulfill: <see cref="IBotPlayer.DecideNextCommand"/>'s
-    /// locked 2-argument signature can only ever see its OWN turn, so only a
-    /// multi-seat loop like this one can let a bot infer another party's
-    /// identity from watching every seat's turns), then the current actor's
-    /// bot decides, then the engine executes.
+    /// <see cref="RunGame"/> (design's data flow diagram): checks the two
+    /// terminal conditions (already won / turn boundary reached, budget
+    /// exhausted), then delegates the actual observe/decide/execute/fold
+    /// sequence to <see cref="BotTurnStep.Advance"/> — the same step
+    /// <c>GameHarness</c> uses, so the two never drift apart.
     /// </summary>
-    private BotRunResult Run(
+    private BotRunResult Drive(
         GameState state,
         IReadOnlyDictionary<PlayerId, IBotPlayer> bots,
         Dictionary<PlayerId, BotMemory> memories,
@@ -110,31 +111,20 @@ public sealed class BotTurnRunner
 
             var currentPlayer = state.Turn.CurrentPlayer;
 
-            foreach (var id in bots.Keys)
-            {
-                memories[id] = memories[id].WithSeenActor(currentPlayer);
-            }
-
             if (!bots.TryGetValue(currentPlayer, out var actingBot))
             {
                 throw new InvalidOperationException(
                     $"Unreachable: no registered bot for current player {currentPlayer.Value}.");
             }
 
-            var view = _engine.Observe(state, currentPlayer);
-            var (command, decidedMemory) = actingBot.DecideNextCommand(view, memories[currentPlayer]);
-
-            var result = _engine.Execute(state, command);
+            var (result, command, nextState) = BotTurnStep.Advance(_engine, state, currentPlayer, actingBot, memories);
 
             if (result is CommandResult<GameState, GameEvent>.Rejected rejected)
             {
-                memories[currentPlayer] = decidedMemory;
                 return new BotRunResult.Rejected(state, Snapshot(memories), commandsIssued, command, rejected.Error);
             }
 
-            var ok = (CommandResult<GameState, GameEvent>.Ok)result;
-            memories[currentPlayer] = BotMemory.Fold(decidedMemory, currentPlayer, view, ok.Events);
-            state = ok.State;
+            state = nextState;
             commandsIssued++;
         }
     }
