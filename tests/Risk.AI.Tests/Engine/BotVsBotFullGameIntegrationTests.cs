@@ -4,6 +4,7 @@ using Risk.Domain.Map;
 using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine;
+using Risk.Engine.Events;
 using Risk.Engine.Modes;
 using Risk.Engine.Rules;
 using Risk.Engine.State;
@@ -321,5 +322,158 @@ public class BotVsBotFullGameIntegrationTests
 
         return required.All(fullyOwned.Contains)
             && fullyOwned.Count(id => !required.Contains(id)) >= wildcardCount;
+    }
+
+    /// <summary>
+    /// Cross product of Capital's full supported player-count range (3-5, per
+    /// <see cref="Risk.Engine.Setup.GameSetup.PlayerCountRange"/>) and the
+    /// three dice-sequence variants — mirrors <see cref="ClassicScenarios"/>
+    /// exactly. <see cref="Risk.Engine.Setup.GameSetup.Create"/>'s own comment
+    /// confirms Capital "reuses [Classic's Claim/Setup] path unchanged,"
+    /// diverging only after Setup placement into
+    /// <see cref="TurnPhase.SelectHeadquarters"/> instead of Reinforce — so
+    /// driving from <see cref="GameHarness.Start"/> straight into
+    /// <see cref="BotTurnRunner.RunGame"/> (no fast-forward needed) exercises
+    /// the real <see cref="Risk.AI.Decisions.HeadquartersDecision"/>/<see cref="BotPlayer"/>
+    /// stack through that phase for the first time end-to-end, exactly the
+    /// same way 9a/9b exercised Claim/Setup/Reinforce/Attack/Fortify.
+    /// </summary>
+    public static IEnumerable<object[]> CapitalScenarios()
+    {
+        foreach (var playerCount in new[] { 3, 4, 5 })
+        {
+            for (var variant = 0; variant < DiceSequenceVariants.Length; variant++)
+            {
+                yield return [playerCount, variant];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same zero-<c>Rejected</c> reasoning as the Classic/SecretMission tests
+    /// above: reaching <see cref="BotRunResult.Completed"/> is itself
+    /// sufficient proof of zero <c>Rejected</c> results anywhere in the run,
+    /// including through the SelectHeadquarters phase this test is the first
+    /// to drive with the real bot stack.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(CapitalScenarios))]
+    public void A_full_bot_vs_bot_Capital_game_reaches_a_valid_win_with_zero_rejected_commands(int playerCount, int diceVariant)
+    {
+        var dice = new SequenceDiceRoller(DiceSequenceVariants[diceVariant]);
+        var harness = GameHarness.Start(GameMode.Capital, playerCount, dice);
+        IReadOnlyList<IBotPlayer> bots = harness.State.Players
+            .Where(p => !p.IsNeutral)
+            .Select(p => (IBotPlayer)new BotPlayer(p.Id))
+            .ToArray();
+        var runner = new BotTurnRunner(harness.Engine);
+
+        var result = runner.RunGame(harness.State, bots);
+
+        var completed = Assert.IsType<BotRunResult.Completed>(result);
+        Assert.True(completed.CommandsIssued < BotWeights.MaxCommandsPerGame,
+            $"Game reached the {BotWeights.MaxCommandsPerGame}-command budget without a Won state — treat as a stalemate, not a pass.");
+
+        var won = Assert.IsType<GameStatus.Won>(completed.State.Status);
+        var winner = completed.State.Players.Single(p => p.Id == won.Winner);
+        Assert.False(winner.IsEliminated);
+
+        // Capital's real victory rule, called directly on the final state —
+        // mirrors the Classic/SecretMission tests' pattern, so this
+        // assertion can never silently drift from the rule it claims to
+        // verify.
+        Assert.Equal(won.Winner, new CapitalVictoryRule().CheckVictory(completed.State));
+
+        // Independent re-verification, NOT delegating back to
+        // CapitalVictoryRule: re-derive "holds own HQ AND every other active
+        // player's revealed HQ" from the winner's OWN redacted PlayerView
+        // (OwnHeadquarters/RevealedHeadquarters — exactly what a real
+        // bot/AI client sees via Observe), cross-checked against territory
+        // ownership on the final GameState. This is the batch's explicit
+        // ask: don't just trust GameStatus.Won fired.
+        var winnerView = harness.Engine.Observe(completed.State, won.Winner);
+        Assert.NotNull(winnerView.OwnHeadquarters);
+        Assert.Equal(completed.State.Players.Count, winnerView.RevealedHeadquarters.Count);
+        Assert.Equal(won.Winner, completed.State.Territories[winnerView.OwnHeadquarters!.Value].Owner);
+        foreach (var (_, hq) in winnerView.RevealedHeadquarters)
+        {
+            Assert.Equal(won.Winner, completed.State.Territories[hq].Owner);
+        }
+    }
+
+    /// <summary>
+    /// A single, hand-picked dice sequence (playerCount=4) that a wider
+    /// exploratory search confirmed drives a genuine "the eventual winner's
+    /// own headquarters gets captured by someone else, and that same winner
+    /// later recaptures it" sequence during the real bot-vs-bot game — the
+    /// exact path <see cref="BotWeights.RecaptureOwnHqWeight"/> (Phase 5's
+    /// post-review fix) exists to prioritize. Length 17, prime, consistent
+    /// with <see cref="DiceSequenceVariants"/>'s own convention.
+    /// </summary>
+    private static readonly IReadOnlyList<int> CapitalRecaptureDiceSequence =
+        [4, 6, 2, 2, 5, 6, 6, 6, 4, 5, 3, 5, 6, 5, 4, 5, 6];
+
+    /// <summary>
+    /// Dedicated proof of Phase 5's post-review fix
+    /// (<see cref="BotWeights.RecaptureOwnHqWeight"/>): this specific,
+    /// deterministic replay must contain a genuine
+    /// <see cref="HeadquartersCaptured"/> event where the eventual winner
+    /// recaptures ITS OWN previously-lost headquarters
+    /// (<c>Attacker == OriginalOwner == won.Winner</c>) en route to victory —
+    /// not merely a game that happens to end in a win.
+    ///
+    /// <para>
+    /// <b>Why observed opportunistically (via a hand-picked dice sequence),
+    /// not hand-forced (via a spliced <see cref="GameState"/>):</b> Capital
+    /// reuses Classic's Claim/Setup path, which (per
+    /// <see cref="A_full_bot_vs_bot_Classic_game_reaches_a_valid_win_with_zero_rejected_commands"/>'s
+    /// own remarks) never touches <c>Random.Shared</c> — territory dealing is
+    /// fully bot-decided and deterministic for a given dice sequence and
+    /// player count, so a wider search over exactly those two levers (the
+    /// same two <see cref="ClassicScenarios"/>/<see cref="CapitalScenarios"/>
+    /// already vary) is sufficient to reliably locate a scenario exhibiting
+    /// this path — a search that found the sequence below among many
+    /// candidates. Splicing ownership into a hand-edited
+    /// <see cref="GameState"/> (as <see cref="GameHarness.WithMissions"/>
+    /// does for missions) was considered and rejected: unlike a mission
+    /// assignment, forcing HQ/territory ownership without going through the
+    /// engine would desync <see cref="HeadquartersRevealed"/>/troop-total
+    /// invariants the real engine enforces, producing a state no real game
+    /// could ever reach — exactly what <see cref="GameHarness"/>'s own class
+    /// doc says driving only the real engine exists to avoid. Once found,
+    /// the sequence is pinned as a literal so this test is exactly as
+    /// deterministic and reproducible as every other test in this file.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_Capital_winner_can_recapture_its_own_lost_headquarters_en_route_to_victory()
+    {
+        const int playerCount = 4;
+        var dice = new SequenceDiceRoller(CapitalRecaptureDiceSequence);
+        var harness = GameHarness.Start(GameMode.Capital, playerCount, dice);
+        IReadOnlyList<IBotPlayer> bots = harness.State.Players
+            .Where(p => !p.IsNeutral)
+            .Select(p => (IBotPlayer)new BotPlayer(p.Id))
+            .ToArray();
+        var runner = new BotTurnRunner(harness.Engine);
+
+        var result = runner.RunGame(harness.State, bots);
+
+        var completed = Assert.IsType<BotRunResult.Completed>(result);
+        Assert.True(completed.CommandsIssued < BotWeights.MaxCommandsPerGame,
+            $"Game reached the {BotWeights.MaxCommandsPerGame}-command budget without a Won state — treat as a stalemate, not a pass.");
+
+        var won = Assert.IsType<GameStatus.Won>(completed.State.Status);
+        Assert.Equal(won.Winner, new CapitalVictoryRule().CheckVictory(completed.State));
+
+        var selfRecaptured = completed.State.Log
+            .OfType<HeadquartersCaptured>()
+            .Any(e => e.Attacker == won.Winner && e.OriginalOwner == won.Winner);
+
+        Assert.True(selfRecaptured,
+            $"Expected winner {won.Winner} to have recaptured its own previously-lost headquarters " +
+            "somewhere in this deterministic replay (that is this test's whole purpose) — if this ever " +
+            "starts failing after a dice-content or weight retune, re-run the exploratory search and pin " +
+            "a new CapitalRecaptureDiceSequence rather than deleting the assertion.");
     }
 }
