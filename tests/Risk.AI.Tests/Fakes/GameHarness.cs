@@ -1,4 +1,5 @@
 using Risk.Domain.Dice;
+using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
@@ -145,6 +146,28 @@ internal sealed class GameHarness
     }
 
     public PlayerView ViewFor(PlayerId viewer) => Engine.Observe(State, viewer);
+
+    /// <summary>
+    /// Overrides the dealt <see cref="PlayerState.Mission"/> for the given seats — used
+    /// by SecretMission tests that need guaranteed per-archetype coverage rather than
+    /// whatever <see cref="Risk.Engine.Modes.SecretMissionSetupStrategy"/>'s <c>Random.Shared</c>
+    /// deal happens to produce (design D9's random-board invariant testing still applies to
+    /// territory dealing and dice — only the mission assignment is forced here). Only
+    /// <see cref="PlayerState.Mission"/> changes; every other field (including the
+    /// randomly-dealt territories/troops) is untouched. Safe to call any time before the
+    /// game is driven, since <c>Observe</c> re-resolves <c>OwnEffectiveMission</c> from
+    /// <see cref="PlayerState.Mission"/> on every call rather than caching it.
+    /// </summary>
+    public GameHarness WithMissions(IReadOnlyDictionary<PlayerId, MissionCard> missions)
+    {
+        State = State with
+        {
+            Players = State.Players
+                .Select(p => missions.TryGetValue(p.Id, out var mission) ? p with { Mission = mission } : p)
+                .ToArray()
+        };
+        return this;
+    }
 
     /// <summary>
     /// Drives <see cref="DriveOneCommand"/> while <paramref name="shouldContinue"/>

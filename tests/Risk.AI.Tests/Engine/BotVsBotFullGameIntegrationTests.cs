@@ -1,7 +1,11 @@
 using Risk.AI.Scoring;
 using Risk.AI.Tests.Fakes;
+using Risk.Domain.Map;
+using Risk.Domain.Missions;
+using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Modes;
+using Risk.Engine.Rules;
 using Risk.Engine.State;
 
 namespace Risk.AI.Tests.Engine;
@@ -131,5 +135,191 @@ public class BotVsBotFullGameIntegrationTests
         {
             Assert.True(loser.IsEliminated);
         }
+    }
+
+    /// <summary>
+    /// Cross product of SecretMission's full supported player-count range
+    /// (3-5, per <see cref="Risk.Engine.Setup.GameSetup.PlayerCountRange"/>)
+    /// and the three dice-sequence variants — mirrors <see cref="ClassicScenarios"/>
+    /// exactly. Missions here come from <see cref="Risk.Engine.Modes.SecretMissionSetupStrategy"/>'s
+    /// own <c>Random.Shared</c> deal (design D9's random-board invariant
+    /// testing), not forced — this is the "does the real deal terminate"
+    /// proof; <see cref="SecretMissionForcedArchetypeScenarios"/> below is the
+    /// "every archetype genuinely works" proof.
+    /// </summary>
+    public static IEnumerable<object[]> SecretMissionScenarios()
+    {
+        foreach (var playerCount in new[] { 3, 4, 5 })
+        {
+            for (var variant = 0; variant < DiceSequenceVariants.Length; variant++)
+            {
+                yield return [playerCount, variant];
+            }
+        }
+    }
+
+    /// <summary>
+    /// First real end-to-end proof of <see cref="Risk.AI.Scoring.MissionScoring"/>'s
+    /// per-archetype weighting (design's bot-objective-awareness capability):
+    /// every seat is a real <see cref="BotPlayer"/> pursuing whatever mission
+    /// <see cref="Risk.Engine.Modes.SecretMissionSetupStrategy"/> dealt it, and
+    /// the game must terminate with SecretMission's own win condition — a
+    /// player's <see cref="Risk.Engine.Views.PlayerView.OwnEffectiveMission"/>
+    /// being satisfied — not simple map domination. Same zero-<c>Rejected</c>
+    /// reasoning as the Classic test above: reaching <c>Completed</c> is
+    /// itself sufficient proof of zero <c>Rejected</c> results.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(SecretMissionScenarios))]
+    public void A_full_bot_vs_bot_SecretMission_game_reaches_a_valid_win_with_zero_rejected_commands(int playerCount, int diceVariant)
+    {
+        var dice = new SequenceDiceRoller(DiceSequenceVariants[diceVariant]);
+        var harness = GameHarness.Start(GameMode.SecretMission, playerCount, dice);
+        IReadOnlyList<IBotPlayer> bots = harness.State.Players
+            .Where(p => !p.IsNeutral)
+            .Select(p => (IBotPlayer)new BotPlayer(p.Id))
+            .ToArray();
+        var runner = new BotTurnRunner(harness.Engine);
+
+        var result = runner.RunGame(harness.State, bots);
+
+        var completed = Assert.IsType<BotRunResult.Completed>(result);
+        Assert.True(completed.CommandsIssued < BotWeights.MaxCommandsPerGame,
+            $"Game reached the {BotWeights.MaxCommandsPerGame}-command budget without a Won state — treat as a stalemate, not a pass.");
+
+        var won = Assert.IsType<GameStatus.Won>(completed.State.Status);
+        var winner = completed.State.Players.Single(p => p.Id == won.Winner);
+        Assert.False(winner.IsEliminated);
+
+        // SecretMission's real victory rule, called directly on the final
+        // state — mirrors the Classic test's ConquestVictoryRule check, so
+        // this assertion can never silently drift from the rule it claims to
+        // verify.
+        Assert.Equal(won.Winner, new SecretMissionVictoryRule().CheckVictory(completed.State));
+
+        // Independent check, NOT delegating back to SecretMissionVictoryRule:
+        // re-derive completion from the winner's OWN redacted OwnEffectiveMission
+        // (exactly what a real bot/AI client would see via Observe) against the
+        // final board, using a fresh implementation of each archetype's plain
+        // win condition (see IsMissionGenuinelySatisfied below). This is the
+        // batch's explicit ask: don't just trust GameStatus.Won fired.
+        var winnerView = harness.Engine.Observe(completed.State, won.Winner);
+        Assert.NotNull(winnerView.OwnEffectiveMission);
+        Assert.True(
+            IsMissionGenuinelySatisfied(completed.State, won.Winner, winnerView.OwnEffectiveMission!),
+            $"Winner {won.Winner} was reported Won, but their OwnEffectiveMission " +
+            $"({winnerView.OwnEffectiveMission}) is not actually satisfied by the final board state.");
+    }
+
+    /// <summary>
+    /// Latin square over SecretMission's three mission archetypes
+    /// (<see cref="OccupyTerritories"/>, <see cref="ConquerContinents"/>,
+    /// <see cref="EliminateArmy"/>) across a fixed 3-player game: each of the
+    /// 3 rotations assigns a DIFFERENT archetype to each seat, so across all
+    /// 3 rotations every seat gets every archetype exactly once. Missions are
+    /// forced via <see cref="GameHarness.WithMissions"/> — territory dealing
+    /// and combat dice stay genuinely random/varied (one dice-sequence
+    /// variant per rotation) — because <see cref="Random.Shared"/>-based
+    /// mission dealing (see <see cref="SecretMissionScenarios"/> above) gives
+    /// no guarantee any single run exercises all three archetypes, and the
+    /// batch brief explicitly calls for forcing assignments to get that
+    /// guarantee.
+    /// </summary>
+    public static IEnumerable<object[]> SecretMissionForcedArchetypeScenarios()
+    {
+        yield return [0];
+        yield return [1];
+        yield return [2];
+    }
+
+    [Theory]
+    [MemberData(nameof(SecretMissionForcedArchetypeScenarios))]
+    public void A_full_bot_vs_bot_SecretMission_game_reaches_a_valid_win_for_every_forced_mission_archetype(int rotation)
+    {
+        const int playerCount = 3;
+        var dice = new SequenceDiceRoller(DiceSequenceVariants[rotation]);
+        var harness = GameHarness.Start(GameMode.SecretMission, playerCount, dice)
+            .WithMissions(BuildLatinSquareMissions(rotation));
+        IReadOnlyList<IBotPlayer> bots = harness.State.Players
+            .Where(p => !p.IsNeutral)
+            .Select(p => (IBotPlayer)new BotPlayer(p.Id))
+            .ToArray();
+        var runner = new BotTurnRunner(harness.Engine);
+
+        var result = runner.RunGame(harness.State, bots);
+
+        var completed = Assert.IsType<BotRunResult.Completed>(result);
+        Assert.True(completed.CommandsIssued < BotWeights.MaxCommandsPerGame,
+            $"Game reached the {BotWeights.MaxCommandsPerGame}-command budget without a Won state — treat as a stalemate, not a pass.");
+
+        var won = Assert.IsType<GameStatus.Won>(completed.State.Status);
+        var winner = completed.State.Players.Single(p => p.Id == won.Winner);
+        Assert.False(winner.IsEliminated);
+        Assert.Equal(won.Winner, new SecretMissionVictoryRule().CheckVictory(completed.State));
+
+        var winnerView = harness.Engine.Observe(completed.State, won.Winner);
+        Assert.NotNull(winnerView.OwnEffectiveMission);
+        Assert.True(
+            IsMissionGenuinelySatisfied(completed.State, won.Winner, winnerView.OwnEffectiveMission!),
+            $"Winner {won.Winner} was reported Won, but their OwnEffectiveMission " +
+            $"({winnerView.OwnEffectiveMission}) is not actually satisfied by the final board state.");
+    }
+
+    /// <summary>
+    /// Rotation N assigns archetype <c>(seat - N) mod 3</c> to each seat (0 =
+    /// Occupy, 1 = ConquerContinents, 2 = EliminateArmy), so all 3 rotations
+    /// together form a Latin square: every seat gets every archetype exactly
+    /// once, and no rotation ever assigns EliminateArmy targeting its own
+    /// holder (the target is always the NEXT seat in the cycle).
+    /// </summary>
+    private static IReadOnlyDictionary<PlayerId, MissionCard> BuildLatinSquareMissions(int rotation)
+    {
+        var occupy = new OccupyTerritories(18, MinArmiesPerTerritory: 2);
+        var continents = new ConquerContinents([new ContinentId("NA"), new ContinentId("OC")]);
+
+        MissionCard ArchetypeFor(int seat)
+        {
+            var slot = ((seat - rotation) % 3 + 3) % 3;
+            return slot switch
+            {
+                0 => occupy,
+                1 => continents,
+                _ => new EliminateArmy(new ArmyId((seat + 1) % 3)),
+            };
+        }
+
+        return Enumerable.Range(0, 3).ToDictionary(seat => new PlayerId(seat), ArchetypeFor);
+    }
+
+    /// <summary>
+    /// Independently re-derives whether <paramref name="mission"/> (the
+    /// winner's <c>OwnEffectiveMission</c>, exactly as reported by
+    /// <c>Observe</c>) is genuinely satisfied on <paramref name="state"/>'s
+    /// final board — computed from each archetype's plain win condition
+    /// directly against public state (<see cref="ContinentControl.IsFullyOwnedBy"/>,
+    /// <see cref="Continents.All"/>, territory ownership/troop counts,
+    /// elimination status), never by calling <see cref="SecretMissionVictoryRule"/>
+    /// or any of its internals.
+    /// </summary>
+    private static bool IsMissionGenuinelySatisfied(GameState state, PlayerId player, MissionCard mission) =>
+        mission switch
+        {
+            OccupyTerritories(var count, var minArmies) =>
+                state.Territories.Values.Count(t => t.Owner == player && t.Troops >= minArmies) >= count,
+            ConquerContinents(var required, var wildcardCount) => ConquerContinentsSatisfied(state, player, required, wildcardCount),
+            EliminateArmy(var army) => state.Players.Single(p => p.Id.Value == army.Value).IsEliminated,
+            _ => throw new InvalidOperationException("Unreachable: unknown MissionCard archetype."),
+        };
+
+    private static bool ConquerContinentsSatisfied(
+        GameState state, PlayerId player, IReadOnlyList<ContinentId> required, int wildcardCount)
+    {
+        var fullyOwned = Continents.All
+            .Where(c => ContinentControl.IsFullyOwnedBy(c, state.Territories, player))
+            .Select(c => c.Id)
+            .ToHashSet();
+
+        return required.All(fullyOwned.Contains)
+            && fullyOwned.Count(id => !required.Contains(id)) >= wildcardCount;
     }
 }
