@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Risk.AI;
+using Risk.AI.Scoring;
 using Risk.Domain.Dice;
 using Risk.Domain.Missions;
 using Risk.Domain.Players;
@@ -96,6 +97,169 @@ public sealed class GameSessionService(
     public event Action? Changed;
 
     /// <summary>
+    /// Set by <see cref="AdvanceAiTurns"/> when an AI seat's turn could not
+    /// be resolved to completion — either the engine rejected a command the
+    /// bot issued, or the per-drain command budget ran out first (design
+    /// D1/D2). <see langword="null"/> at the start of every mutator
+    /// (<see cref="Start"/>, <see cref="Execute"/>, <see cref="LoadFrom"/>)
+    /// before <see cref="AdvanceAiTurns"/> runs, and cleared by
+    /// <see cref="Reset"/>. Once set, it is never automatically retried —
+    /// surfacing an AI defect is the whole point (design D2).
+    /// </summary>
+    public AiTurnFailure? AiFailure { get; private set; }
+
+    /// <summary>
+    /// The bot instance for each AI-controlled seat, rebuilt whenever seat
+    /// control can change (<see cref="Start"/>/<see cref="LoadFrom"/>) via
+    /// <see cref="RebuildBotRegistry"/>. Never contains the synthesized
+    /// <see cref="GameMode.TwoPlayer"/> neutral seat (always <c>IsAi: false</c>
+    /// per <see cref="Start"/>'s own synthesis).
+    /// </summary>
+    private readonly Dictionary<PlayerId, IBotPlayer> _bots = new();
+
+    /// <summary>
+    /// Each registered bot's own causally-derived memory, threaded across
+    /// <see cref="AdvanceAiTurns"/> calls for as long as the seat keeps its
+    /// registry entry. Reset to <see cref="BotMemory.Empty"/> whenever
+    /// <see cref="RebuildBotRegistry"/> runs (design D4: a resumed AI seat
+    /// via <see cref="LoadFrom"/> is always starting a fresh turn, so
+    /// <c>Empty</c> is correct by construction — see that method's own
+    /// remarks).
+    /// </summary>
+    private readonly Dictionary<PlayerId, BotMemory> _botMemories = new();
+
+    /// <summary>
+    /// Rebuilds <see cref="_bots"/>/<see cref="_botMemories"/> from the
+    /// current <see cref="Players"/> (spec's "Bot registry construction"):
+    /// every <see cref="PlayerConfig.IsAi"/> seat gets a fresh
+    /// <see cref="BotPlayer"/> and <see cref="BotMemory.Empty"/>. Called from
+    /// <see cref="Start"/>/<see cref="LoadFrom"/> only — seat control is
+    /// fixed at game start (spec's "Seat control fixed at game start"
+    /// non-goal), so <see cref="Execute"/> never needs to rebuild.
+    /// </summary>
+    private void RebuildBotRegistry()
+    {
+        _bots.Clear();
+        _botMemories.Clear();
+
+        foreach (var config in Players.Values.Where(c => c.IsAi))
+        {
+            _bots[config.Id] = new BotPlayer(config.Id);
+            _botMemories[config.Id] = BotMemory.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Drains every consecutive AI-controlled seat's turn, starting from
+    /// whichever seat is <see cref="State"/>'s current <c>Turn.CurrentPlayer</c>,
+    /// until either a human (or the <see cref="GameMode.TwoPlayer"/> neutral,
+    /// which never becomes <c>CurrentPlayer</c>) seat is reached,
+    /// <see cref="GameStatus.Won"/> is reached, or the outer per-drain
+    /// command budget (<see cref="BotWeights.MaxCommandsPerGame"/>, design
+    /// D3) is exhausted. Called from <see cref="Start"/>, <see cref="Execute"/>
+    /// (on <c>Ok</c>), and <see cref="LoadFrom"/>, always immediately before
+    /// their own <see cref="Changed"/> invocation, so
+    /// <c>Turn.CurrentPlayer</c> is guaranteed human-or-game-over by the time
+    /// any component renders.
+    ///
+    /// The budget is counted PER CALL (per drain), not per game (design D3):
+    /// an all-AI game resolved entirely from <see cref="Start"/> is one
+    /// drain and correctly gets the full per-game bound, while a later
+    /// <see cref="Execute"/> call's own drain starts its count back at zero —
+    /// <see cref="BotTurnRunner.RunTurn"/> already bounds any single seat's
+    /// turn on its own via <see cref="BotWeights.MaxCommandsPerTurn"/>, so
+    /// this outer counter exists only to bound a CHAIN of seats within one
+    /// call.
+    ///
+    /// On <see cref="BotRunResult.Rejected"/>, <see cref="State"/> is
+    /// deliberately NOT reassigned: the engine leaves state unchanged on a
+    /// rejection, so <see cref="State"/> already equals
+    /// <c>rejected.State</c> — reassigning it would be a no-op at best and
+    /// an easy-to-regress footgun at worst if that invariant ever
+    /// changed. Never retried, never masked — a bot's illegal command is a
+    /// defect (design D2), the same hard-fail posture <see cref="BotTurnRunner"/>
+    /// itself has one layer down.
+    ///
+    /// <para>
+    /// <b>Post-RED fix:</b> each loop iteration calls <see cref="MarkSeenByAllBots"/>
+    /// on <c>bot.Id</c> before <see cref="BotTurnRunner.RunTurn"/> — required
+    /// because <c>RunTurn</c> builds its OWN single-entry <c>{ [bot.Id] = memory }</c>
+    /// dictionary internally (it only ever drives one seat's turn), so
+    /// <c>BotTurnStep.Advance</c>'s "every tracked bot observes the current
+    /// actor" step (design D8, upstream in <c>Risk.AI</c>) can only ever mark
+    /// a bot as having seen ITSELF when driven this way — unlike
+    /// <see cref="BotTurnRunner.RunGame"/>, which keeps every registered
+    /// bot's memory in ONE shared dictionary for the whole game. Without this
+    /// backfill, a <see cref="GameMode.TwoPlayer"/> bot's <c>BotMemory.SeenActors</c>
+    /// would never reach the 2-actor count <c>Decisions.SetupDecision.IsTwoPlayerPhaseB</c>
+    /// requires, so it would never switch to <c>PlaceNeutralTroopsCommand</c>
+    /// once its own Setup pool drains — instead retrying <c>PlaceTroopsCommand</c>
+    /// with <c>TroopsRemaining == 0</c>, a genuine <c>Rejected</c> the engine
+    /// would (and, before this fix, did) return. This was caught by this
+    /// batch's own all-AI-game RED run, not called out in the source design.
+    /// </para>
+    /// </summary>
+    private void AdvanceAiTurns()
+    {
+        var totalCommandsIssued = 0;
+
+        while (State is { Status: GameStatus.InProgress } && _bots.TryGetValue(State.Turn.CurrentPlayer, out var bot))
+        {
+            if (totalCommandsIssued >= BotWeights.MaxCommandsPerGame)
+            {
+                AiFailure = AiTurnFailure.BudgetExhausted(bot.Id);
+                return;
+            }
+
+            MarkSeenByAllBots(bot.Id);
+
+            switch (botRunner.RunTurn(State, bot, _botMemories[bot.Id]))
+            {
+                case BotRunResult.Completed completed:
+                    State = completed.State;
+                    _botMemories[bot.Id] = completed.Memories[bot.Id];
+                    totalCommandsIssued += completed.CommandsIssued;
+                    break;
+
+                case BotRunResult.Rejected rejected:
+                    // rejected.State == State (the engine leaves state
+                    // unchanged on Rejected) — deliberately not reassigned,
+                    // never retried. See this method's own doc comment.
+                    AiFailure = AiTurnFailure.Rejected(bot.Id, rejected.Command, rejected.Error);
+                    return;
+
+                case BotRunResult.Exhausted exhausted:
+                    State = exhausted.State;
+                    foreach (var (pid, mem) in exhausted.Memories)
+                    {
+                        _botMemories[pid] = mem;
+                    }
+
+                    AiFailure = AiTurnFailure.BudgetExhausted(bot.Id);
+                    return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records <paramref name="actor"/> as seen (<see cref="BotMemory.WithSeenActor"/>)
+    /// in every currently-registered bot's memory — the cross-seat backfill
+    /// <see cref="AdvanceAiTurns"/>'s per-seat <see cref="BotTurnRunner.RunTurn"/>
+    /// calls need (see that method's own doc comment) and, via <see cref="Execute"/>'s
+    /// own call site below, the same backfill for a HUMAN seat's turn, which
+    /// never otherwise passes through <see cref="AdvanceAiTurns"/> at all. A
+    /// no-op for any bot that has already recorded <paramref name="actor"/>
+    /// (<see cref="BotMemory.WithSeenActor"/> itself is idempotent).
+    /// </summary>
+    private void MarkSeenByAllBots(PlayerId actor)
+    {
+        foreach (var id in _bots.Keys)
+        {
+            _botMemories[id] = _botMemories[id].WithSeenActor(actor);
+        }
+    }
+
+    /// <summary>
     /// Starts a new game from the setup screen's rows: wraps
     /// <see cref="GameSetup.Create"/> and, on success, zips
     /// <paramref name="rows"/> to the implicit <c>PlayerId(0..N-1)</c>
@@ -132,6 +296,11 @@ public sealed class GameSessionService(
             }
 
             Players = players;
+
+            AiFailure = null;
+            RebuildBotRegistry();
+            AdvanceAiTurns();
+
             Changed?.Invoke();
         }
 
@@ -151,6 +320,16 @@ public sealed class GameSessionService(
         {
             State = ok.State;
             LastEvents = ok.Events;
+
+            // Backfill for a human seat's own turn (see MarkSeenByAllBots'
+            // doc comment) — command.Actor is guaranteed to equal the
+            // pre-command Turn.CurrentPlayer here, per the engine's own
+            // actor-is-current-player validation gate.
+            MarkSeenByAllBots(command.Actor);
+
+            AiFailure = null;
+            AdvanceAiTurns();
+
             Changed?.Invoke();
         }
 
@@ -208,6 +387,13 @@ public sealed class GameSessionService(
         Players = new Dictionary<PlayerId, PlayerConfig>();
         LastEvents = [];
         OwnerUserId = null;
+
+        // Design D7: a reset session must not retain seat->bot bindings, nor
+        // a stale failure, from whatever game was previously loaded here.
+        AiFailure = null;
+        _bots.Clear();
+        _botMemories.Clear();
+
         Changed?.Invoke();
     }
 
@@ -251,6 +437,11 @@ public sealed class GameSessionService(
         State = snapshot.State;
         Players = snapshot.Players.ToDictionary(p => p.Id);
         LastEvents = [];
+
+        AiFailure = null;
+        RebuildBotRegistry();
+        AdvanceAiTurns();
+
         Changed?.Invoke();
     }
 
