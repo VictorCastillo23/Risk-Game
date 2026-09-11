@@ -199,13 +199,30 @@ public sealed class GameSessionService(
     /// batch's own all-AI-game RED run, not called out in the source design.
     /// </para>
     /// </summary>
-    private void AdvanceAiTurns()
+    private void AdvanceAiTurns() => AdvanceAiTurns(BotWeights.MaxCommandsPerGame);
+
+    /// <summary>
+    /// The actual implementation behind the no-arg <see cref="AdvanceAiTurns()"/>
+    /// above, with the per-drain budget exposed as an <see langword="internal"/>
+    /// parameter purely as a test seam (fresh-context review, post-Phase-3):
+    /// the real budget, <see cref="BotWeights.MaxCommandsPerGame"/>
+    /// (250,000), makes <see cref="AiTurnFailure.BudgetExhausted"/> and the
+    /// <see cref="BotRunResult.Exhausted"/> switch arm effectively
+    /// untestable without an impractically long-running test. Every
+    /// production caller (<see cref="Start(IReadOnlyList{PlayerSetupRow}, GameMode)"/>,
+    /// <see cref="Execute"/>, <see cref="LoadFrom"/>) only ever reaches this
+    /// through the no-arg overload's real budget; only
+    /// <c>Risk.Web.Tests</c> (via <c>InternalsVisibleTo</c>) calls this
+    /// overload, or the internal <see cref="Start(IReadOnlyList{PlayerSetupRow}, GameMode, int)"/>
+    /// test seam, directly with an artificially tiny value.
+    /// </summary>
+    internal void AdvanceAiTurns(int maxCommands)
     {
         var totalCommandsIssued = 0;
 
         while (State is { Status: GameStatus.InProgress } && _bots.TryGetValue(State.Turn.CurrentPlayer, out var bot))
         {
-            if (totalCommandsIssued >= BotWeights.MaxCommandsPerGame)
+            if (totalCommandsIssued >= maxCommands)
             {
                 AiFailure = AiTurnFailure.BudgetExhausted(bot.Id);
                 return;
@@ -271,7 +288,24 @@ public sealed class GameSessionService(
     /// <see cref="GameMode.Classic"/>, matching <c>Setup.razor</c>'s mode
     /// dropdown default (roadmap item 2.2).
     /// </param>
-    public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic)
+    public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic) =>
+        Start(rows, mode, BotWeights.MaxCommandsPerGame);
+
+    /// <summary>
+    /// The actual implementation behind the public <see cref="Start(IReadOnlyList{PlayerSetupRow}, GameMode)"/>
+    /// overload above, with the per-drain AI budget exposed as an
+    /// <see langword="internal"/> parameter for the same reason as
+    /// <see cref="AdvanceAiTurns(int)"/>: it is the only entry point that
+    /// can put <see cref="AdvanceAiTurns(int)"/>'s
+    /// <see cref="AiTurnFailure.BudgetExhausted"/> path under test with an
+    /// all-AI roster, since a fresh <see cref="_bots"/> registry can only
+    /// ever be populated by <see cref="Start"/>/<see cref="LoadFrom"/>, both
+    /// of which otherwise always drain with the real (untestably large)
+    /// budget before returning control to any caller — there is no other
+    /// seam from which to observe a genuinely mid-drain, not-yet-exhausted
+    /// AI turn from outside this class.
+    /// </summary>
+    internal CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode, int aiTurnBudget)
     {
         var result = GameSetup.Create(rows.Count, mode, dice);
 
@@ -299,7 +333,7 @@ public sealed class GameSessionService(
 
             AiFailure = null;
             RebuildBotRegistry();
-            AdvanceAiTurns();
+            AdvanceAiTurns(aiTurnBudget);
 
             Changed?.Invoke();
         }

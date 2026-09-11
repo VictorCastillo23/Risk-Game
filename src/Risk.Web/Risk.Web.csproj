@@ -19,6 +19,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      risk-web-ai-seats (Phase 2/3 fresh-context review fix): GameSessionService
+      exposes internal test-only overloads (AdvanceAiTurns(int), Start(..., int))
+      so GameSessionServiceAiIntegrationTests can force AiTurnFailure.BudgetExhausted
+      deterministically with a tiny budget instead of driving the real
+      250,000-command BotWeights.MaxCommandsPerGame budget.
+    -->
+    <InternalsVisibleTo Include="Risk.Web.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

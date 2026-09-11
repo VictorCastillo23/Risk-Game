@@ -275,4 +275,178 @@ public class GameSessionServiceAiIntegrationTests
         // No retry: the fake was asked to reject exactly once.
         Assert.Equal(1, fakeEngine.Rejections);
     }
+
+    /// <summary>
+    /// Fresh-context review fix (Gap 1): the handoff scenario above only
+    /// ever plays ONE round-trip, which never reaches
+    /// <c>GameMode.TwoPlayer</c>'s Setup Phase B — so it can never prove the
+    /// <c>Execute</c>-side <c>MarkSeenByAllBots(command.Actor)</c> call site
+    /// (the one that records a HUMAN's own turn as "seen" by every
+    /// registered bot) is load-bearing. Without it, a bot's
+    /// <c>BotMemory.SeenActors</c> would get stuck at <c>{ self }</c> forever
+    /// (see <see cref="AdvanceAiTurns"/>'s own "Post-RED fix" doc comment),
+    /// <c>Decisions.SetupDecision.IsTwoPlayerPhaseB</c> would never trip, and
+    /// the bot would keep re-submitting an already-exhausted
+    /// <c>PlaceTroopsCommand</c> — a genuine <c>Rejected</c> the moment its
+    /// own Setup pool hits 0. This test drives a REAL human (scripted,
+    /// purely defensive — places troops, never attacks, always
+    /// <see cref="EndPhaseCommand"/>s Attack/Fortify) against a REAL AI seat
+    /// all the way to <see cref="GameStatus.Won"/>, so both Setup Phase A
+    /// AND Phase B are genuinely exercised for BOTH seats, and the AI's own
+    /// aggression (<see cref="AlwaysAttackerWinsDiceRoller"/> guarantees
+    /// every attack it launches succeeds) is what ends the game.
+    /// </summary>
+    [Fact]
+    public void A_human_vs_AI_TwoPlayer_game_reaches_Setup_Phase_B_and_Won_with_no_AiFailure()
+    {
+        const int MaxCommands = 5_000; // safety net: fail loudly instead of hanging if something stalls
+
+        var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
+        var session = new GameSessionService(
+            engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(),
+            StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
+
+        var rows = new List<PlayerSetupRow>
+        {
+            new("Human", "#E53935", false),
+            new("Bot", "#1E88E5", true),
+        };
+        var startResult = session.Start(rows, GameMode.TwoPlayer);
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(startResult);
+
+        var commandsIssued = 0;
+
+        while (session.State!.Turn.Phase == TurnPhase.Setup)
+        {
+            Assert.True(++commandsIssued < MaxCommands, "Setup phase exceeded the safety command cap.");
+
+            // The bot's own Setup turns (Phase A and B alike) are fully
+            // resolved inside Execute, below, before control ever returns
+            // here — so whenever WE observe the game from outside, it must
+            // always be the human's turn.
+            Assert.Equal(Seat0, session.State!.Turn.CurrentPlayer);
+            Assert.Null(session.AiFailure);
+
+            DriveOneHumanSetupPlacement(session, Seat0);
+        }
+
+        Assert.Null(session.AiFailure);
+
+        while (session.State!.Status is not GameStatus.Won)
+        {
+            Assert.True(++commandsIssued < MaxCommands, "Main game loop exceeded the safety command cap.");
+
+            var state = session.State!;
+            Assert.Equal(Seat0, state.Turn.CurrentPlayer);
+            Assert.Null(session.AiFailure);
+
+            // The human is purely defensive: places reinforcements, never
+            // attacks, never fortifies. Only the bot ever attacks — with
+            // AlwaysAttackerWinsDiceRoller guaranteeing every one of its
+            // attacks succeeds, it eventually eliminates the human.
+            var result = state.Turn.Phase switch
+            {
+                TurnPhase.Reinforce when state.Players.Single(p => p.Id == Seat0).TroopsRemaining > 0 =>
+                    session.Execute(new PlaceTroopsCommand(Seat0, state.Territories.First(kv => kv.Value.Owner == Seat0).Key, 1)),
+                _ => session.Execute(new EndPhaseCommand(Seat0)),
+            };
+
+            Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        }
+
+        Assert.Null(session.AiFailure);
+        var won = Assert.IsType<GameStatus.Won>(session.State!.Status);
+
+        // The bot (Seat1) wins by eliminating the purely-defensive human —
+        // proving the AI's own Attack-phase decisions ran correctly for a
+        // full game, not just a handful of Setup commands.
+        Assert.Equal(Seat1, won.Winner);
+
+        // Setup Phase B genuinely ran for BOTH seats (design D8's
+        // Phase A/B boundary) — the exact fact Gap 1's fix makes possible:
+        // without it, the bot's own IsTwoPlayerPhaseB check would never
+        // trip, and this event would never appear.
+        var neutralPlacements = session.State!.Log.OfType<NeutralTroopsPlaced>().ToList();
+        Assert.NotEmpty(neutralPlacements);
+        Assert.Contains(neutralPlacements, e => e.Placer == Seat0);
+        Assert.Contains(neutralPlacements, e => e.Placer == Seat1);
+    }
+
+    /// <summary>Mirrors <c>Risk.Tests.Fakes.GameSimulation.PlaceOneStartingTroop</c>, scoped to the human seat only (the bot's own Setup turns auto-resolve inside <see cref="GameSessionService.Execute"/>).</summary>
+    private static void DriveOneHumanSetupPlacement(GameSessionService session, PlayerId human)
+    {
+        var state = session.State!;
+        var humanPool = state.Players.Single(p => p.Id == human).TroopsRemaining;
+
+        if (humanPool == 0)
+        {
+            // Setup Phase B: the human's own pool is drained, so this
+            // command places one of the NEUTRAL's remaining troops.
+            var neutralId = state.Players.Single(p => p.IsNeutral).Id;
+            var neutralTerritory = state.Territories.First(kv => kv.Value.Owner == neutralId).Key;
+            var neutralResult = session.Execute(new PlaceNeutralTroopsCommand(human, neutralTerritory, 1));
+            Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(neutralResult);
+            return;
+        }
+
+        var territory = state.Territories.First(kv => kv.Value.Owner == human).Key;
+        var result = session.Execute(new PlaceTroopsCommand(human, territory, 1));
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+    }
+
+    /// <summary>
+    /// Fresh-context review fix (Gap 2): <see cref="AdvanceAiTurns"/>'s outer
+    /// per-drain budget check and the <c>BotRunResult.Exhausted</c> switch
+    /// arm were new production code with zero test coverage — the REAL
+    /// budget (<c>BotWeights.MaxCommandsPerGame</c>, 250,000) makes hitting
+    /// it directly impractical. The internal
+    /// <see cref="GameSessionService.Start(IReadOnlyList{PlayerSetupRow}, GameMode, int)"/>
+    /// test seam lets this test force the budget down to 1, deterministically
+    /// tripping <see cref="AiTurnFailure.BudgetExhausted"/> after the FIRST
+    /// bot (Seat0, TwoPlayer's <c>players[0]</c>) completes its own
+    /// 2-command Setup turn (TwoPlayer's Setup budget is 2 troops per turn,
+    /// and <c>Decisions.SetupDecision</c> always places exactly 1 troop per
+    /// command — see <see cref="GameEngine.SetupTroopsPerTurn"/> — so
+    /// Seat0's first turn always costs exactly 2 commands), before Seat1 (the
+    /// OTHER bot) ever gets a turn.
+    /// </summary>
+    [Fact]
+    public void An_exhausted_per_drain_budget_sets_AiFailure_and_preserves_partial_progress()
+    {
+        var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
+        var session = new GameSessionService(
+            engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(),
+            StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
+
+        var rows = new List<PlayerSetupRow>
+        {
+            new("Bot A", "#E53935", true),
+            new("Bot B", "#1E88E5", true),
+        };
+
+        var startResult = session.Start(rows, GameMode.TwoPlayer, aiTurnBudget: 1);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(startResult);
+        Assert.NotNull(session.State);
+        Assert.IsType<GameStatus.InProgress>(session.State!.Status);
+
+        // Seat0's own 2-command Setup turn completed (the budget check only
+        // runs BEFORE a seat's turn starts, never mid-turn), then the
+        // outer check tripped before Seat1 ever got to act.
+        Assert.Equal(Seat1, session.State!.Turn.CurrentPlayer);
+
+        var failure = session.AiFailure;
+        Assert.NotNull(failure);
+        Assert.Equal(Seat1, failure!.Player);
+        Assert.True(failure.IsBudgetExhausted);
+        Assert.Null(failure.Command);
+        Assert.Null(failure.Error);
+
+        // State reflects the genuine partial progress made before the
+        // budget cut the drain off — not corrupted, not reverted: exactly
+        // Seat0's own 2 TroopsPlaced commands, nothing from Seat1.
+        var placements = session.State!.Log.OfType<TroopsPlaced>().ToList();
+        Assert.Equal(2, placements.Count);
+        Assert.All(placements, e => Assert.Equal(Seat0, e.Player));
+    }
 }
