@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using Risk.Domain.Errors
 @using Risk.Domain.Map
+@using Risk.Domain.Players
 @using Risk.Engine.Commands
 @using Risk.Engine.Events
 @using Risk.Engine.Results
@@ -12,6 +13,8 @@
 @using Risk.Web.Persistence
 @using Risk.Web.Services
 @inject GameSessionService Session
+@inject NetworkGameRegistry Games
+@inject NetworkedSeatContext NetContext
 @inject NavigationManager Navigation
 @inject ProtectedSessionStorage SessionStorage
 
@@ -28,6 +31,11 @@
     // occupation gate below, or OccupyPrompt would render a "Confirmar"
     // button that always fails with GameOver.
     var isWon = state.Status is GameStatus.Won;
+    // Networked gating (openspec risk-web-multiplayer): only the current
+    // seat's device interacts; everyone else (including spectators) gets a
+    // read-only board. Hot-seat (no ActiveNetwork) is always interactive.
+    var myTurn = IsMyTurn();
+    var canSeeHand = CanSeeHand();
 
     <div class="game-shell">
         <PlayerStatsBar State="state" Players="Session.Players" />
@@ -35,13 +43,21 @@
 
         <div class="game-columns">
             <div class="game-board-column">
-                <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" OnTerritoryRightClick="OnTerritoryRightClick" Pending="_staging.Pending" Locked="isWon || pendingOccupation is not null" />
+                <BoardSvg State="state" Players="Session.Players" Selected="_selection.Origin" OnTerritoryClick="OnTerritoryClick" OnTerritoryRightClick="OnTerritoryRightClick" Pending="_staging.Pending" Locked="isWon || pendingOccupation is not null || !myTurn" />
             </div>
 
             <div class="game-side-column">
                 @if (state.Status is GameStatus.Won won)
                 {
                     <VictoryScreen Winner="Session.ConfigFor(won.Winner)" />
+                }
+                else if (!myTurn)
+                {
+                    // Read-only view for waiting players and spectators: no
+                    // command panel can dispatch here (board clicks are also
+                    // ignored in OnTerritoryClick), and the engine's own
+                    // NotYourTurn gate stays authoritative regardless.
+                    <p class="game-waiting" role="status">Esperando a @Session.ConfigFor(state.Turn.CurrentPlayer).Name…</p>
                 }
                 else if (pendingOccupation is not null)
                 {
@@ -68,12 +84,19 @@
                     <FortifyPanel CurrentPlayer="state.Turn.CurrentPlayer" State="state" Origin="_selection.Origin" Destination="_selection.Destination" />
                 }
 
-                @if (state.Mode == GameMode.SecretMission)
+                @if (myTurn && state.Mode == GameMode.SecretMission)
                 {
                     <MissionPanel CurrentPlayer="state.Turn.CurrentPlayer" />
                 }
                 <DicePanel Battle="_lastBattle" />
-                <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
+                @if (canSeeHand)
+                {
+                    // Networked: ObserveCurrentPlayer returns THIS circuit's
+                    // seat view, so each device only ever sees its own hand.
+                    // Seatless/spectator circuits have no view (the proxy
+                    // throws) — hence the gate. Hot-seat always passes it.
+                    <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
+                }
                 @if (Session.AiFailure is { } aiFailure)
                 {
                     <p class="game-error" role="alert" aria-live="polite">@AiFailureMessage(aiFailure)</p>
@@ -82,7 +105,12 @@
                 {
                     <p class="game-post-login-save @(_postLoginSaveFailed ? "game-error" : "")" role="@(_postLoginSaveFailed ? "alert" : "status")">@_postLoginSaveMessage</p>
                 }
-                <SavePanel />
+                @if (Session.ActiveNetwork is null)
+                {
+                    // Networked saves are host-driven (lobby button); hidden
+                    // here so a guest can't snapshot a game they don't own.
+                    <SavePanel />
+                }
                 <LogPanel Log="state.Log" Players="Session.Players" />
             </div>
         </div>
@@ -90,6 +118,30 @@
 }
 
 @code {
+    // Networked turn gating (openspec risk-web-multiplayer): hot-seat is
+    // always interactive; a networked circuit only acts on its own seated
+    // turn (non-negative seat id equal to Turn.CurrentPlayer). Spectators
+    // (negative ids) and seatless viewers are read-only by construction.
+    private bool IsMyTurn()
+    {
+        if (Session.ActiveNetwork is null)
+        {
+            return true;
+        }
+
+        var seat = NetContext.Seat;
+        var state = Session.State;
+        return state is not null && seat is { } s && s.Value >= 0 && state.Turn.CurrentPlayer == s;
+    }
+
+    /// <summary>
+    /// Whether this circuit may see a hand panel: everyone in hot-seat,
+    /// only seated non-spectator circuits in networked games (the proxy
+    /// throws for seatless/spectator viewers — the anti-leak default).
+    /// </summary>
+    private bool CanSeeHand() =>
+        Session.ActiveNetwork is null || (NetContext.Seat is { } s && s.Value >= 0);
+
     // Design's read convention (D5): board/turn/phase come straight off
     // Session.State (GameState), never Observe() — only the hand-of-cards
     // panel (a later PR) needs the redacted PlayerView seam.
@@ -251,11 +303,52 @@
 
         if (!Session.IsStarted)
         {
+            // Networked reload (Phase 4): a fresh circuit lost its scoped
+            // context but the browser still bookmarks (code, seat) — rebind
+            // before giving up and bouncing home.
+            if (await TryRestoreNetworkSeatAsync())
+            {
+                SubscribeToSessionChanged();
+                StateHasChanged();
+                return;
+            }
+
             Navigation.NavigateTo("/");
             return;
         }
 
         SubscribeToSessionChanged();
+    }
+
+    /// <summary>
+    /// Best-effort seat rebind from the lobby bookmark; false means "nothing
+    /// restorable" (no bookmark, unknown game/seat) — the caller bounces
+    /// home. Never throws: storage failures degrade to a fresh join.
+    /// </summary>
+    private async Task<bool> TryRestoreNetworkSeatAsync()
+    {
+        try
+        {
+            var stored = await SessionStorage.GetAsync<NetworkSeatBookmark>(NetworkSeatBookmark.StorageKey);
+            if (stored.Success
+                && stored.Value is { } mark
+                && JoinCode.TryParse(mark.Code, out var code)
+                && Games.TryGet(code, out var session)
+                && session is not null
+                && NetContext.CircuitId is { } circuit
+                && session.Join(new PlayerId(mark.Seat), circuit))
+            {
+                NetContext.Code = session.Code;
+                NetContext.Seat = new PlayerId(mark.Seat);
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best-effort by design — see the doc comment above.
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -301,7 +394,7 @@
     {
         var state = Session.State;
 
-        if (state is null || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
+        if (state is null || !IsMyTurn() || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || !ClickablePhases.Contains(state.Turn.Phase))
         {
             return;
         }
@@ -397,7 +490,7 @@
     {
         var state = Session.State;
 
-        if (state is null || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || state.Turn.Phase != TurnPhase.Reinforce)
+        if (state is null || !IsMyTurn() || state.Status is GameStatus.Won || state.Turn.PendingOccupation is not null || state.Turn.Phase != TurnPhase.Reinforce)
         {
             return;
         }

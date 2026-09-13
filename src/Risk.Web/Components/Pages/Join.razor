@@ -1,0 +1,106 @@
+@page "/join"
+@page "/join/{code?}"
+@using Risk.Engine.State
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject NetworkGameRegistry Games
+@inject NetworkedSeatContext NetContext
+@inject NavigationManager Navigation
+
+<PageTitle>Risk — Unirse a partida</PageTitle>
+
+<h1>Unirse a partida en red</h1>
+
+<input type="text"
+       value="@_code"
+       placeholder="Código (ej. R7K9X2)"
+       @oninput="e => _code = (string?)e.Value ?? string.Empty" />
+
+<input type="text"
+       value="@_name"
+       placeholder="Tu nombre"
+       @oninput="e => _name = (string?)e.Value ?? string.Empty" />
+
+<label>
+    <input type="checkbox" checked="@_spectator" @onchange="e => _spectator = (bool)(e.Value ?? false)" />
+    Unirse como espectador (solo mirar)
+</label>
+
+<button type="button" @onclick="OnJoin">Unirse</button>
+
+@if (_error is not null)
+{
+    <p class="game-error" role="alert">@_error</p>
+}
+
+@code {
+    [Parameter]
+    public string? Code { get; set; }
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private bool _spectator;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrWhiteSpace(Code))
+        {
+            _code = Code;
+        }
+    }
+
+    /// <summary>
+    /// Claims a seat and hands off to the lobby. Players may only join
+    /// before start (post-start player claims would break the engine's
+    /// <c>0..N-1</c> zip); spectators may join anytime, including mid-game.
+    /// </summary>
+    private void OnJoin()
+    {
+        if (!JoinCode.TryParse(_code, out var code)
+            || code is null
+            || !Games.TryGet(code, out var session)
+            || session is null)
+        {
+            _error = "Código inválido o partida no encontrada.";
+            return;
+        }
+
+        var players = session.Seats.Where(s => !s.IsSpectator).ToList();
+
+        if (_spectator)
+        {
+            var specName = string.IsNullOrWhiteSpace(_name)
+                ? $"Espectador {session.Seats.Count(s => s.IsSpectator) + 1}"
+                : _name.Trim();
+            var seat = session.ClaimSeat(specName, "#6C757D", NetContext.CircuitId, isSpectator: true);
+            NetContext.Code = session.Code;
+            NetContext.Seat = seat;
+            _error = null;
+            Navigation.NavigateTo($"/lobby/{session.Code.Value}");
+            return;
+        }
+
+        if (session.IsStarted)
+        {
+            _error = "La partida ya inició; podés unirte como espectador.";
+            return;
+        }
+
+        if (players.Count >= PlayerPalette.Swatches.Count)
+        {
+            _error = "Mesa llena (6 jugadores).";
+            return;
+        }
+
+        var taken = players.Select(s => s.Config.ColorHex).ToHashSet();
+        var color = PlayerPalette.Swatches.FirstOrDefault(s => !taken.Contains(s)) ?? PlayerPalette.Swatches[0];
+        var name = string.IsNullOrWhiteSpace(_name) ? $"Jugador {players.Count + 1}" : _name.Trim();
+
+        var playerSeat = session.ClaimSeat(name, color, NetContext.CircuitId);
+        NetContext.Code = session.Code;
+        NetContext.Seat = playerSeat;
+        _error = null;
+        Navigation.NavigateTo($"/lobby/{session.Code.Value}");
+    }
+}

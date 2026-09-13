@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -34,6 +35,18 @@ builder.Services.AddSingleton<IGameEngine, GameEngine>();
 builder.Services.AddSingleton<BotTurnRunner>();
 builder.Services.AddScoped<IGameStore, EfGameStore>();
 builder.Services.AddScoped<GameSessionService>();
+
+// Networked multiplayer (openspec risk-web-multiplayer): the join-code ->
+// session registry is the only networked singleton. Sessions themselves
+// live in the registry (one per game, shared across circuits); the scoped
+// GameSessionService above stays the hot-seat path, untouched.
+builder.Services.AddSingleton<NetworkGameRegistry>();
+
+// Networked seat identity: scoped context (one per circuit/device) fed by
+// the circuit handler above it — registered as CircuitHandler so Blazor
+// invokes it for every new circuit automatically.
+builder.Services.AddScoped<NetworkedSeatContext>();
+builder.Services.AddScoped<CircuitHandler, NetworkCircuitHandler>();
 
 // Accounts (design D1/D4): Identity gates only /saved and the future
 // save/resume actions — anonymous hot-seat play through Setup.razor/

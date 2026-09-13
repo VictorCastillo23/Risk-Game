@@ -15,6 +15,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Risk.Domain\Risk.Domain.csproj" />
     <ProjectReference Include="..\Risk.Engine\Risk.Engine.csproj" />
+    <!-- AI seats (hot-seat and networked) drive IBotPlayer/BotTurnRunner
+         server-side — same dependency direction as Risk.AI's own consumers
+         (Domain + Engine only, never the reverse). -->
     <ProjectReference Include="..\Risk.AI\Risk.AI.csproj" />
   </ItemGroup>
 

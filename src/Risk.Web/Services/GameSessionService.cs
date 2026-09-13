@@ -77,36 +77,140 @@ public enum ResumeOutcome
 /// <see cref="ResumeAsync"/>. The signed-in user's id is resolved from
 /// <paramref name="authStateProvider"/>'s server-side principal (design D4)
 /// — no component ever passes an id in directly.
+///
+/// Networked proxy (openspec risk-web-multiplayer): when this circuit
+/// joined a networked game (<paramref name="net"/> holds its code+seat and
+/// <paramref name="games"/> resolves it), <see cref="State"/>,
+/// <see cref="Players"/>, <see cref="LastEvents"/>, <see cref="Execute"/>
+/// and <see cref="ObserveCurrentPlayer"/> read/forward through that shared
+/// <see cref="NetworkGameSession"/> — so every existing panel works
+/// unchanged across devices. <see cref="Changed"/> is re-raised from the
+/// network session (forwarding swapped whenever the active game changes).
+/// With no joined game every member behaves exactly like hot-seat; both
+/// parameters are optional precisely so the 1:1 hot-seat construction in
+/// existing tests keeps compiling untouched.
 /// </summary>
 public sealed class GameSessionService(
     IGameEngine engine,
     IDiceRoller dice,
     IGameStore store,
     AuthenticationStateProvider authStateProvider,
-    BotTurnRunner botRunner)
+    BotTurnRunner botRunner,
+    NetworkGameRegistry? games = null,
+    NetworkedSeatContext? net = null)
 {
-    public GameState? State { get; private set; }
-
-    public IReadOnlyDictionary<PlayerId, PlayerConfig> Players { get; private set; } =
+    private GameState? _state;
+    private IReadOnlyDictionary<PlayerId, PlayerConfig> _players =
         new Dictionary<PlayerId, PlayerConfig>();
+    private IReadOnlyList<GameEvent> _lastEvents = [];
 
-    public IReadOnlyList<GameEvent> LastEvents { get; private set; } = [];
+    /// <summary>
+    /// The joined networked game, if this circuit claimed a seat in one.
+    /// Null = plain hot-seat. Ensures <see cref="Changed"/> forwarding from
+    /// whichever game is active (subscription swapped on change).
+    /// </summary>
+    public NetworkGameSession? ActiveNetwork
+    {
+        get
+        {
+            NetworkGameSession? active = null;
+            if (net?.Code is not null && games?.TryGet(net.Code, out var session) == true)
+            {
+                active = session;
+            }
+
+            if (!ReferenceEquals(active, _forwarded))
+            {
+                if (_forwarded is not null)
+                {
+                    _forwarded.Changed -= OnNetworkChanged;
+                }
+
+                _forwarded = active;
+                if (_forwarded is not null)
+                {
+                    _forwarded.Changed += OnNetworkChanged;
+                }
+            }
+
+            return active;
+        }
+    }
+
+    private NetworkGameSession? _forwarded;
+
+    private void OnNetworkChanged() => _changed?.Invoke();
+
+    public GameState? State
+    {
+        get => ActiveNetwork?.State ?? _state;
+        private set => _state = value;
+    }
+
+    public IReadOnlyDictionary<PlayerId, PlayerConfig> Players
+    {
+        get => ActiveNetwork is { } active
+            ? active.Seats.ToDictionary(s => s.Config.Id, s => s.Config)
+            : _players;
+        private set => _players = value;
+    }
+
+    public IReadOnlyList<GameEvent> LastEvents
+    {
+        get => ActiveNetwork?.LastEvents ?? _lastEvents;
+        private set => _lastEvents = value;
+    }
+
+    /// <summary>
+    /// The table's bot failure, if a bot turn hard-stopped. In a networked
+    /// game this surfaces the shared session's failure; in hot-seat, this
+    /// circuit's own. Null while every bot turn completes. All internal
+    /// writes go through the private setter (hot-seat machinery); the
+    /// networked session owns its own copy.
+    /// </summary>
+    public AiTurnFailure? AiFailure
+    {
+        get => ActiveNetwork?.AiFailure ?? _aiFailure;
+        private set => _aiFailure = value;
+    }
+
+    private AiTurnFailure? _aiFailure;
 
     public bool IsStarted => State is not null;
 
-    public event Action? Changed;
+    private Action? _changed;
 
     /// <summary>
+    /// Subscribing ensures network forwarding first: a circuit that only
+    /// subscribes (like Game.razor's OnInitialized) without having read
+    /// <see cref="State"/> yet must still receive networked updates. Found
+    /// by the relay test failing before this accessor existed.
+    /// </summary>
+    public event Action? Changed
+    {
+        add
+        {
+            _ = ActiveNetwork;
+            _changed += value;
+        }
+        remove => _changed -= value;
+    }
+
+    /// <summary>
+    /// The table's bot failure (main's hot-seat doc below, extended): in a
+    /// networked game this surfaces the shared session's failure instead —
+    /// see the unified member above. Once set, it is never automatically
+    /// retried — surfacing an AI defect is the whole point (design D2).
+    /// </summary>
+    /// <remarks>
     /// Set by <see cref="AdvanceAiTurns"/> when an AI seat's turn could not
     /// be resolved to completion — either the engine rejected a command the
     /// bot issued, or the per-drain command budget ran out first (design
     /// D1/D2). <see langword="null"/> at the start of every mutator
     /// (<see cref="Start"/>, <see cref="Execute"/>, <see cref="LoadFrom"/>)
     /// before <see cref="AdvanceAiTurns"/> runs, and cleared by
-    /// <see cref="Reset"/>. Once set, it is never automatically retried —
-    /// surfacing an AI defect is the whole point (design D2).
-    /// </summary>
-    public AiTurnFailure? AiFailure { get; private set; }
+    /// <see cref="Reset"/>.
+    /// </remarks>
 
     /// <summary>
     /// The bot instance for each AI-controlled seat, rebuilt whenever seat
@@ -330,12 +434,11 @@ public sealed class GameSessionService(
             }
 
             Players = players;
-
             AiFailure = null;
             RebuildBotRegistry();
             AdvanceAiTurns(aiTurnBudget);
 
-            Changed?.Invoke();
+            _changed?.Invoke();
         }
 
         return result;
@@ -343,6 +446,14 @@ public sealed class GameSessionService(
 
     public CommandResult<GameState, GameEvent> Execute(GameCommand command)
     {
+        // Networked circuits dispatch through the shared session (whose own
+        // server-side turn gate rejects out-of-turn actors); hot-seat goes
+        // straight to the engine, exactly as before.
+        if (ActiveNetwork is { } active)
+        {
+            return active.Dispatch(command);
+        }
+
         if (State is null)
         {
             throw new InvalidOperationException("GameSessionService.Execute was called before Start.");
@@ -364,7 +475,7 @@ public sealed class GameSessionService(
             AiFailure = null;
             AdvanceAiTurns();
 
-            Changed?.Invoke();
+            _changed?.Invoke();
         }
 
         return result;
@@ -374,9 +485,25 @@ public sealed class GameSessionService(
     /// The current player's redacted view: their own hand in full, everyone
     /// else's hand reduced to a count. Throws if called before <see cref="Start"/>
     /// — a programmer error, not a rule violation.
+    ///
+    /// Networked: returns THIS circuit's seat view (never another seat's),
+    /// so every device only ever sees its own hand. A seatless or spectator
+    /// circuit (null or negative seat) has no view to return — throwing is
+    /// the anti-leak default; callers hide hand UI for those circuits.
     /// </summary>
     public PlayerView ObserveCurrentPlayer()
     {
+        if (ActiveNetwork is { } active)
+        {
+            var seat = net?.Seat;
+            if (seat is null || seat.Value.Value < 0)
+            {
+                throw new InvalidOperationException("GameSessionService.ObserveCurrentPlayer has no seat in the networked game.");
+            }
+
+            return active.Observe(seat.Value);
+        }
+
         if (State is null)
         {
             throw new InvalidOperationException("GameSessionService.ObserveCurrentPlayer was called before Start.");
@@ -400,7 +527,7 @@ public sealed class GameSessionService(
     /// </summary>
     public MissionCard? WinnerMission() =>
         State is { Status: GameStatus.Won won } state
-            ? engine.Observe(state, won.Winner).OwnEffectiveMission
+            ? (ActiveNetwork?.Observe(won.Winner) ?? engine.Observe(state, won.Winner)).OwnEffectiveMission
             : null;
 
     public PlayerConfig ConfigFor(PlayerId id) => Players[id];
@@ -422,13 +549,23 @@ public sealed class GameSessionService(
         LastEvents = [];
         OwnerUserId = null;
 
+        // A reset circuit leaves its networked table too: the shared session
+        // itself survives (other devices keep playing), but this circuit
+        // drops back to plain hot-seat browsing instead of rendering a game
+        // it no longer belongs to.
+        if (net is not null)
+        {
+            net.Code = null;
+            net.Seat = null;
+        }
+
         // Design D7: a reset session must not retain seat->bot bindings, nor
         // a stale failure, from whatever game was previously loaded here.
         AiFailure = null;
         _bots.Clear();
         _botMemories.Clear();
 
-        Changed?.Invoke();
+        _changed?.Invoke();
     }
 
     /// <summary>
@@ -476,7 +613,7 @@ public sealed class GameSessionService(
         RebuildBotRegistry();
         AdvanceAiTurns();
 
-        Changed?.Invoke();
+        _changed?.Invoke();
     }
 
     /// <summary>

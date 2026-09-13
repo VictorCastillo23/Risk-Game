@@ -1,0 +1,236 @@
+@page "/lobby/{code}"
+@implements IDisposable
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Risk.Domain.Errors
+@using Risk.Domain.Players
+@using Risk.Engine.Events
+@using Risk.Engine.Results
+@using Risk.Engine.State
+@using Risk.Web.Components.Shared
+@using Risk.Web.Models
+@using Risk.Web.Services
+@inject NetworkGameRegistry Games
+@inject NetworkedSeatContext NetContext
+@inject GameSessionService SessionService
+@inject ProtectedSessionStorage SessionStorage
+@inject NavigationManager Navigation
+
+<PageTitle>Risk — Sala de espera</PageTitle>
+
+@if (_session is null)
+{
+    <p class="game-error" role="alert">Código inválido o partida no encontrada.</p>
+    <a href="/">Volver al inicio</a>
+}
+else
+{
+    var session = _session;
+    var players = session.Seats.Where(s => !s.IsSpectator).ToList();
+    var mySeat = NetContext.Code == session.Code && NetContext.Seat is { } mine
+        ? session.Seats.FirstOrDefault(s => s.Config.Id == mine)
+        : null;
+    var isHost = mySeat?.IsHost == true;
+
+    <h1>Sala de espera</h1>
+    <p>Código: <strong>@session.Code.Value</strong></p>
+    <p>
+        Enlace para unirse:
+        <input type="text" readonly value="@Navigation.ToAbsoluteUri($"/join/{session.Code.Value}")" size="45" />
+    </p>
+
+    <ul>
+        @foreach (var seat in session.Seats)
+        {
+            <li>
+                <span style="background-color:@seat.Config.ColorHex">&nbsp;&nbsp;</span>
+                @seat.Config.Name
+                @(seat.IsHost ? "(anfitrión)" : "")
+                @(seat.IsSpectator ? "(espectador)" : "")
+                @(seat.IsConnected ? "" : "(desconectado)")
+            </li>
+        }
+    </ul>
+
+    @if (session.IsStarted)
+    {
+        <p><strong>¡Partida iniciada!</strong></p>
+        <button type="button" @onclick="@(() => Navigation.NavigateTo("/game"))">Ir al tablero</button>
+
+        @if (isHost)
+        {
+            // Host-only save (Phase 4): the scoped service snapshots the
+            // shared network state, so this is the same SaveAsync path as
+            // hot-seat, gated here by lobby role instead of a new API.
+            <button type="button" disabled="@_saving" @onclick="OnSave">Guardar partida</button>
+            @if (_saveMessage is not null)
+            {
+                <p role="status">@_saveMessage</p>
+            }
+            @if (_saveError is not null)
+            {
+                <p class="game-error" role="alert">@_saveError</p>
+            }
+        }
+    }
+    else if (isHost)
+    {
+        <label for="lobby-mode">Modo de juego</label>
+        <select id="lobby-mode" value="@_mode" @onchange="OnModeChanged">
+            @foreach (var mode in SelectableModes)
+            {
+                <option value="@mode">@GameModeDisplay.Label(mode)</option>
+            }
+        </select>
+
+        <button type="button" disabled="@(players.Count < 2 || players.Count > 6)" @onclick="OnStart">
+            Iniciar partida (@players.Count/6)
+        </button>
+        <button type="button" disabled="@(players.Count >= 6)" @onclick="OnAddBot" title="Ocupa un asiento libre con un bot">
+            Añadir IA
+        </button>
+        <RejectionMessage Error="_error" />
+    }
+    else
+    {
+        <p>Esperando al anfitrión…</p>
+    }
+}
+
+@code {
+    [Parameter]
+    public string? Code { get; set; }
+
+    private static readonly GameMode[] SelectableModes = [GameMode.Classic, GameMode.SecretMission, GameMode.TwoPlayer, GameMode.Capital];
+
+    private NetworkGameSession? _session;
+    private GameMode _mode = GameMode.Classic;
+    private GameError? _error;
+    private bool _saving;
+    private string? _saveMessage;
+    private string? _saveError;
+
+    protected override void OnInitialized()
+    {
+        if (JoinCode.TryParse(Code, out var code)
+            && code is not null
+            && Games.TryGet(code, out var session)
+            && session is not null)
+        {
+            _session = session;
+            session.Changed += OnSessionChanged;
+        }
+    }
+
+    /// <summary>
+    /// Seat bookmarking (Phase 4): persist (code, seat) once interop is
+    /// safe, and rebind it on a fresh circuit (reload/reopened tab) for
+    /// this same code. Best-effort throughout — storage failures degrade
+    /// to "join again manually", never to a broken circuit.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _session is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (NetContext.Code is not null && NetContext.Seat is { } mine)
+            {
+                await SessionStorage.SetAsync(
+                    NetworkSeatBookmark.StorageKey,
+                    NetworkSeatBookmark.For(NetContext.Code, mine));
+            }
+            else if (NetContext.Seat is null && NetContext.CircuitId is { } circuit)
+            {
+                var stored = await SessionStorage.GetAsync<NetworkSeatBookmark>(NetworkSeatBookmark.StorageKey);
+                if (stored.Success
+                    && stored.Value is { } mark
+                    && mark.Code == _session.Code.Value
+                    && _session.Join(new PlayerId(mark.Seat), circuit))
+                {
+                    NetContext.Code = _session.Code;
+                    NetContext.Seat = new PlayerId(mark.Seat);
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best-effort by design — see the doc comment above.
+        }
+    }
+
+    private void OnModeChanged(ChangeEventArgs e)
+    {
+        _mode = Enum.Parse<GameMode>((string)e.Value!);
+    }
+
+    private void OnStart()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        var result = _session.Start(_mode);
+        _error = result switch
+        {
+            CommandResult<GameState, GameEvent>.Ok => null,
+            CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
+            _ => _error
+        };
+    }
+
+    /// <summary>
+    /// Host-only pre-start bot seat: first free color, no circuit binding
+    /// (bots resolve server-side, never from a device).
+    /// </summary>
+    private void OnAddBot()
+    {
+        if (_session is null || _session.IsStarted)
+        {
+            return;
+        }
+
+        var taken = _session.Seats.Where(s => !s.IsSpectator).Select(s => s.Config.ColorHex).ToHashSet();
+        var color = PlayerPalette.Swatches.FirstOrDefault(s => !taken.Contains(s)) ?? PlayerPalette.Swatches[0];
+        var botNumber = _session.Seats.Count(s => s.Config.IsAi) + 1;
+        _session.ClaimSeat($"Bot {botNumber}", color, connectionId: null, isAi: true);
+    }
+
+    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task OnSave()
+    {
+        _saving = true;
+        _saveMessage = null;
+        _saveError = null;
+
+        var outcome = await SessionService.SaveAsync();
+        _saving = false;
+
+        switch (outcome)
+        {
+            case SaveOutcome.Created:
+            case SaveOutcome.Overwritten:
+                _saveMessage = "Partida guardada.";
+                break;
+            case SaveOutcome.Failed:
+                _saveError = "No se pudo guardar la partida. Probá de nuevo.";
+                break;
+            case SaveOutcome.NotAuthenticated:
+                _saveError = "Tenés que iniciar sesión para guardar.";
+                break;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_session is not null)
+        {
+            _session.Changed -= OnSessionChanged;
+        }
+    }
+}
