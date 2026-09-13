@@ -34,7 +34,19 @@ public sealed class RiskDbContextFactory : IDesignTimeDbContextFactory<RiskDbCon
         }
 
         var optionsBuilder = new DbContextOptionsBuilder<RiskDbContext>();
-        optionsBuilder.UseSqlServer(connectionString);
+
+        // Transient resiliency (deploy fix): the migrate job runs dotnet ef
+        // against a serverless DB that is usually PAUSED — the first connect
+        // gets error 40613 while Azure resumes it, and without retries the
+        // whole deploy fails (exactly what killed the post-#66 deploy).
+        // Program.cs already sets this for runtime; the design-time factory
+        // needs its own copy because dotnet ef never boots the web host.
+        // maxRetryCount 10 (not the default 6): a cold resume can outlast
+        // the default ~60s window; migrations run rarely, so waiting longer
+        // here is strictly cheaper than a failed deploy.
+        optionsBuilder.UseSqlServer(
+            connectionString,
+            sqlOptions => sqlOptions.EnableRetryOnFailure(maxRetryCount: 10));
 
         return new RiskDbContext(optionsBuilder.Options);
     }

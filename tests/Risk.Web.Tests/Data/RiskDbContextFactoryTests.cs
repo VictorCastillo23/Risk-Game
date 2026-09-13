@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.SqlServer.Storage.Internal;
 using Risk.Web.Data;
 
 namespace Risk.Web.Tests.Data;
@@ -63,6 +65,30 @@ public sealed class RiskDbContextFactoryTests
             using var context = factory.CreateDbContext([]);
 
             Assert.NotNull(context);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(ConnectionStringEnvVar, original);
+        }
+    }
+
+    [Fact]
+    public void CreateDbContext_ConfiguresTransientRetryResiliency()
+    {
+        // The migrate job hits a serverless DB that may be paused mid-wake
+        // (error 40613); without EnableRetryOnFailure dotnet ef dies on the
+        // first attempt instead of riding out the resume.
+        var original = Environment.GetEnvironmentVariable(ConnectionStringEnvVar);
+        try
+        {
+            Environment.SetEnvironmentVariable(
+                ConnectionStringEnvVar,
+                "Server=tcp:placeholder.database.windows.net,1433;Database=placeholder;User Id=placeholder;Password=placeholder;Encrypt=True;");
+            var factory = new RiskDbContextFactory();
+
+            using var context = factory.CreateDbContext([]);
+
+            Assert.IsType<SqlServerRetryingExecutionStrategy>(context.Database.CreateExecutionStrategy());
         }
         finally
         {
