@@ -8,6 +8,8 @@
 @using Risk.Web.Models
 @using Risk.Web.Services
 @inject GameSessionService Session
+@inject NetworkGameRegistry Games
+@inject NetworkedSeatContext NetContext
 @inject NavigationManager Navigation
 
 <PageTitle>Risk — Configurar partida</PageTitle>
@@ -15,6 +17,17 @@
 <div class="setup-header">
     <h1>Configurar partida</h1>
     <button type="button" @onclick="@(() => Navigation.NavigateTo("/saved"))">Ver partida guardada</button>
+</div>
+
+<div class="setup-variant">
+    <label>
+        <input type="radio" name="game-variant" checked="@(_variant == "local")" @onchange="@(() => _variant = "local")" />
+        Local (hot-seat)
+    </label>
+    <label>
+        <input type="radio" name="game-variant" checked="@(_variant == "red")" @onchange="@(() => _variant = "red")" />
+        En red (multidispositivo)
+    </label>
 </div>
 
 <div class="setup-game-mode">
@@ -27,6 +40,8 @@
     </select>
 </div>
 
+@if (_variant == "local")
+{
 <div class="setup-player-count">
     <label for="player-count">Cantidad de jugadores</label>
     <select id="player-count" @onchange="OnPlayerCountChanged">
@@ -79,6 +94,32 @@
 }
 
 <button type="button" @onclick="OnStart">Comenzar partida</button>
+}
+else
+{
+<div class="setup-networked">
+    <p>Crea una partida en red: obtendrás un código para que otros se unan desde sus dispositivos.</p>
+    <input type="text"
+           value="@_netName"
+           placeholder="Tu nombre (anfitrión)"
+           @oninput="e => _netName = (string?)e.Value ?? string.Empty" />
+
+    <div class="setup-swatches" role="group" aria-label="Tu color">
+        @foreach (var swatch in PlayerPalette.Swatches)
+        {
+            <button type="button"
+                    class="setup-swatch @(_netColor == swatch ? "selected" : "")"
+                    style="background-color:@swatch"
+                    aria-pressed="@(_netColor == swatch)"
+                    @onclick="() => _netColor = swatch">
+            </button>
+        }
+    </div>
+
+    <button type="button" @onclick="OnCreateNetworked">Crear partida en red</button>
+    <p>O <a href="/join">unirse a una partida</a> con un código.</p>
+</div>
+}
 
 <RejectionMessage Error="_error" />
 
@@ -96,6 +137,13 @@
 
     private List<PlayerSetupRow> _rows = BuildRows(GameSetup.PlayerCountRange(GameMode.Classic).Min);
     private GameError? _error;
+
+    // Networked variant (openspec risk-web-multiplayer): "local" keeps the
+    // hot-seat flow above byte-identical; "red" collects just the host's
+    // identity and creates the game (lobby + joiners live in Lobby/Join).
+    private string _variant = "local";
+    private string _netName = string.Empty;
+    private string _netColor = PlayerPalette.Swatches[0];
 
     private static List<PlayerSetupRow> BuildRows(int count) =>
         Enumerable.Range(0, count)
@@ -151,5 +199,22 @@
                 _error = rejected.Error;
                 break;
         }
+    }
+
+    /// <summary>
+    /// Networked creation: empty session + host seat bound to this circuit,
+    /// then hand off to the lobby. Mode travels with the host circuit into
+    /// Lobby (component field there) — nothing is started yet, so joiners
+    /// can still arrive before the first turn exists.
+    /// </summary>
+    private void OnCreateNetworked()
+    {
+        var name = string.IsNullOrWhiteSpace(_netName) ? "Anfitrión" : _netName.Trim();
+        var session = Games.Create();
+        var seat = session.ClaimSeat(name, _netColor, NetContext.CircuitId);
+        NetContext.Code = session.Code;
+        NetContext.Seat = seat;
+        _error = null;
+        Navigation.NavigateTo($"/lobby/{session.Code.Value}");
     }
 }
