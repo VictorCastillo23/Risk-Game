@@ -1,5 +1,6 @@
 @page "/join"
 @page "/join/{code?}"
+@implements IDisposable
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using Risk.Domain.Players
 @using Risk.Engine.State
@@ -14,10 +15,32 @@
 
 <h1>Unirse a partida en red</h1>
 
+@if (_session?.IsStarted == true)
+{
+    // Seat reclaim (returning player whose bookmark died with the tab):
+    // disconnected seats are orphans nobody can spontaneosly fill — the
+    // link alone never grants a seat, but its owner can take it back by
+    // name. Same trust level as the join code itself (casual play).
+    var orphans = _session.Seats.Where(s => !s.IsConnected && !s.IsSpectator).ToList();
+    @if (orphans.Count > 0)
+    {
+        <p>Asientos desconectados (¿sos uno de ellos? recuperalo):</p>
+        <ul>
+            @foreach (var seat in orphans)
+            {
+                <li>
+                    @seat.Config.Name
+                    <button type="button" @onclick="() => OnReclaim(seat.Config.Id)">Soy yo</button>
+                </li>
+            }
+        </ul>
+    }
+}
+
 <input type="text"
        value="@_code"
        placeholder="Código (ej. R7K9X2)"
-       @oninput="e => _code = (string?)e.Value ?? string.Empty" />
+       @oninput="OnCodeChanged" />
 
 <input type="text"
        value="@_name"
@@ -44,6 +67,7 @@
     private string _name = string.Empty;
     private bool _spectator;
     private string? _error;
+    private NetworkGameSession? _session;
 
     protected override void OnInitialized()
     {
@@ -58,6 +82,42 @@
             && mine is not null && mine.Value == NetContext.Code.Value)
         {
             Navigation.NavigateTo($"/lobby/{mine.Value}");
+            return;
+        }
+
+        ResolveSession();
+    }
+
+    /// <summary>
+    /// Resolves (and subscribes to) the game for the current code box, so
+    /// the orphan-seat list above stays live as players disconnect. Silent
+    /// when the code doesn't match a game yet — the user is still typing.
+    /// </summary>
+    private void ResolveSession()
+    {
+        if (_session is not null)
+        {
+            _session.Changed -= OnSessionChanged;
+            _session = null;
+        }
+
+        if (JoinCode.TryParse(_code, out var code)
+            && code is not null
+            && Games.TryGet(code, out var session)
+            && session is not null)
+        {
+            _session = session;
+            session.Changed += OnSessionChanged;
+        }
+    }
+
+    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        if (_session is not null)
+        {
+            _session.Changed -= OnSessionChanged;
         }
     }
 
@@ -86,13 +146,45 @@
         await TryRestoreSeatAsync(session);
     }
 
+    private void OnCodeChanged(ChangeEventArgs e)
+    {
+        _code = (string?)e.Value ?? string.Empty;
+        _error = null;
+        ResolveSession();
+    }
+
+    /// <summary>
+    /// Takes back a disconnected seat by name (see the markup note): the
+    /// seat id is unchanged so the engine's <c>0..N-1</c> zip is unaffected,
+    /// and a live seat can never be taken — <see cref="NetworkGameSession"/>
+    /// only rebinds, never reassigns.
+    /// </summary>
+    private void OnReclaim(PlayerId seat)
+    {
+        if (_session is null || NetContext.CircuitId is not { } circuit)
+        {
+            _error = "No se pudo identificar este dispositivo. Recargá la página.";
+            return;
+        }
+
+        if (!_session.Join(seat, circuit))
+        {
+            _error = "Ese asiento ya no está disponible.";
+            return;
+        }
+
+        NetContext.Code = _session.Code;
+        NetContext.Seat = seat;
+        _error = null;
+        Navigation.NavigateTo($"/lobby/{_session.Code.Value}");
+    }
     /// <summary>
     /// Claims a seat and hands off to the lobby. Players may only join
     /// before start (post-start player claims would break the engine's
     /// <c>0..N-1</c> zip); spectators may join anytime, including mid-game.
     /// A started game first attempts the bookmarked-seat rebind, so a
     /// returning player never hits the spectator-only wall for their own
-    /// seat.
+    /// seat (seat reclaim by name lives in the markup above).
     /// </summary>
     private async Task OnJoin()
     {
