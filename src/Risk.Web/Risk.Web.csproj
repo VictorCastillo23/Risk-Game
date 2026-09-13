@@ -15,6 +15,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Risk.Domain\Risk.Domain.csproj" />
     <ProjectReference Include="..\Risk.Engine\Risk.Engine.csproj" />
+    <!-- Networked AI seats (openspec risk-web-multiplayer Phase 5): the
+         session drives IBotPlayer/BotTurnRunner server-side, exactly like
+         hot-seat AI seats do — same dependency direction as Risk.AI's own
+         consumers (Domain + Engine only, never the reverse). -->
+    <ProjectReference Include="..\Risk.AI\Risk.AI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

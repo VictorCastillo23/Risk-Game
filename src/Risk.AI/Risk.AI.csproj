@@ -7,6 +7,11 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Risk.AI.Tests" />
+    <!-- Networked AI seats call BotTurnRunner.RunTurn with its default
+         budget (BotWeights.MaxCommandsPerTurn, internal by design): the
+         default value bakes in at the call site, so Risk.Web needs
+         visibility. Reusing the tuned constant beats a second knob. -->
+    <InternalsVisibleTo Include="Risk.Web" />
   </ItemGroup>
 
   <PropertyGroup>
