@@ -5,6 +5,8 @@
 @using Risk.Web.Persistence
 @using Risk.Web.Services
 @inject GameSessionService Session
+@inject NetworkGameRegistry Games
+@inject NetworkedSeatContext NetContext
 @inject NavigationManager Navigation
 
 <PageTitle>Risk — Partida guardada</PageTitle>
@@ -37,6 +39,7 @@ else
         else
         {
             <button type="button" @onclick="OnResume" disabled="@_resuming">Reanudar</button>
+            <button type="button" @onclick="OnOpenNetworkedRoom" disabled="@_resuming">Abrir sala en red</button>
         }
     </div>
 }
@@ -86,5 +89,45 @@ else
         }
 
         _resuming = false;
+    }
+
+    /// <summary>
+    /// Networked resume (Phase 4): loads the save into a throwaway hot-seat
+    /// copy, then restores it as a FRESH networked table under a new code —
+    /// old devices rejoin; nobody inherits a stale seat binding. The host
+    /// (first config) binds this circuit and lands in the lobby.
+    /// </summary>
+    private async Task OnOpenNetworkedRoom()
+    {
+        _resuming = true;
+        _resumeError = null;
+
+        if (NetContext.CircuitId is not { } circuit)
+        {
+            _resumeError = "No se pudo identificar este dispositivo. Recargá la página.";
+            _resuming = false;
+            return;
+        }
+
+        var outcome = await Session.ResumeAsync();
+        if (outcome != ResumeOutcome.Resumed || Session.State is null)
+        {
+            _resumeError = outcome == ResumeOutcome.Failed
+                ? "No se pudo reanudar la partida. Probá de nuevo."
+                : "No se encontró ninguna partida guardada.";
+            _resuming = false;
+            return;
+        }
+
+        var snapshot = Session.Snapshot();
+        Session.Reset();
+
+        var game = Games.Create();
+        game.Restore(snapshot.State, snapshot.Players);
+        var host = game.Seats[0].Config.Id;
+        game.Join(host, circuit);
+        NetContext.Code = game.Code;
+        NetContext.Seat = host;
+        Navigation.NavigateTo($"/lobby/{game.Code.Value}");
     }
 }
