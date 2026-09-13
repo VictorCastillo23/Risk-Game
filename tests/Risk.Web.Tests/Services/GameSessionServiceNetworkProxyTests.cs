@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Dice;
 using Risk.Domain.Errors;
 using Risk.Domain.Map;
@@ -36,7 +37,7 @@ public class GameSessionServiceNetworkProxyTests
         var context = new NetworkedSeatContext { Code = net.Code };
         var service = new GameSessionService(
             engine, dice, new FakeGameStore(), StubAuthenticationStateProvider.Anonymous(),
-            registry, context);
+            new BotTurnRunner(engine), games: registry, net: context);
         return new Harness(service, net, context, engine);
     }
 

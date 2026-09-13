@@ -10,6 +10,10 @@
         <div class="player-stats-bar-entry">
             <span class="player-stats-bar-swatch" style="background-color:@config.ColorHex"></span>
             <span class="player-stats-bar-name">@config.Name</span>
+            @if (config.IsAi)
+            {
+                <AiBadge />
+            }
             <span class="player-stats-bar-territories" title="Territorios">Territorios: @row.TerritoryCount</span>
             <span class="player-stats-bar-troops" title="Tropas">Tropas: @row.TroopCount</span>
         </div>

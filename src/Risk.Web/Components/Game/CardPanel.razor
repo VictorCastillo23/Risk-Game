@@ -69,6 +69,12 @@
         </ul>
 
         var bonusMatches = ComputeBonusMatches(hand);
+        var tradePreview = ComputeTradePreview(hand);
+
+        @if (tradePreview is { } preview)
+        {
+            <p class="card-panel-hint">Este canje da @preview tropas@(bonusMatches.Count == 1 ? " (+2 por territorio propio)" : "").</p>
+        }
 
         @if (bonusMatches.Count >= 2)
         {
@@ -136,6 +142,24 @@
 
         var cards = _selection.SelectedIndices.Select(i => hand[i]).ToArray();
         return TerritoryTradeBonus.ResolveMatches(cards, Session.State.Territories, CurrentPlayer);
+    }
+
+    /// <summary>
+    /// Preview of the troops this trade would award (base scale for the
+    /// next trade number, +2 when the selection has exactly one owned-territory
+    /// match the engine will auto-apply). Null unless the current selection
+    /// is a valid trade-in set. Read-only — never validates or dispatches.
+    /// </summary>
+    private int? ComputeTradePreview(IReadOnlyList<Card> hand)
+    {
+        if (!_selection.IsValidTrade(hand) || Session.State is null)
+        {
+            return null;
+        }
+
+        var preview = CardTradeBonus.ForTradeNumber(Session.State.TradesCompleted + 1);
+        var bonusMatches = ComputeBonusMatches(hand);
+        return bonusMatches.Count == 1 ? preview + 2 : preview;
     }
 
     private bool CanTrade(IReadOnlyList<Card> hand, IReadOnlyList<TerritoryId> bonusMatches) =>

@@ -5,6 +5,10 @@
 <div class="phase-indicator">
     <span class="phase-indicator-swatch" style="background-color:@CurrentPlayerConfig.ColorHex"></span>
     <span class="phase-indicator-player">@CurrentPlayerConfig.Name</span>
+    @if (CurrentPlayerConfig.IsAi)
+    {
+        <AiBadge />
+    }
     <span class="phase-indicator-phase">@PhaseDisplay.Label(State.Turn.Phase)</span>
     @if (CurrentPlayerState.TroopsRemaining > 0)
     {

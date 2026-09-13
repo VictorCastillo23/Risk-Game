@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Cards;
 using Risk.Domain.Map;
 using Risk.Domain.Players;
@@ -37,7 +38,7 @@ public class GameSessionServiceFullGameIntegrationTests
         // TwoPlayer mode never rolls the setup dice (TurnOrder.DetermineFirst
         // is only invoked for Classic), so reusing the combat roller here is
         // safe and avoids introducing an unused third fake.
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
         var changedCount = 0;
         session.Changed += () => changedCount++;
 

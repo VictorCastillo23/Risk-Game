@@ -89,21 +89,17 @@
                     <MissionPanel CurrentPlayer="state.Turn.CurrentPlayer" />
                 }
                 <DicePanel Battle="_lastBattle" />
-                @if (Session.AiFailure is { } aiFailure)
-                {
-                    // A bot hard-stop stalls the whole table (turn never
-                    // advances past the bot) — this must be visible, not a
-                    // silent freeze. Same game-error class as the AI banner's
-                    // hot-seat counterpart.
-                    <p class="game-error" role="alert">La IA (@Session.ConfigFor(aiFailure.Player).Name) se detuvo@(aiFailure.IsBudgetExhausted ? " por límite de comandos" : "") y la partida está detenida.</p>
-                }
                 @if (canSeeHand)
                 {
                     // Networked: ObserveCurrentPlayer returns THIS circuit's
                     // seat view, so each device only ever sees its own hand.
                     // Seatless/spectator circuits have no view (the proxy
-                    // throws) — hence the gate.
+                    // throws) — hence the gate. Hot-seat always passes it.
                     <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
+                }
+                @if (Session.AiFailure is { } aiFailure)
+                {
+                    <p class="game-error" role="alert" aria-live="polite">@AiFailureMessage(aiFailure)</p>
                 }
                 @if (_postLoginSaveMessage is not null)
                 {
@@ -111,11 +107,11 @@
                 }
                 @if (Session.ActiveNetwork is null)
                 {
-                    // Networked saves are host-driven (Phase 4); hidden here
-                    // so a guest can't snapshot a game they don't own.
+                    // Networked saves are host-driven (lobby button); hidden
+                    // here so a guest can't snapshot a game they don't own.
                     <SavePanel />
                 }
-                <LogPanel Log="state.Log" />
+                <LogPanel Log="state.Log" Players="Session.Players" />
             </div>
         </div>
     </div>
@@ -541,5 +537,13 @@
     public void Dispose()
     {
         Session.Changed -= OnSessionChanged;
+    }
+
+    private string AiFailureMessage(AiTurnFailure failure)
+    {
+        var name = Session.ConfigFor(failure.Player).Name;
+        return failure.IsBudgetExhausted
+            ? $"La IA de {name} no pudo completar su turno (se alcanzó el límite de comandos)."
+            : $"La IA de {name} no pudo continuar: {GameErrorPresenter.Describe(failure.Error!)}";
     }
 }

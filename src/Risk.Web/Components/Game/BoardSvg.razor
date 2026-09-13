@@ -12,7 +12,7 @@
 
             <rect class="board-continent-halo" x="@bounds.X" y="@bounds.Y" width="@bounds.Width" height="@bounds.Height" rx="28" fill="@haloColor" stroke="@haloColor" />
             <g transform="translate(@(bounds.X + 14), @(bounds.Y + 24))">
-                <text class="board-continent-label">@ContinentDisplay.Label(continent.Id)</text>
+                <text class="board-continent-label">@ContinentDisplay.Label(continent.Id) (+@continent.Bonus)</text>
             </g>
         }
     </g>

@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Commands;
@@ -32,7 +33,7 @@ public class GameSessionServicePersistenceTests
     private static GameSessionService NewSession(IGameStore store, Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider auth)
     {
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
-        return new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, auth);
+        return new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), store, auth, new BotTurnRunner(engine));
     }
 
     [Fact]
@@ -271,7 +272,7 @@ public class GameSessionServicePersistenceTests
     {
         var store = new ThrowingGameStore(new FakeGameStore()) { ThrowOnDelete = true };
         var engineFake = new FakeGameEngine();
-        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn("user-1"), new BotTurnRunner(engineFake));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         await session.SaveAsync();
         var wonState = session.State! with { Status = new GameStatus.Won(session.State!.Turn.CurrentPlayer) };
@@ -307,7 +308,7 @@ public class GameSessionServicePersistenceTests
     {
         var store = new FakeGameStore();
         var engineFake = new FakeGameEngine();
-        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.Anonymous());
+        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engineFake));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         var wonState = session.State! with { Status = new GameStatus.Won(session.State!.Turn.CurrentPlayer) };
         engineFake.ExecuteResult = new CommandResult<GameState, GameEvent>.Ok(wonState, []);
@@ -323,7 +324,7 @@ public class GameSessionServicePersistenceTests
     {
         var store = new FakeGameStore();
         var engineFake = new FakeGameEngine();
-        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn("user-1"));
+        var session = new GameSessionService(engineFake, new AlwaysAttackerWinsDiceRoller(), store, StubAuthenticationStateProvider.SignedIn("user-1"), new BotTurnRunner(engineFake));
         session.Start(TwoValidRows, GameMode.TwoPlayer);
         await session.SaveAsync();
 

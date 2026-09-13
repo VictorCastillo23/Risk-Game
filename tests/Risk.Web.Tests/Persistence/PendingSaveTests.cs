@@ -1,3 +1,4 @@
+using Risk.AI;
 using Risk.Domain.Players;
 using Risk.Engine;
 using Risk.Engine.Events;
@@ -32,7 +33,7 @@ public class PendingSaveTests
             new("Ana", "#E53935", false),
             new("Beto", "#1E88E5", false)
         };
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
         var startResult = session.Start(rows, GameMode.TwoPlayer);
         Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(startResult);
 
@@ -63,7 +64,7 @@ public class PendingSaveTests
         // regression guard for the gap this record was created to close.
         var engine = new GameEngine(new AlwaysAttackerWinsDiceRoller());
         var rows = new List<PlayerSetupRow> { new("Ana", "#E53935", false), new("Beto", "#1E88E5", false) };
-        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous());
+        var session = new GameSessionService(engine, new AlwaysAttackerWinsDiceRoller(), new FakeGameStore(), StubAuthenticationStateProvider.Anonymous(), new BotTurnRunner(engine));
         session.Start(rows, GameMode.TwoPlayer);
 
         var pending = PendingSave.From(session.Snapshot());

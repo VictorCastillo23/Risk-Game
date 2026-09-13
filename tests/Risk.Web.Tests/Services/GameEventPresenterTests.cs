@@ -219,4 +219,38 @@ public class GameEventPresenterTests
         Assert.All(messages, m => Assert.False(string.IsNullOrWhiteSpace(m)));
         Assert.Equal(12, messages.Distinct().Count());
     }
+
+    [Fact]
+    public void Describe_NeutralTroopsPlaced_MentionsPlacerTerritoryAndCount()
+    {
+        var e = new NeutralTroopsPlaced(PlayerOne, Alaska, 2);
+
+        var described = GameEventPresenter.Describe(e);
+
+        Assert.Contains("2", described);
+        Assert.Contains("Alaska", described);
+        Assert.Contains("neutrales", described, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Ocurrió un evento.", described);
+    }
+
+    [Fact]
+    public void Describe_WithNameLookup_UsesRealName()
+    {
+        var e = new TroopsPlaced(PlayerOne, Alaska, 3);
+
+        var described = GameEventPresenter.Describe(e, id => id == PlayerOne ? "Ana" : null);
+
+        Assert.Contains("Ana", described);
+        Assert.DoesNotContain("Jugador 1", described);
+    }
+
+    [Fact]
+    public void Describe_WithNameLookup_ReturningNull_FallsBackToPlayerNumber()
+    {
+        var e = new TroopsPlaced(PlayerOne, Alaska, 3);
+
+        var described = GameEventPresenter.Describe(e, _ => null);
+
+        Assert.Contains("Jugador 1", described);
+    }
 }

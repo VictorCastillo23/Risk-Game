@@ -1,4 +1,6 @@
+@using Risk.Domain.Players
 @using Risk.Engine.Events
+@using Risk.Web.Models
 @using Risk.Web.Services
 
 <div class="log-panel panel-frame">
@@ -10,13 +12,12 @@
     else
     {
         <ul class="log-panel-entries" role="log" aria-live="polite">
-            @* Design's read convention (D5): read straight off GameState.Log,
-               which the engine only ever appends to (Log = [.. state.Log, ..
-               events]) — so iterating it in order is already oldest-first,
-               no reversal needed (scenario "Log grows with events"). *@
-            @foreach (var entry in Log)
+            @* Newest first: GameState.Log is append-only oldest-first,
+               so iterate it reversed (scenario "Log grows with events" still
+               holds — only the render order changed). *@
+            @foreach (var entry in Enumerable.Reverse(Log))
             {
-                <li>@GameEventPresenter.Describe(entry)</li>
+                <li>@GameEventPresenter.Describe(entry, NameOf)</li>
             }
         </ul>
     }
@@ -26,4 +27,11 @@
     /// <summary>The full accumulated event log to render, oldest first (design D5: read straight off <c>GameState.Log</c>).</summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<GameEvent> Log { get; set; } = [];
+
+    /// <summary>Optional player configs used to resolve display names; falls back to "Jugador N" when absent.</summary>
+    [Parameter]
+    public IReadOnlyDictionary<PlayerId, PlayerConfig>? Players { get; set; }
+
+    private string? NameOf(PlayerId id) =>
+        Players is not null && Players.TryGetValue(id, out var config) ? config.Name : null;
 }

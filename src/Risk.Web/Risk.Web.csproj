@@ -15,11 +15,21 @@
   <ItemGroup>
     <ProjectReference Include="..\Risk.Domain\Risk.Domain.csproj" />
     <ProjectReference Include="..\Risk.Engine\Risk.Engine.csproj" />
-    <!-- Networked AI seats (openspec risk-web-multiplayer Phase 5): the
-         session drives IBotPlayer/BotTurnRunner server-side, exactly like
-         hot-seat AI seats do — same dependency direction as Risk.AI's own
-         consumers (Domain + Engine only, never the reverse). -->
+    <!-- AI seats (hot-seat and networked) drive IBotPlayer/BotTurnRunner
+         server-side — same dependency direction as Risk.AI's own consumers
+         (Domain + Engine only, never the reverse). -->
     <ProjectReference Include="..\Risk.AI\Risk.AI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      risk-web-ai-seats (Phase 2/3 fresh-context review fix): GameSessionService
+      exposes internal test-only overloads (AdvanceAiTurns(int), Start(..., int))
+      so GameSessionServiceAiIntegrationTests can force AiTurnFailure.BudgetExhausted
+      deterministically with a tiny budget instead of driving the real
+      250,000-command BotWeights.MaxCommandsPerGame budget.
+    -->
+    <InternalsVisibleTo Include="Risk.Web.Tests" />
   </ItemGroup>
 
   <ItemGroup>
