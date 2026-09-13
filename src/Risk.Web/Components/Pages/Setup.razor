@@ -67,12 +67,12 @@
 
         <div class="setup-ai-toggle">
             <label>
-                <input type="radio" name="@($"ai-toggle-{index}")" checked="@(!row.IsAi)" disabled />
+                <input type="radio" name="@($"ai-toggle-{index}")" checked="@(!row.IsAi)" @onchange="() => OnAiToggled(index, false)" />
                 Humano
             </label>
-            <label class="disabled" title="Próximamente">
-                <input type="radio" name="@($"ai-toggle-{index}")" checked="@row.IsAi" disabled />
-                IA (próximamente)
+            <label>
+                <input type="radio" name="@($"ai-toggle-{index}")" checked="@row.IsAi" @onchange="() => OnAiToggled(index, true)" />
+                IA
             </label>
         </div>
     </div>
@@ -135,6 +135,11 @@
         }
 
         _rows[index] = _rows[index] with { ColorHex = swatch };
+    }
+
+    private void OnAiToggled(int index, bool isAi)
+    {
+        _rows[index] = _rows[index] with { IsAi = isAi };
     }
 
     private void OnStart()

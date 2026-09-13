@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Risk.AI;
 using Risk.Domain.Dice;
 using Risk.Engine;
 using Risk.Web.Components;
@@ -30,6 +31,7 @@ builder.Services.AddRazorPages();
 // Server circuit, i.e. one hot-seat game per browser tab.
 builder.Services.AddSingleton<IDiceRoller, RandomDiceRoller>();
 builder.Services.AddSingleton<IGameEngine, GameEngine>();
+builder.Services.AddSingleton<BotTurnRunner>();
 builder.Services.AddScoped<IGameStore, EfGameStore>();
 builder.Services.AddScoped<GameSessionService>();
 

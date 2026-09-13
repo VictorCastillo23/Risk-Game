@@ -74,6 +74,10 @@
                 }
                 <DicePanel Battle="_lastBattle" />
                 <CardPanel CurrentPlayer="state.Turn.CurrentPlayer" Locked="isWon || pendingOccupation is not null" />
+                @if (Session.AiFailure is { } aiFailure)
+                {
+                    <p class="game-error" role="alert" aria-live="polite">@AiFailureMessage(aiFailure)</p>
+                }
                 @if (_postLoginSaveMessage is not null)
                 {
                     <p class="game-post-login-save @(_postLoginSaveFailed ? "game-error" : "")" role="@(_postLoginSaveFailed ? "alert" : "status")">@_postLoginSaveMessage</p>
@@ -440,5 +444,13 @@
     public void Dispose()
     {
         Session.Changed -= OnSessionChanged;
+    }
+
+    private string AiFailureMessage(AiTurnFailure failure)
+    {
+        var name = Session.ConfigFor(failure.Player).Name;
+        return failure.IsBudgetExhausted
+            ? $"La IA de {name} no pudo completar su turno (se alcanzó el límite de comandos)."
+            : $"La IA de {name} no pudo continuar: {GameErrorPresenter.Describe(failure.Error!)}";
     }
 }

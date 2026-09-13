@@ -7,6 +7,18 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Risk.AI.Tests" />
+    <!--
+      risk-web-ai-seats (Phase 3): GameSessionService.AdvanceAiTurns needs
+      Risk.AI.Scoring.BotWeights.MaxCommandsPerGame as the outer per-drain
+      command budget (design D3 — reusing this constant rather than adding a
+      second Risk.Web-only tuning knob). BotWeights is `internal static`, so
+      Risk.Web needs this grant to compile against it; the design's "Verified
+      source facts" section listed the constant's value but did not check its
+      accessibility level, so this ItemGroup entry was a necessary addition
+      discovered during implementation, not called out in the design's File
+      Changes table.
+    -->
+    <InternalsVisibleTo Include="Risk.Web" />
   </ItemGroup>
 
   <PropertyGroup>
