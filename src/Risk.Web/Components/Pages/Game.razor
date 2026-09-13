@@ -83,7 +83,7 @@
                     <p class="game-post-login-save @(_postLoginSaveFailed ? "game-error" : "")" role="@(_postLoginSaveFailed ? "alert" : "status")">@_postLoginSaveMessage</p>
                 }
                 <SavePanel />
-                <LogPanel Log="state.Log" />
+                <LogPanel Log="state.Log" Players="Session.Players" />
             </div>
         </div>
     </div>
