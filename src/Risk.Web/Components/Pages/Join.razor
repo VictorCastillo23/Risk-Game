@@ -1,10 +1,13 @@
 @page "/join"
 @page "/join/{code?}"
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using Risk.Domain.Players
 @using Risk.Engine.State
 @using Risk.Web.Models
 @using Risk.Web.Services
 @inject NetworkGameRegistry Games
 @inject NetworkedSeatContext NetContext
+@inject ProtectedSessionStorage SessionStorage
 @inject NavigationManager Navigation
 
 <PageTitle>Risk — Unirse a partida</PageTitle>
@@ -48,14 +51,50 @@
         {
             _code = Code;
         }
+
+        // Already seated here (in-circuit back-navigation): skip the form.
+        if (NetContext.Code is not null && NetContext.Seat is not null
+            && JoinCode.TryParse(_code, out var mine)
+            && mine is not null && mine.Value == NetContext.Code.Value)
+        {
+            Navigation.NavigateTo($"/lobby/{mine.Value}");
+        }
+    }
+
+    /// <summary>
+    /// First-render seat recovery: a returning device (logout/login, reload)
+    /// whose circuit lost its context rebinds its bookmarked seat before
+    /// ever seeing the form — otherwise a started game wrongly offers only
+    /// the spectator path. Silent when there is nothing to restore.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || NetContext.Seat is not null)
+        {
+            return;
+        }
+
+        if (!JoinCode.TryParse(_code, out var code)
+            || code is null
+            || !Games.TryGet(code, out var session)
+            || session is null
+            || !session.IsStarted)
+        {
+            return;
+        }
+
+        await TryRestoreSeatAsync(session);
     }
 
     /// <summary>
     /// Claims a seat and hands off to the lobby. Players may only join
     /// before start (post-start player claims would break the engine's
     /// <c>0..N-1</c> zip); spectators may join anytime, including mid-game.
+    /// A started game first attempts the bookmarked-seat rebind, so a
+    /// returning player never hits the spectator-only wall for their own
+    /// seat.
     /// </summary>
-    private void OnJoin()
+    private async Task OnJoin()
     {
         if (!JoinCode.TryParse(_code, out var code)
             || code is null
@@ -83,6 +122,11 @@
 
         if (session.IsStarted)
         {
+            if (await TryRestoreSeatAsync(session))
+            {
+                return;
+            }
+
             _error = "La partida ya inició; podés unirte como espectador.";
             return;
         }
@@ -102,5 +146,37 @@
         NetContext.Seat = playerSeat;
         _error = null;
         Navigation.NavigateTo($"/lobby/{session.Code.Value}");
+    }
+
+    /// <summary>
+    /// Rebinds this device's bookmarked seat for <paramref name="session"/>
+    /// and routes to the lobby. False when there is nothing restorable
+    /// (no bookmark, code mismatch, unknown seat). Best-effort: storage
+    /// failures degrade to the normal join form, never to a broken page.
+    /// </summary>
+    private async Task<bool> TryRestoreSeatAsync(NetworkGameSession session)
+    {
+        try
+        {
+            var stored = await SessionStorage.GetAsync<NetworkSeatBookmark>(NetworkSeatBookmark.StorageKey);
+            if (stored.Success
+                && stored.Value is { } mark
+                && mark.Code == session.Code.Value
+                && NetContext.CircuitId is { } circuit
+                && session.Join(new PlayerId(mark.Seat), circuit))
+            {
+                NetContext.Code = session.Code;
+                NetContext.Seat = new PlayerId(mark.Seat);
+                _error = null;
+                Navigation.NavigateTo($"/lobby/{session.Code.Value}");
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best-effort by design — see the doc comment above.
+        }
+
+        return false;
     }
 }
