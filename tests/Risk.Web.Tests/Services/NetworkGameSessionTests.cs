@@ -50,7 +50,7 @@ public class NetworkGameSessionTests
     }
 
     [Fact]
-    public void ClaimSeat_SpectatorDoesNotShiftPlayerIds()
+    public void ClaimSeat_SpectatorGetsStableId_EngineMappingSkipsIt()
     {
         var session = NewSession(new FakeGameEngine(), new QueuedDiceRoller());
 
@@ -58,12 +58,62 @@ public class NetworkGameSessionTests
         var spectator = session.ClaimSeat("Miron", "#6C757D", "conn-spec", isSpectator: true);
         var beto = session.ClaimSeat("Beto", "#00FF00", "conn-beto");
 
-        // Engine seats stay zipped 0..N-1 in claim order no matter how many
-        // spectators interleave; spectators get negative ids that can never
-        // equal Turn.CurrentPlayer, so their commands fail the Dispatch gate.
+        // Claim ids are stable forever (circuits/bookmarks hold them); the
+        // engine zip is resolved separately at Start via EngineIdFor.
         Assert.Equal(new PlayerId(0), ana);
-        Assert.Equal(new PlayerId(1), beto);
-        Assert.True(spectator.Value < 0);
+        Assert.Equal(new PlayerId(1), spectator);
+        Assert.Equal(new PlayerId(2), beto);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(session.Start(GameMode.TwoPlayer));
+        Assert.Equal(new PlayerId(0), session.EngineIdFor(new PlayerId(0)));
+        Assert.Null(session.EngineIdFor(new PlayerId(1)));
+        Assert.Equal(new PlayerId(1), session.EngineIdFor(new PlayerId(2)));
+    }
+
+    [Fact]
+    public void Start_WithSelection_DemotesUnselectedHumans_AndRemovesUnselectedBots()
+    {
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+        session.ClaimSeat("Ana", "#FF0000", "c0");
+        session.ClaimSeat("Bot1", "#00FF00", null, isAi: true);
+        session.ClaimSeat("Beto", "#1D4ED8", "c2");
+        session.ClaimSeat("Ceci", "#F2C14E", "c3");
+        session.ClaimSeat("Bot2", "#7B2CBF", null, isAi: true);
+
+        var result = session.Start(GameMode.TwoPlayer, selected: [new PlayerId(0), new PlayerId(2)]);
+
+        Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        // Both selected seats kept their stable keys; Beto now drives
+        // engine seat 1 while Ana still drives 0.
+        Assert.Equal(new PlayerId(0), session.EngineIdFor(new PlayerId(0)));
+        Assert.Equal(new PlayerId(1), session.EngineIdFor(new PlayerId(2)));
+        // Unselected human demoted (key kept, engine seat revoked)...
+        var ceci = session.Seats.Single(s => s.Config.Id == new PlayerId(3));
+        Assert.True(ceci.IsSpectator);
+        Assert.Null(session.EngineIdFor(new PlayerId(3)));
+        // ...unselected bots removed outright; host untouched.
+        Assert.DoesNotContain(session.Seats, s => s.Config.Name == "Bot1" || s.Config.Name == "Bot2");
+        Assert.True(session.Seats.Single(s => s.Config.Id == new PlayerId(0)).IsHost);
+    }
+
+    [Fact]
+    public void Start_WithoutHostSelected_Throws()
+    {
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+        session.ClaimSeat("Ana", "#FF0000", "c0");
+        session.ClaimSeat("Beto", "#00FF00", "c1");
+
+        Assert.Throws<InvalidOperationException>(() => session.Start(GameMode.TwoPlayer, selected: [new PlayerId(1)]));
+        Assert.False(session.IsStarted);
+    }
+
+    [Fact]
+    public void EngineIdFor_UnknownSeat_ReturnsNull()
+    {
+        var session = NewSession(new FakeGameEngine(), QueuedDiceRoller.ForRollOff(2));
+        StartTwoPlayer(session);
+
+        Assert.Null(session.EngineIdFor(new PlayerId(9)));
     }
 
     [Fact]
@@ -101,9 +151,12 @@ public class NetworkGameSessionTests
         var spec = session.ClaimSeat("Miron", "#6C757D", "conn-spec", isSpectator: true);
         var ana = session.ClaimSeat("Ana", "#FF0000", "conn-ana");
 
+        // Stable claim ids for everyone (spectators included); host goes to
+        // the first HUMAN claim, never to a spectator.
+        Assert.Equal(new PlayerId(0), spec);
+        Assert.Equal(new PlayerId(1), ana);
         Assert.False(session.Seats[0].IsHost);
         Assert.True(session.Seats[1].IsHost);
-        Assert.Equal(new PlayerId(0), ana);
     }
 
     [Fact]

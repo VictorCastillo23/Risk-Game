@@ -120,8 +120,15 @@
 @code {
     // Networked turn gating (openspec risk-web-multiplayer): hot-seat is
     // always interactive; a networked circuit only acts on its own seated
-    // turn (non-negative seat id equal to Turn.CurrentPlayer). Spectators
-    // (negative ids) and seatless viewers are read-only by construction.
+    // turn. The stable claim key maps to an engine seat via EngineIdFor —
+    // spectators, removed, and seatless circuits map to null and are
+    // read-only by construction (this is what survives roster curation:
+    // keys never change, only the mapping does).
+    private PlayerId? MyEngineSeat() =>
+        Session.ActiveNetwork is { } net && NetContext.Seat is { } key
+            ? net.EngineIdFor(key)
+            : null;
+
     private bool IsMyTurn()
     {
         if (Session.ActiveNetwork is null)
@@ -129,18 +136,17 @@
             return true;
         }
 
-        var seat = NetContext.Seat;
         var state = Session.State;
-        return state is not null && seat is { } s && s.Value >= 0 && state.Turn.CurrentPlayer == s;
+        return state is not null && MyEngineSeat() is { } mine && state.Turn.CurrentPlayer == mine;
     }
 
     /// <summary>
     /// Whether this circuit may see a hand panel: everyone in hot-seat,
-    /// only seated non-spectator circuits in networked games (the proxy
-    /// throws for seatless/spectator viewers — the anti-leak default).
+    /// only engine-mapped circuits in networked games (the proxy throws
+    /// for the rest — the anti-leak default).
     /// </summary>
     private bool CanSeeHand() =>
-        Session.ActiveNetwork is null || (NetContext.Seat is { } s && s.Value >= 0);
+        Session.ActiveNetwork is null || MyEngineSeat() is not null;
 
     // Design's read convention (D5): board/turn/phase come straight off
     // Session.State (GameState), never Observe() — only the hand-of-cards
@@ -333,6 +339,7 @@
             if (stored.Success
                 && stored.Value is { } mark
                 && JoinCode.TryParse(mark.Code, out var code)
+                && code is not null
                 && Games.TryGet(code, out var session)
                 && session is not null
                 && NetContext.CircuitId is { } circuit

@@ -63,13 +63,28 @@ public sealed class NetworkGameSession(
     private Dictionary<PlayerId, BotMemory> _memories = new();
 
     /// <summary>
-    /// Claims the next seat; the first player claim is the host. Seated
-    /// players get engine-stable ids (<c>PlayerId</c> = non-spectator claim
-    /// count, so <see cref="Start"/>'s <c>0..N-1</c> zip holds no matter how
-    /// many spectators interleave); spectators get negative ids that can
-    /// never equal <c>Turn.CurrentPlayer</c>, so <see cref="Dispatch"/>
-    /// rejects their commands by construction. Pre-start only for players;
-    /// spectators may join anytime (including mid-game).
+    /// Stable-key to engine-seat map, built by <see cref="Start"/> (and
+    /// <see cref="Restore"/> as identity). Claim ids never change — circuits
+    /// and bookmarks hold them across demotions — while engine ids are
+    /// positional among the SELECTED players. Spectators are absent: their
+    /// key can never address a turn.
+    /// </summary>
+    private Dictionary<PlayerId, PlayerId> _keyToEngine = new();
+
+    /// <summary>
+    /// The engine seat driven by stable claim key <paramref name="key"/>,
+    /// or null for spectators, removed bots, and unknown keys.
+    /// </summary>
+    public PlayerId? EngineIdFor(PlayerId key) =>
+        _keyToEngine.TryGetValue(key, out var engine) ? engine : null;
+
+    /// <summary>
+    /// Claims the next seat (<c>PlayerId(Seats.Count)</c>), stable forever:
+    /// circuits, bookmarks, and <see cref="Join"/>/<see cref="Leave"/>
+    /// address seats by this key, never by engine position — so a later
+    /// roster curation (demote/remove at <see cref="Start"/>) cannot strand
+    /// a device the way re-zipping ids would. The first human claim hosts.
+    /// Pre-start only for players; spectators may join anytime.
     /// </summary>
     public PlayerId ClaimSeat(string name, string colorHex, string? connectionId, bool isAi = false, bool isSpectator = false)
     {
@@ -78,9 +93,7 @@ public sealed class NetworkGameSession(
             throw new InvalidOperationException("NetworkGameSession.ClaimSeat was called after Start.");
         }
 
-        var id = isSpectator
-            ? new PlayerId(-Seats.Count(s => s.IsSpectator) - 1)
-            : new PlayerId(Seats.Count(s => !s.IsSpectator));
+        var id = new PlayerId(Seats.Count);
         var seat = new PlayerSeat(
             new PlayerConfig(id, name, colorHex, isAi),
             connectionId,
@@ -93,31 +106,63 @@ public sealed class NetworkGameSession(
     }
 
     /// <summary>
-    /// Builds engine players from the claimed non-spectator seats in claim
-    /// order (their <c>PlayerConfig.Id</c> already zips <c>0..N-1</c> by
-    /// <see cref="ClaimSeat"/> construction, like hot-seat <c>Start</c>). On success
-    /// assigns <see cref="State"/> and raises <see cref="Changed"/>; on
-    /// rejection leaves everything untouched.
+    /// Starts from the selected seats (default: every claimed player):
+    /// unselected humans are demoted to spectators (key kept, engine seat
+    /// revoked — their circuits degrade to the waiting view on their own),
+    /// unselected bots are removed outright. Rows zip positionally to engine
+    /// <c>0..N-1</c> in claim order and <see cref="EngineIdFor"/> records
+    /// the mapping, so selected devices keep working under their stable
+    /// keys. The host must be selected. Pure until the engine accepts:
+    /// a rejection leaves seats, map, and state untouched.
     /// </summary>
-    public CommandResult<GameState, GameEvent> Start(GameMode mode)
+    public CommandResult<GameState, GameEvent> Start(GameMode mode, IReadOnlyList<PlayerId>? selected = null)
     {
         if (IsStarted)
         {
             throw new InvalidOperationException("NetworkGameSession.Start was called twice.");
         }
 
-        var rows = Seats
-            .Where(s => !s.IsSpectator)
+        var playing = Seats.Where(s => !s.IsSpectator).ToList();
+        var selectedKeys = selected ?? playing.Select(s => s.Config.Id).ToList();
+
+        var hostKey = Seats.Where(s => s.IsHost).Select(s => s.Config.Id).FirstOrDefault();
+        if (!selectedKeys.Contains(hostKey))
+        {
+            throw new InvalidOperationException("NetworkGameSession.Start requires the host seat selected.");
+        }
+
+        var rows = playing
+            .Where(s => selectedKeys.Contains(s.Config.Id))
             .Select(s => new PlayerSetupRow(s.Config.Name, s.Config.ColorHex, s.Config.IsAi))
             .ToList();
 
         var result = GameSetup.Create(rows.Count, mode, dice);
 
-        if (result is CommandResult<GameState, GameEvent>.Ok ok)
+        if (result is not CommandResult<GameState, GameEvent>.Ok ok)
         {
-            State = ok.State;
-            LastEvents = ok.Events;
-            AiFailure = null;
+            return result;
+        }
+
+        // Commit the curated roster only now that the engine accepted it.
+        var seats = Seats.ToList();
+        seats.RemoveAll(s => s.Config.IsAi && !s.IsSpectator && !selectedKeys.Contains(s.Config.Id));
+        for (var i = 0; i < seats.Count; i++)
+        {
+            if (!seats[i].IsSpectator && !selectedKeys.Contains(seats[i].Config.Id))
+            {
+                seats[i] = seats[i] with { IsSpectator = true };
+            }
+        }
+
+        Seats = seats;
+        State = ok.State;
+        LastEvents = ok.Events;
+        AiFailure = null;
+
+        _keyToEngine = playing
+            .Where(s => selectedKeys.Contains(s.Config.Id))
+            .Select((s, engine) => (s.Config.Id, Engine: new PlayerId(engine)))
+            .ToDictionary(x => x.Id, x => x.Engine);
 
             // Same neutral-army synthesized config as hot-seat Start:
             // TwoPlayer's neutral is GameSetup.Create's own player, never a
@@ -133,7 +178,6 @@ public sealed class NetworkGameSession(
             RebuildBotRegistry();
             AdvanceAiTurns();
             Changed?.Invoke();
-        }
 
         return result;
     }
@@ -158,6 +202,13 @@ public sealed class NetworkGameSession(
             .Select((p, i) => new PlayerSeat(
                 p, ConnectionId: null, IsHost: i == 0, IsConnected: false, IsSpectator: false))
             .ToList();
+        // Engine zip is positional over the restored seats (a networked
+        // snapshot carries stable claim keys, not engine ids — same rule
+        // as Start keeps every consumer aligned).
+        _keyToEngine = Seats
+            .Where(s => !s.IsSpectator)
+            .Select((s, engine) => (s.Config.Id, Engine: new PlayerId(engine)))
+            .ToDictionary(x => x.Id, x => x.Engine);
         RebuildBotRegistry();
         Changed?.Invoke();
     }

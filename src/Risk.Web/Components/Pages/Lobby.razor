@@ -5,6 +5,7 @@
 @using Risk.Domain.Players
 @using Risk.Engine.Events
 @using Risk.Engine.Results
+@using Risk.Engine.Setup
 @using Risk.Engine.State
 @using Risk.Web.Components.Shared
 @using Risk.Web.Models
@@ -47,6 +48,19 @@ else
                 @(seat.IsHost ? "(anfitrión)" : "")
                 @(seat.IsSpectator ? "(espectador)" : "")
                 @(seat.IsConnected ? "" : "(desconectado)")
+                @if (isHost && !session.IsStarted && !seat.IsSpectator)
+                {
+                    // Roster curation: the host picks who plays. Unchecked
+                    // humans become spectators at Start, unchecked bots are
+                    // removed outright. The host seat itself is locked in.
+                    <label>
+                        <input type="checkbox"
+                               checked="@(!_deselected.Contains(seat.Config.Id))"
+                               disabled="@seat.IsHost"
+                               @onchange="e => OnToggleSeat(seat.Config.Id, e.Value)" />
+                        Juega
+                    </label>
+                }
             </li>
         }
     </ul>
@@ -74,6 +88,10 @@ else
     }
     else if (isHost)
     {
+        var range = GameSetup.PlayerCountRange(_mode);
+        var selectedCount = players.Count(s => !_deselected.Contains(s.Config.Id));
+        var inRange = selectedCount >= range.Min && selectedCount <= range.Max;
+
         <label for="lobby-mode">Modo de juego</label>
         <select id="lobby-mode" value="@_mode" @onchange="OnModeChanged">
             @foreach (var mode in SelectableModes)
@@ -82,8 +100,8 @@ else
             }
         </select>
 
-        <button type="button" disabled="@(players.Count < 2 || players.Count > 6)" @onclick="OnStart">
-            Iniciar partida (@players.Count/6)
+        <button type="button" disabled="@(!inRange)" @onclick="OnStart">
+            Iniciar partida (@selectedCount jugarán)
         </button>
         <button type="button" disabled="@(players.Count >= 6)" @onclick="OnAddBot" title="Ocupa un asiento libre con un bot">
             Añadir IA
@@ -105,6 +123,7 @@ else
     private NetworkGameSession? _session;
     private GameMode _mode = GameMode.Classic;
     private GameError? _error;
+    private readonly HashSet<PlayerId> _deselected = new();
     private bool _saving;
     private string? _saveMessage;
     private string? _saveError;
@@ -174,13 +193,35 @@ else
             return;
         }
 
-        var result = _session.Start(_mode);
+        var selected = _session.Seats
+            .Where(s => !s.IsSpectator && !_deselected.Contains(s.Config.Id))
+            .Select(s => s.Config.Id)
+            .ToList();
+        var result = _session.Start(_mode, selected);
         _error = result switch
         {
             CommandResult<GameState, GameEvent>.Ok => null,
             CommandResult<GameState, GameEvent>.Rejected rejected => rejected.Error,
             _ => _error
         };
+    }
+
+    /// <summary>
+    /// Roster curation (host only): unchecking removes a seat from the next
+    /// <see cref="NetworkGameSession.Start"/> selection — humans demote to
+    /// spectators, bots are dropped. The host seat cannot be unchecked (the
+    /// session itself also throws without the host selected).
+    /// </summary>
+    private void OnToggleSeat(PlayerId seat, object? value)
+    {
+        if (value is true)
+        {
+            _deselected.Remove(seat);
+        }
+        else
+        {
+            _deselected.Add(seat);
+        }
     }
 
     /// <summary>

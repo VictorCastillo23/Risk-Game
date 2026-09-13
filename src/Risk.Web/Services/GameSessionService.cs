@@ -149,9 +149,33 @@ public sealed class GameSessionService(
 
     public IReadOnlyDictionary<PlayerId, PlayerConfig> Players
     {
-        get => ActiveNetwork is { } active
-            ? active.Seats.ToDictionary(s => s.Config.Id, s => s.Config)
-            : _players;
+        // Keyed by ENGINE id (what state rows, Turn.CurrentPlayer, and
+        // ConfigFor callers address): players via the session's stable-key
+        // map, the TwoPlayer neutral by its own engine id, spectators
+        // excluded (nothing addresses them by id — lobby reads Seats).
+        // This also makes demoted-spectator keys collision-proof, which a
+        // Config.Id-keyed dict was not.
+        get
+        {
+            if (ActiveNetwork is not { } active)
+            {
+                return _players;
+            }
+
+            var dict = new Dictionary<PlayerId, PlayerConfig>();
+            foreach (var seat in active.Seats)
+            {
+                if (seat.IsSpectator)
+                {
+                    continue;
+                }
+
+                dict[active.EngineIdFor(seat.Config.Id) ?? seat.Config.Id] = seat.Config;
+            }
+
+            return dict;
+        }
+
         private set => _players = value;
     }
 
@@ -487,21 +511,22 @@ public sealed class GameSessionService(
     /// — a programmer error, not a rule violation.
     ///
     /// Networked: returns THIS circuit's seat view (never another seat's),
-    /// so every device only ever sees its own hand. A seatless or spectator
-    /// circuit (null or negative seat) has no view to return — throwing is
-    /// the anti-leak default; callers hide hand UI for those circuits.
+    /// so every device only ever sees its own hand. The stable claim key
+    /// maps through <see cref="NetworkGameSession.EngineIdFor"/>: seatless,
+    /// spectator, or removed seats map to null and throw — the anti-leak
+    /// default; callers hide hand UI for those circuits.
     /// </summary>
     public PlayerView ObserveCurrentPlayer()
     {
         if (ActiveNetwork is { } active)
         {
-            var seat = net?.Seat;
-            if (seat is null || seat.Value.Value < 0)
+            var engine = net?.Seat is { } key ? active.EngineIdFor(key) : null;
+            if (engine is null)
             {
-                throw new InvalidOperationException("GameSessionService.ObserveCurrentPlayer has no seat in the networked game.");
+                throw new InvalidOperationException("GameSessionService.ObserveCurrentPlayer has no engine seat in the networked game.");
             }
 
-            return active.Observe(seat.Value);
+            return active.Observe(engine.Value);
         }
 
         if (State is null)
