@@ -42,7 +42,7 @@
                 <g transform="translate(@position.X, @position.Y)">
                     <circle class="board-marker-fill" r="@(radius - 6)" fill="@color" />
                     <circle class="board-marker-ring-inner" r="@(radius - 4.5)" fill="none" stroke="@MarkerInk.InnerRingFor(color)" />
-                    <circle class="board-marker-ring-outer" r="@(radius - 1.5)" fill="none" stroke="@MarkerInk.Outer" />
+                    <circle class="board-marker-ring-outer" r="@(radius - 1.5)" fill="none" stroke="@(TerritoryLayout.NeedsLightOuterRing(id) ? MarkerInk.OuterOnDarkArt : MarkerInk.Outer)" />
                     <text class="board-territory-troops" text-anchor="middle" dy="4">@territory.Troops</text>
                     <text class="board-territory-pending" text-anchor="middle" dy="28" style="@(pending > 0 ? null : "display:none")">+@pending</text>
                 </g>

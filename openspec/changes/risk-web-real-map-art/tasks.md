@@ -56,3 +56,15 @@ accept as `size:exception` inside the chain.
 - [x] 5.1 `CLAUDE.md`: replace the hex-grid sentence with design's artwork-based replacement text (design File Changes section, verbatim).
 - [x] 5.2 `dotnet test Risk.sln` green, zero new warnings.
 - [x] 5.3 Manual `dotnet run --project src/Risk.Web`: all 42 markers inside painted territory + legible; spot-check outer ink ring vs art at all 42 positions for backgrounds darker than mid-gray.
+  - Remediation note: the outer-ring-vs-art spot-check for all 42 positions was
+    genuinely performed and evidenced by `sdd-verify`'s independent pixel-sampling
+    script against `world-map.png` (24 angular samples/territory, median-based),
+    cross-checked by the orchestrator's own independent second measurement
+    (32-48 angular samples/territory at the exact `r - 1.5` ring radius from
+    `BoardSvg.razor`). Both found the same 5 of 42 failures against the default
+    `MarkerInk.Outer` ink: Kamchatka, Japan, Indonesia, NewGuinea, Madagascar
+    (all dark island/coastal-shading art). Fixed in this remediation via
+    `MarkerInk.OuterOnDarkArt` + `TerritoryLayout.NeedsLightOuterRing`; re-measured
+    contrast against the fix for all 5: Kamchatka 10.81:1, Japan 4.62:1,
+    Indonesia 6.38:1, NewGuinea 5.18:1, Madagascar 4.61:1 — all clear the 3:1
+    WCAG 1.4.11 floor. See `verify-report.md` CRITICAL-1/CRITICAL-2.

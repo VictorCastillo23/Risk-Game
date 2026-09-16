@@ -111,6 +111,25 @@ public static class TerritoryLayout
     private static readonly IReadOnlyDictionary<TerritoryId, double> RadiusOverrides =
         new Dictionary<TerritoryId, double>();
 
+    /// <summary>
+    /// Named exceptions only, same shape as <see cref="RadiusOverrides"/> but for
+    /// outer-ring ink color instead of radius. Populated from a one-time pixel
+    /// measurement against the shipped <c>world-map.png</c> artwork (risk-web-real-map-art
+    /// remediation, sdd-verify CRITICAL-1): these 5 territories sit on local art dark
+    /// enough that the default <see cref="MarkerInk.Outer"/> ink fails WCAG 1.4.11's
+    /// 3:1 floor against it — all 5 are small islands or coastal peninsulas surrounded
+    /// by dark ocean/coastal shading. <see cref="MarkerInk.OuterOnDarkArt"/> clears 3:1
+    /// against every one of them with comfortable margin.
+    /// </summary>
+    private static readonly IReadOnlySet<TerritoryId> LightOuterRingTerritories = new HashSet<TerritoryId>
+    {
+        new("Kamchatka"),
+        new("Japan"),
+        new("Indonesia"),
+        new("NewGuinea"),
+        new("Madagascar"),
+    };
+
     /// <summary>Center point of every territory's marker, in canvas pixel coordinates.</summary>
     public static IReadOnlyDictionary<TerritoryId, (double X, double Y)> Coordinates { get; } = BuildCoordinates();
 
@@ -123,6 +142,14 @@ public static class TerritoryLayout
     /// <summary>Marker radius for <paramref name="territory"/>, in canvas units — <see cref="RadiusOverrides"/>'s entry if one exists, else <see cref="MarkerRadius"/>.</summary>
     public static double RadiusOf(TerritoryId territory) =>
         RadiusOverrides.TryGetValue(territory, out var radius) ? radius : MarkerRadius;
+
+    /// <summary>
+    /// True when <paramref name="territory"/>'s outer marker ring must use
+    /// <see cref="MarkerInk.OuterOnDarkArt"/> instead of <see cref="MarkerInk.Outer"/>
+    /// to clear WCAG 1.4.11's 3:1 floor against its own local artwork.
+    /// </summary>
+    public static bool NeedsLightOuterRing(TerritoryId territory) =>
+        LightOuterRingTerritories.Contains(territory);
 
     private static IReadOnlyDictionary<TerritoryId, (double X, double Y)> BuildCoordinates()
     {

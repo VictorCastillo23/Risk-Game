@@ -26,6 +26,30 @@ public class MarkerInkTests
         Assert.True(ratio >= 3.0, $"{fill} inner ring contrast was {ratio:F2}:1, expected >= 3.0:1.");
     }
 
+    // Average local-artwork RGB sampled at the outer ring's true radius for
+    // the 5 territories flagged by sdd-verify's independent pixel-sampling
+    // script (Kamchatka, Japan, Indonesia, NewGuinea, Madagascar all sit on
+    // dark island/coastal-shading art). Against the default MarkerInk.Outer
+    // ("#2b2118") these 5 fail WCAG 1.4.11's 3:1 floor; MarkerInk.OuterOnDarkArt
+    // is the fix, applied to exactly these 5 via TerritoryLayout.NeedsLightOuterRing.
+    public static IEnumerable<object[]> DarkArtSamples()
+    {
+        yield return new object[] { "Kamchatka", "#343221" };
+        yield return new object[] { "Japan", "#686d25" };
+        yield return new object[] { "Indonesia", "#853e3d" };
+        yield return new object[] { "NewGuinea", "#934d47" };
+        yield return new object[] { "Madagascar", "#b2471c" };
+    }
+
+    [Theory]
+    [MemberData(nameof(DarkArtSamples))]
+    public void OuterOnDarkArt_ReachesThreeToOneAgainstMeasuredDarkArt(string territory, string measuredArtHex)
+    {
+        var ratio = MarkerInk.ContrastRatio(measuredArtHex, MarkerInk.OuterOnDarkArt);
+
+        Assert.True(ratio >= 3.0, $"{territory} outer ring contrast against measured art was {ratio:F2}:1, expected >= 3.0:1.");
+    }
+
     [Fact]
     public void RingColors_StillMatchTheCssCustomProperties()
     {

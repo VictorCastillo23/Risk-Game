@@ -34,6 +34,17 @@ public static class MarkerInk
     public const string InnerOnLight = "#2b2118";
 
     /// <summary>
+    /// Outer ring color for a territory whose local artwork is dark enough that
+    /// the default <see cref="Outer"/> ink fails 3:1 against it (see
+    /// TerritoryLayout's named per-territory exception list, populated from a
+    /// one-time pixel measurement against the shipped map artwork — analogous
+    /// to design D9's RadiusOverrides mechanism, but for ring color instead of
+    /// radius). Same value as <see cref="InnerOnDark"/> — reused because it's
+    /// the project's one "light ink" constant, not duplicated as a new color.
+    /// </summary>
+    public const string OuterOnDarkArt = "#f5ead0";
+
+    /// <summary>
     /// WCAG relative-luminance threshold below which a fill is treated as
     /// "dark" for inner-ring selection. At exactly this threshold the worst
     /// case still clears 3:1 on both sides (design D8), so every sRGB fill
