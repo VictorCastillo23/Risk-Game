@@ -21,7 +21,7 @@ public static class TerritoryLayout
 
     /// <summary>Default radius of a territory marker, in canvas units. 2*R scaled by the
     /// reference board width (~1032 CSS px / 1340) clears WCAG 2.5.8's 24x24 px floor.</summary>
-    public const double MarkerRadius = 17;
+    public const double MarkerRadius = 25;
 
     /// <summary>Hard floor for a <see cref="RadiusOverrides"/> entry, in canvas units (~20 CSS px). See design D9.</summary>
     public const double MinRadius = 13;
@@ -38,56 +38,56 @@ public static class TerritoryLayout
     [
         // North America
         ("Alaska", "NA", 90, 140),
-        ("NorthwestTerritory", "NA", 230, 130),
-        ("Greenland", "NA", 505, 110),
-        ("Alberta", "NA", 200, 210),
-        ("Ontario", "NA", 300, 210),
-        ("Quebec", "NA", 400, 190),
-        ("WesternUnitedStates", "NA", 230, 310),
-        ("EasternUnitedStates", "NA", 350, 325),
-        ("CentralAmerica", "NA", 250, 425),
+        ("NorthwestTerritory", "NA", 230, 135),
+        ("Greenland", "NA", 490, 110),
+        ("Alberta", "NA", 200, 220),
+        ("Ontario", "NA", 300, 220),
+        ("Quebec", "NA", 400, 220),
+        ("WesternUnitedStates", "NA", 230, 340),
+        ("EasternUnitedStates", "NA", 340, 335),
+        ("CentralAmerica", "NA", 245, 425),
 
         // South America
-        ("Venezuela", "SA", 355, 505),
+        ("Venezuela", "SA", 335, 505),
         ("Brazil", "SA", 430, 600),
-        ("Peru", "SA", 340, 630),
-        ("Argentina", "SA", 395, 765),
+        ("Peru", "SA", 340, 610),
+        ("Argentina", "SA", 350, 750),
 
         // Europe
-        ("Iceland", "EU", 585, 195),
-        ("GreatBritain", "EU", 585, 300),
-        ("Scandinavia", "EU", 760, 185),
-        ("NorthernEurope", "EU", 680, 310),
-        ("WesternEurope", "EU", 615, 400),
-        ("SouthernEurope", "EU", 700, 420),
-        ("Ukraine", "EU", 820, 330),
+        ("Iceland", "EU", 590,200),
+        ("GreatBritain", "EU", 580, 300),
+        ("Scandinavia", "EU", 710, 185),
+        ("NorthernEurope", "EU", 680, 315),
+        ("WesternEurope", "EU", 610, 395),
+        ("SouthernEurope", "EU", 690, 410),
+        ("Ukraine", "EU", 810, 290),
 
         // Africa
-        ("NorthAfrica", "AF", 630, 540),
+        ("NorthAfrica", "AF", 630, 555),
         ("Egypt", "AF", 730, 525),
-        ("EastAfrica", "AF", 780, 650),
+        ("EastAfrica", "AF", 780, 630),
         ("Congo", "AF", 705, 675),
-        ("SouthAfrica", "AF", 705, 790),
+        ("SouthAfrica", "AF", 715, 785),
         ("Madagascar", "AF", 845, 770),
 
         // Asia
-        ("Ural", "AS", 960, 175),
-        ("Siberia", "AS", 1090, 140),
-        ("Yakutsk", "AS", 1200, 110),
-        ("Kamchatka", "AS", 1210, 215),
-        ("Irkutsk", "AS", 1060, 285),
-        ("Mongolia", "AS", 1050, 375),
-        ("Japan", "AS", 1225, 360),
-        ("China", "AS", 1060, 445),
-        ("Afghanistan", "AS", 920, 425),
-        ("MiddleEast", "AS", 880, 495),
-        ("India", "AS", 985, 540),
-        ("Siam", "AS", 1075, 530),
+        ("Ural", "AS", 940, 220),
+        ("Siberia", "AS", 1020, 170),
+        ("Yakutsk", "AS", 1100, 140),
+        ("Kamchatka", "AS", 1190, 175),
+        ("Irkutsk", "AS", 1075, 255),
+        ("Mongolia", "AS", 1080, 335),
+        ("Japan", "AS", 1235, 350),
+        ("China", "AS", 1060, 425),
+        ("Afghanistan", "AS", 905, 365),
+        ("MiddleEast", "AS", 840, 500),
+        ("India", "AS", 985, 500),
+        ("Siam", "AS", 1075, 525),
 
         // Oceania
-        ("Indonesia", "OC", 1065, 650),
+        ("Indonesia", "OC", 1085, 660),
         ("NewGuinea", "OC", 1200, 630),
-        ("WesternAustralia", "OC", 1155, 770),
+        ("WesternAustralia", "OC", 1135, 770),
         ("EasternAustralia", "OC", 1240, 770)
     ];
 
