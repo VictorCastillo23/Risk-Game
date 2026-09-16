@@ -3,169 +3,173 @@ using Risk.Domain.Map;
 namespace Risk.Web.Models;
 
 /// <summary>
-/// Low-poly hex-grid board layout for all 42 <see cref="WorldMap"/>
-/// territories, used by <c>BoardSvg</c> to render a stylized continent-shaped
-/// map. Each continent is its own small local axial-hex grid — only a tiny
-/// hand-placed (Q, R) pair per territory in <see cref="TerritorySeed"/>,
-/// positioned on the shared canvas by <see cref="ContinentOrigins"/> and
-/// converted to pixel geometry by <see cref="HexGrid"/>. Territories on
-/// adjacent axial cells share a polygon edge, which is what makes each
-/// continent read as one contiguous landmass. This is still presentation
-/// data, not real cartography — a stylized/low-poly silhouette per
-/// continent, per the confirmed non-goal of geographic accuracy.
+/// Hand-placed pixel-coordinate layout for all 42 <see cref="WorldMap"/>
+/// territories and the 6 continent bonus-label anchors, positioned directly
+/// against the real watercolor map artwork (<c>wwwroot/images/world-map.png</c>,
+/// 1340x876). Unlike the previous hex-grid silhouette this is not derived
+/// geometry — every coordinate is a hand-authored point chosen to sit inside
+/// its territory's own painted region in the artwork; presentation-only,
+/// kept separate from <see cref="Risk.Domain"/>'s adjacency graph.
 /// </summary>
 public static class TerritoryLayout
 {
-    /// <summary>Width of the canvas these coordinates are laid out on.</summary>
-    public const double CanvasWidth = 1200;
+    /// <summary>Width of the map artwork these coordinates are laid out on.</summary>
+    public const double CanvasWidth = 1340;
 
-    /// <summary>Height of the canvas these coordinates are laid out on.</summary>
-    public const double CanvasHeight = 760;
+    /// <summary>Height of the map artwork these coordinates are laid out on.</summary>
+    public const double CanvasHeight = 876;
 
-    private const double HexSize = 40;
+    /// <summary>Default radius of a territory marker, in canvas units. 2*R scaled by the
+    /// reference board width (~1032 CSS px / 1340) clears WCAG 2.5.8's 24x24 px floor.</summary>
+    public const double MarkerRadius = 25;
 
-    // One entry per WorldMap.Territories id: which continent it belongs to,
-    // and its (Q, R) axial coordinate inside that continent's own local hex
-    // grid. This is the only hand-placed geometry input — everything else
-    // (pixel centers, hexagon vertices) is derived by HexGrid. The (Q, R)
-    // values are chosen to trace a recognizable silhouette per continent
-    // (e.g. South America as a narrow north-south column, Greenland/
-    // Madagascar as detached islands), not to mirror real distances.
-    private static readonly (string Name, string ContinentId, int Q, int R)[] TerritorySeed =
+    /// <summary>Hard floor for a <see cref="RadiusOverrides"/> entry, in canvas units (~20 CSS px). See design D9.</summary>
+    public const double MinRadius = 13;
+
+    // One entry per WorldMap.Territories id: which continent it belongs to
+    // (kept as its own column rather than derived from WorldMap so the seed
+    // stays readable grouped per continent while authoring against the
+    // artwork, and so ContinentOf_...MatchingItsRealContinent stays a real
+    // cross-check instead of a tautology — design D3), and its hand-placed
+    // pixel coordinate in the artwork's own 1340x876 space. Every value is
+    // an integral pixel literal (design D7) so Razor's culture-aware double
+    // formatting can never corrupt an SVG attribute.
+    private static readonly (string Name, string ContinentId, double X, double Y)[] TerritorySeed =
     [
-        // North America — wide north tapering to a narrow isthmus south; Greenland a detached island to the northeast
-        ("Alaska", "NA", 0, 0),
-        ("NorthwestTerritory", "NA", 1, 0),
-        ("Greenland", "NA", 3, -1),
-        ("Alberta", "NA", 0, 1),
-        ("Ontario", "NA", 1, 1),
-        ("Quebec", "NA", 2, 1),
-        ("WesternUnitedStates", "NA", 0, 2),
-        ("EasternUnitedStates", "NA", 1, 2),
-        ("CentralAmerica", "NA", 1, 3),
+        // North America
+        ("Alaska", "NA", 90, 140),
+        ("NorthwestTerritory", "NA", 230, 135),
+        ("Greenland", "NA", 490, 110),
+        ("Alberta", "NA", 200, 220),
+        ("Ontario", "NA", 300, 220),
+        ("Quebec", "NA", 400, 220),
+        ("WesternUnitedStates", "NA", 230, 340),
+        ("EasternUnitedStates", "NA", 340, 335),
+        ("CentralAmerica", "NA", 245, 425),
 
-        // South America — narrow north-south column with an eastward bulge at Brazil
-        ("Venezuela", "SA", 0, 0),
-        ("Brazil", "SA", 1, 0),
-        ("Peru", "SA", 0, 1),
-        ("Argentina", "SA", 0, 2),
+        // South America
+        ("Venezuela", "SA", 335, 505),
+        ("Brazil", "SA", 430, 600),
+        ("Peru", "SA", 340, 610),
+        ("Argentina", "SA", 350, 750),
 
-        // Europe — Iceland/Scandinavia to the north, Ukraine reaching east toward Asia
-        ("Iceland", "EU", 0, 0),
-        ("Scandinavia", "EU", 1, 0),
-        ("GreatBritain", "EU", 0, 1),
-        ("NorthernEurope", "EU", 1, 1),
-        ("Ukraine", "EU", 2, 1),
-        ("WesternEurope", "EU", 0, 2),
-        ("SouthernEurope", "EU", 1, 2),
+        // Europe
+        ("Iceland", "EU", 590,200),
+        ("GreatBritain", "EU", 580, 300),
+        ("Scandinavia", "EU", 710, 185),
+        ("NorthernEurope", "EU", 680, 315),
+        ("WesternEurope", "EU", 610, 395),
+        ("SouthernEurope", "EU", 690, 410),
+        ("Ukraine", "EU", 810, 290),
 
-        // Africa — EastAfrica as the hub bordering all 5 other territories;
-        // the rest ring around it in real-border order (Egypt, NorthAfrica,
-        // Congo, SouthAfrica, Madagascar) so consecutive ring pairs touch
-        // (matching WorldMap borders) while Egypt and Congo — real
-        // non-neighbors — land on non-consecutive ring slots and no longer
-        // falsely share a hex edge. See HexAdjacencyRegressionTests.
-        ("NorthAfrica", "AF", 2, 0),
-        ("Egypt", "AF", 2, 1),
-        ("Congo", "AF", 1, 0),
-        ("EastAfrica", "AF", 1, 1),
-        ("Madagascar", "AF", 0, 2),
-        ("SouthAfrica", "AF", 0, 1),
+        // Africa
+        ("NorthAfrica", "AF", 630, 555),
+        ("Egypt", "AF", 730, 525),
+        ("EastAfrica", "AF", 780, 630),
+        ("Congo", "AF", 705, 675),
+        ("SouthAfrica", "AF", 715, 785),
+        ("Madagascar", "AF", 845, 770),
 
-        // Asia — the largest continent: wide north tapering to the Middle East / India peninsula.
-        // Coordinates are deliberately NOT a simple grid: they trace the real WorldMap
-        // adjacency graph as hex-neighbor offsets (each real border is an axial-neighbor
-        // pair) while keeping non-adjacent pairs apart, so no two hexes visually touch
-        // unless WorldMap.AreAdjacent agrees — see HexAdjacencyRegressionTests.
-        ("Ural", "AS", -1, 0),
-        ("Siberia", "AS", 0, 0),
-        ("Yakutsk", "AS", 1, 0),
-        ("Kamchatka", "AS", 1, 1),
-        ("Irkutsk", "AS", 0, 1),
-        ("Mongolia", "AS", 0, 2),
-        ("Japan", "AS", 1, 2),
-        ("Afghanistan", "AS", -2, 3),
-        ("China", "AS", -1, 3),
-        ("Siam", "AS", -1, 4),
-        ("MiddleEast", "AS", -3, 4),
-        ("India", "AS", -2, 4),
+        // Asia
+        ("Ural", "AS", 940, 220),
+        ("Siberia", "AS", 1020, 170),
+        ("Yakutsk", "AS", 1100, 140),
+        ("Kamchatka", "AS", 1190, 175),
+        ("Irkutsk", "AS", 1075, 255),
+        ("Mongolia", "AS", 1080, 335),
+        ("Japan", "AS", 1235, 350),
+        ("China", "AS", 1060, 425),
+        ("Afghanistan", "AS", 905, 365),
+        ("MiddleEast", "AS", 840, 500),
+        ("India", "AS", 985, 500),
+        ("Siam", "AS", 1075, 525),
 
-        // Oceania — Indonesia/New Guinea islands north of the Australian mainland
-        ("Indonesia", "OC", 0, 0),
-        ("NewGuinea", "OC", 1, 0),
-        ("WesternAustralia", "OC", 0, 1),
-        ("EasternAustralia", "OC", 1, 1)
+        // Oceania
+        ("Indonesia", "OC", 1085, 660),
+        ("NewGuinea", "OC", 1200, 630),
+        ("WesternAustralia", "OC", 1135, 770),
+        ("EasternAustralia", "OC", 1240, 770)
     ];
 
-    // Positions each continent's local hex grid on the shared canvas —
-    // mirrors the previous schematic layout's macro clusters (NA top-left,
-    // EU top-middle, AS top-right/largest, SA bottom-left, AF
-    // bottom-middle, OC bottom-right) so the six regions stay in their
-    // familiar places; only the shape within each cluster changed from
-    // loose dots to a contiguous hex blob.
-    private static readonly IReadOnlyDictionary<string, (double OriginX, double OriginY)> ContinentOrigins =
-        new Dictionary<string, (double OriginX, double OriginY)>
-        {
-            ["NA"] = (90, 160),
-            ["SA"] = (140, 480),
-            ["EU"] = (520, 140),
-            ["AF"] = (520, 460),
-            ["AS"] = (900, 120),
-            ["OC"] = (980, 520)
-        };
+    // One hand-placed label anchor per continent — the centroid of that
+    // continent's own territory coordinates, verified against Coordinates
+    // by ContinentLabelAnchors_EachSitsNearItsOwnContinent rather than
+    // derived from a bounding box, since real continent bounding boxes
+    // overlap (design D1, "Deviation from spec wording").
+    private static readonly (string ContinentId, double X, double Y)[] ContinentLabelSeed =
+    [
+        ("NA", 284, 228),
+        ("SA", 380, 625),
+        ("EU", 678, 306),
+        ("AF", 732, 658),
+        ("AS", 1060, 341),
+        ("OC", 1165, 705)
+    ];
 
-    /// <summary>Hex-vertex polygon for every territory, in canvas pixel coordinates.</summary>
-    public static IReadOnlyDictionary<TerritoryId, IReadOnlyList<(double X, double Y)>> Polygons { get; } = BuildPolygons();
+    /// <summary>Named exceptions only (design D9). Empty unless hand-placement proves the
+    /// spacing test unsatisfiable; an entry below 16 owes an inline SC 2.5.8 justification.</summary>
+    private static readonly IReadOnlyDictionary<TerritoryId, double> RadiusOverrides =
+        new Dictionary<TerritoryId, double>();
 
-    /// <summary>Precomputed SVG <c>points</c> attribute string per territory, so <c>BoardSvg</c> doesn't re-join coordinates on every render.</summary>
-    public static IReadOnlyDictionary<TerritoryId, string> PolygonPointsAttr { get; } = BuildPolygonPointsAttr();
+    /// <summary>
+    /// Named exceptions only, same shape as <see cref="RadiusOverrides"/> but for
+    /// outer-ring ink color instead of radius. The first 5 entries were populated
+    /// from a one-time pixel measurement against the shipped <c>world-map.png</c>
+    /// artwork (risk-web-real-map-art remediation, sdd-verify CRITICAL-1): these
+    /// territories sit on local art dark enough that the default
+    /// <see cref="MarkerInk.Outer"/> ink fails WCAG 1.4.11's 3:1 floor against it —
+    /// all 5 are small islands or coastal peninsulas surrounded by dark ocean/coastal
+    /// shading. <see cref="MarkerInk.OuterOnDarkArt"/> clears 3:1 against every one
+    /// of them with comfortable margin.
+    ///
+    /// Congo, EasternAustralia, and Argentina were added in a second remediation
+    /// pass, after sdd-verify's follow-up 216-sample pixel-sampling method found
+    /// these 3 sitting right at the 3:1 contrast boundary against the default
+    /// outer ring, with inconsistent results across sampling parameterizations
+    /// (unlike the original 5, which failed consistently every time). This is a
+    /// precautionary inclusion for a borderline result, not a proven violation
+    /// like the first 5.
+    /// </summary>
+    private static readonly IReadOnlySet<TerritoryId> LightOuterRingTerritories = new HashSet<TerritoryId>
+    {
+        new("Kamchatka"),
+        new("Japan"),
+        new("Indonesia"),
+        new("NewGuinea"),
+        new("Madagascar"),
+        new("Congo"),
+        new("EasternAustralia"),
+        new("Argentina"),
+    };
 
-    /// <summary>Center point of every territory's hexagon — used for troop-count/label placement and adjacency-line endpoints.</summary>
+    /// <summary>Center point of every territory's marker, in canvas pixel coordinates.</summary>
     public static IReadOnlyDictionary<TerritoryId, (double X, double Y)> Coordinates { get; } = BuildCoordinates();
 
     /// <summary>The continent each territory belongs to, mirrored from <see cref="WorldMap"/> for fast lookup by the board renderer.</summary>
     public static IReadOnlyDictionary<TerritoryId, ContinentId> ContinentOf { get; } = BuildContinentOf();
 
+    /// <summary>Hand-placed "+bonus" label anchor per continent (design D1).</summary>
+    public static IReadOnlyDictionary<ContinentId, (double X, double Y)> ContinentLabelAnchors { get; } = BuildContinentLabelAnchors();
+
+    /// <summary>Marker radius for <paramref name="territory"/>, in canvas units — <see cref="RadiusOverrides"/>'s entry if one exists, else <see cref="MarkerRadius"/>.</summary>
+    public static double RadiusOf(TerritoryId territory) =>
+        RadiusOverrides.TryGetValue(territory, out var radius) ? radius : MarkerRadius;
+
     /// <summary>
-    /// Padded bounding box per continent (over every member territory's hex
-    /// vertices), used to draw the continent halo/label backdrop layer.
+    /// True when <paramref name="territory"/>'s outer marker ring must use
+    /// <see cref="MarkerInk.OuterOnDarkArt"/> instead of <see cref="MarkerInk.Outer"/>
+    /// to clear WCAG 1.4.11's 3:1 floor against its own local artwork.
     /// </summary>
-    public static IReadOnlyDictionary<ContinentId, (double X, double Y, double Width, double Height)> ContinentBounds { get; } = BuildContinentBounds();
-
-    private static IReadOnlyDictionary<TerritoryId, IReadOnlyList<(double X, double Y)>> BuildPolygons()
-    {
-        var polygons = new Dictionary<TerritoryId, IReadOnlyList<(double X, double Y)>>(TerritorySeed.Length);
-
-        foreach (var (name, continentId, q, r) in TerritorySeed)
-        {
-            var origin = ContinentOrigins[continentId];
-            var center = HexGrid.AxialToPixel(q, r, HexSize, origin.OriginX, origin.OriginY);
-            polygons.Add(new TerritoryId(name), HexGrid.Corners(center.X, center.Y, HexSize));
-        }
-
-        return polygons;
-    }
-
-    private static IReadOnlyDictionary<TerritoryId, string> BuildPolygonPointsAttr()
-    {
-        var attrs = new Dictionary<TerritoryId, string>(Polygons.Count);
-
-        foreach (var (id, points) in Polygons)
-        {
-            attrs.Add(id, string.Join(' ', points.Select(p => $"{p.X.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},{p.Y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}")));
-        }
-
-        return attrs;
-    }
+    public static bool NeedsLightOuterRing(TerritoryId territory) =>
+        LightOuterRingTerritories.Contains(territory);
 
     private static IReadOnlyDictionary<TerritoryId, (double X, double Y)> BuildCoordinates()
     {
         var coordinates = new Dictionary<TerritoryId, (double X, double Y)>(TerritorySeed.Length);
 
-        foreach (var (name, continentId, q, r) in TerritorySeed)
+        foreach (var (name, _, x, y) in TerritorySeed)
         {
-            var origin = ContinentOrigins[continentId];
-            coordinates.Add(new TerritoryId(name), HexGrid.AxialToPixel(q, r, HexSize, origin.OriginX, origin.OriginY));
+            coordinates.Add(new TerritoryId(name), (x, y));
         }
 
         return coordinates;
@@ -183,22 +187,15 @@ public static class TerritoryLayout
         return continentOf;
     }
 
-    private static IReadOnlyDictionary<ContinentId, (double X, double Y, double Width, double Height)> BuildContinentBounds()
+    private static IReadOnlyDictionary<ContinentId, (double X, double Y)> BuildContinentLabelAnchors()
     {
-        const double padding = 26;
-        var bounds = new Dictionary<ContinentId, (double X, double Y, double Width, double Height)>();
+        var anchors = new Dictionary<ContinentId, (double X, double Y)>(ContinentLabelSeed.Length);
 
-        foreach (var group in Polygons.GroupBy(kv => ContinentOf[kv.Key]))
+        foreach (var (continentId, x, y) in ContinentLabelSeed)
         {
-            var points = group.SelectMany(kv => kv.Value).ToArray();
-            var minX = points.Min(p => p.X) - padding;
-            var maxX = points.Max(p => p.X) + padding;
-            var minY = points.Min(p => p.Y) - padding;
-            var maxY = points.Max(p => p.Y) + padding;
-
-            bounds.Add(group.Key, (minX, minY, maxX - minX, maxY - minY));
+            anchors.Add(new ContinentId(continentId), (x, y));
         }
 
-        return bounds;
+        return anchors;
     }
 }
