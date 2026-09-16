@@ -113,13 +113,22 @@ public static class TerritoryLayout
 
     /// <summary>
     /// Named exceptions only, same shape as <see cref="RadiusOverrides"/> but for
-    /// outer-ring ink color instead of radius. Populated from a one-time pixel
-    /// measurement against the shipped <c>world-map.png</c> artwork (risk-web-real-map-art
-    /// remediation, sdd-verify CRITICAL-1): these 5 territories sit on local art dark
-    /// enough that the default <see cref="MarkerInk.Outer"/> ink fails WCAG 1.4.11's
-    /// 3:1 floor against it — all 5 are small islands or coastal peninsulas surrounded
-    /// by dark ocean/coastal shading. <see cref="MarkerInk.OuterOnDarkArt"/> clears 3:1
-    /// against every one of them with comfortable margin.
+    /// outer-ring ink color instead of radius. The first 5 entries were populated
+    /// from a one-time pixel measurement against the shipped <c>world-map.png</c>
+    /// artwork (risk-web-real-map-art remediation, sdd-verify CRITICAL-1): these
+    /// territories sit on local art dark enough that the default
+    /// <see cref="MarkerInk.Outer"/> ink fails WCAG 1.4.11's 3:1 floor against it —
+    /// all 5 are small islands or coastal peninsulas surrounded by dark ocean/coastal
+    /// shading. <see cref="MarkerInk.OuterOnDarkArt"/> clears 3:1 against every one
+    /// of them with comfortable margin.
+    ///
+    /// Congo, EasternAustralia, and Argentina were added in a second remediation
+    /// pass, after sdd-verify's follow-up 216-sample pixel-sampling method found
+    /// these 3 sitting right at the 3:1 contrast boundary against the default
+    /// outer ring, with inconsistent results across sampling parameterizations
+    /// (unlike the original 5, which failed consistently every time). This is a
+    /// precautionary inclusion for a borderline result, not a proven violation
+    /// like the first 5.
     /// </summary>
     private static readonly IReadOnlySet<TerritoryId> LightOuterRingTerritories = new HashSet<TerritoryId>
     {
@@ -128,6 +137,9 @@ public static class TerritoryLayout
         new("Indonesia"),
         new("NewGuinea"),
         new("Madagascar"),
+        new("Congo"),
+        new("EasternAustralia"),
+        new("Argentina"),
     };
 
     /// <summary>Center point of every territory's marker, in canvas pixel coordinates.</summary>

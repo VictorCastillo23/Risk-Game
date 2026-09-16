@@ -64,20 +64,31 @@ public class TerritoryLayoutTests
     }
 
     // Remediation for sdd-verify's CRITICAL-1: a one-time pixel measurement
-    // against the real map artwork found exactly these 5 territories' local
-    // art dark enough that the default outer ring ink (MarkerInk.Outer) fails
-    // WCAG 1.4.11's 3:1 floor. This is a named per-territory exception list,
-    // the same shape as design D9's RadiusOverrides, but for ring color.
+    // against the real map artwork found exactly these first 5 territories'
+    // local art dark enough that the default outer ring ink (MarkerInk.Outer)
+    // fails WCAG 1.4.11's 3:1 floor. This is a named per-territory exception
+    // list, the same shape as design D9's RadiusOverrides, but for ring color.
+    //
+    // Congo, EasternAustralia, and Argentina were added afterward, in a
+    // follow-up remediation: sdd-verify's second, more thorough 216-sample
+    // pixel-sampling pass found these 3 sitting right at the 3:1 boundary,
+    // with inconsistent results across sampling parameterizations (unlike
+    // the original 5, which failed consistently every time). They are a
+    // precautionary inclusion for a borderline result, not a proven
+    // violation like the first 5.
     [Theory]
     [InlineData("Kamchatka", true)]
     [InlineData("Japan", true)]
     [InlineData("Indonesia", true)]
     [InlineData("NewGuinea", true)]
     [InlineData("Madagascar", true)]
+    [InlineData("Congo", true)]
+    [InlineData("EasternAustralia", true)]
+    [InlineData("Argentina", true)]
     [InlineData("Alaska", false)]
     [InlineData("Brazil", false)]
     [InlineData("Ukraine", false)]
-    public void NeedsLightOuterRing_IsTrueOnlyForTheFiveDarkArtTerritories(string territoryName, bool expected)
+    public void NeedsLightOuterRing_IsTrueOnlyForTheEightBorderlineOrDarkArtTerritories(string territoryName, bool expected)
     {
         var needsLightRing = TerritoryLayout.NeedsLightOuterRing(new TerritoryId(territoryName));
 
