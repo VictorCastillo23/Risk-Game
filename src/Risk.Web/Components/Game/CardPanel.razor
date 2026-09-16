@@ -14,16 +14,16 @@
 
 <div class="card-panel panel-frame">
     @{
-        // Design's read convention (D5): the ONE place hidden information
+        // The ONE place hidden information
         // matters — OwnHand comes from Observe(), never from raw
         // GameState.Players[x].Hand, so this panel structurally cannot
-        // leak another player's cards. Hoisted (roadmap 5.4) so the Capital
+        // leak another player's cards. Hoisted so the Capital
         // HQ tray/warning section below can reuse the same PlayerView.
         var view = Session.ObserveCurrentPlayer();
         var hand = view.OwnHand;
     }
 
-    @if (hand.Count >= MandatoryTradeThreshold)
+    @if (hand.Count >= CardTradeBonus.MandatoryHandThreshold)
     {
         <p class="card-panel-warning" role="alert">Tenés @hand.Count cartas: debés canjear un conjunto válido.</p>
     }
@@ -73,7 +73,7 @@
 
         @if (tradePreview is { } preview)
         {
-            <p class="card-panel-hint">Este canje da @preview tropas@(bonusMatches.Count == 1 ? " (+2 por territorio propio)" : "").</p>
+            <p class="card-panel-hint">Este canje da @preview tropas@(bonusMatches.Count == 1 ? $" (+{TerritoryTradeBonus.Troops} por territorio propio)" : "").</p>
         }
 
         @if (bonusMatches.Count >= 2)
@@ -97,8 +97,6 @@
 </div>
 
 @code {
-    private const int MandatoryTradeThreshold = 5;
-
     /// <summary>Always the acting player for this panel's command (design's dispatch contract: <c>Actor = Turn.CurrentPlayer</c>).</summary>
     [Parameter, EditorRequired]
     public PlayerId CurrentPlayer { get; set; }
@@ -159,7 +157,7 @@
 
         var preview = CardTradeBonus.ForTradeNumber(Session.State.TradesCompleted + 1);
         var bonusMatches = ComputeBonusMatches(hand);
-        return bonusMatches.Count == 1 ? preview + 2 : preview;
+        return bonusMatches.Count == 1 ? preview + TerritoryTradeBonus.Troops : preview;
     }
 
     private bool CanTrade(IReadOnlyList<Card> hand, IReadOnlyList<TerritoryId> bonusMatches) =>

@@ -148,8 +148,15 @@ public class BotMemoryTests
     }
 
     [Fact]
-    public void Fold_ignores_a_card_trade_bonus_during_an_attack_phase_mandatory_trade_down()
+    public void Fold_banks_a_card_trade_bonus_during_an_attack_phase_mandatory_trade_down()
     {
+        // GameEngine now preserves an Attack-phase-banked trade bonus
+        // additively across the turn boundary (AdvanceToNextPlayer/
+        // AdvanceAfterHeadquartersSelection add to TroopsRemaining instead of
+        // overwriting it), so the bot must bank it too instead of discarding
+        // it — otherwise it would under-count its real Reinforce pool and
+        // get rejected with ReinforcementIncomplete for ending Reinforce
+        // early.
         var memory = BotMemory.Empty with { ReinforcePool = 3 };
         var view = PlayerViewBuilder.For(Self).Phase(TurnPhase.Attack).Build();
         var events = new GameEvent[]
@@ -159,7 +166,25 @@ public class BotMemoryTests
 
         var folded = BotMemory.Fold(memory, Self, view, events);
 
-        Assert.Equal(3, folded.ReinforcePool);
+        Assert.Equal(11, folded.ReinforcePool);
+    }
+
+    [Fact]
+    public void Fold_banks_a_card_trade_bonus_from_an_unseeded_pool_during_an_attack_phase_mandatory_trade_down()
+    {
+        // Same scenario as above, but the pool has never been seeded this
+        // visit (null, not merely 0) — must bank additively from null, same
+        // null-safe pattern as the Reinforce-phase early-trade case.
+        var memory = BotMemory.Empty; // ReinforcePool is null.
+        var view = PlayerViewBuilder.For(Self).Phase(TurnPhase.Attack).Build();
+        var events = new GameEvent[]
+        {
+            new CardsTraded(Self, new Card[] { AlaskaInfantry, AlbertaInfantry, OntarioInfantry }, 8),
+        };
+
+        var folded = BotMemory.Fold(memory, Self, view, events);
+
+        Assert.Equal(8, folded.ReinforcePool);
     }
 
     [Fact]

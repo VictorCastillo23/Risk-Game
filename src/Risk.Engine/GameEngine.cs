@@ -21,8 +21,6 @@ namespace Risk.Engine;
 /// </summary>
 public sealed class GameEngine : IGameEngine
 {
-    private const int MandatoryTradeThreshold = 5;
-
     private readonly IDiceRoller dice;
     private readonly Func<GameMode, IVictoryRule?> victoryRuleFor;
 
@@ -31,7 +29,7 @@ public sealed class GameEngine : IGameEngine
     }
 
     /// <summary>
-    /// Test-only seam (item 2.1, design D5): lets <c>Risk.Tests</c> inject an
+    /// Test-only seam: lets <c>Risk.Tests</c> inject an
     /// instrumented <see cref="IVictoryRule"/> resolver to positively prove
     /// which <see cref="GameMode"/>s actually route through
     /// <see cref="ExecuteAttack"/>'s <see cref="IVictoryRule"/> dispatch,
@@ -54,7 +52,7 @@ public sealed class GameEngine : IGameEngine
             return Reject(GameErrorCode.GameOver, "The game has already ended.");
         }
 
-        // Item 4.2/D1: checked before the actor-is-current-player check
+        // Checked before the actor-is-current-player check
         // below. The neutral (TwoPlayer's third army) is not "out of turn"
         // — it can never legitimately act at all, so the diagnostic must say
         // so precisely rather than falling through to NotYourTurn. Uses a
@@ -93,8 +91,8 @@ public sealed class GameEngine : IGameEngine
         // `ExecuteTradeCards`. OccupyCommand is exempt for the same reason
         // the PendingOccupation gate above exempts it.
         var actorHand = state.Players.Single(p => p.Id == command.Actor).Hand;
-        var mandatoryTradeAtTurnStart = state.Turn.Phase == TurnPhase.Reinforce && actorHand.Count >= MandatoryTradeThreshold;
-        var mandatoryTradeOverflow = state.Turn.MandatoryTradeDown && actorHand.Count >= MandatoryTradeThreshold;
+        var mandatoryTradeAtTurnStart = state.Turn.Phase == TurnPhase.Reinforce && actorHand.Count >= CardTradeBonus.MandatoryHandThreshold;
+        var mandatoryTradeOverflow = state.Turn.MandatoryTradeDown && actorHand.Count >= CardTradeBonus.MandatoryHandThreshold;
         if ((mandatoryTradeAtTurnStart || mandatoryTradeOverflow) && command is not (TradeCardsCommand or OccupyCommand))
         {
             return Reject(GameErrorCode.MandatoryTradeRequired, "You must trade in a valid card set before taking further actions.");
@@ -128,10 +126,10 @@ public sealed class GameEngine : IGameEngine
             .Where(p => p.Id != viewer)
             .ToDictionary(p => p.Id, p => p.Hand.Count);
 
-        // Design D1: headquarters reveal is derived, not stored. The
+        // Headquarters reveal is derived, not stored. The
         // predicate is monotonic (HeadquartersId is write-once) and
         // deliberately has no IsEliminated skip — see GameEngine's own
-        // AdvanceAfterHeadquartersSelection doc comment / design D3 for the
+        // AdvanceAfterHeadquartersSelection doc comment for the
         // unreachability proof that elimination cannot occur before this
         // predicate is evaluated for the first time.
         var ownHeadquarters = state.Players.Single(p => p.Id == viewer).HeadquartersId;
@@ -139,7 +137,7 @@ public sealed class GameEngine : IGameEngine
             ? state.Players.ToDictionary(p => p.Id, p => p.HeadquartersId!.Value)
             : new Dictionary<PlayerId, TerritoryId>();
 
-        // Design 3.4-D1/D2: the substitution is engine-owned. Observe reports what
+        // The substitution is engine-owned. Observe reports what
         // the player must actually complete, which is exactly what
         // SecretMissionVictoryRule checks — one function, two call sites, no drift.
         var ownMission = state.Players.Single(p => p.Id == viewer).Mission;
@@ -153,14 +151,13 @@ public sealed class GameEngine : IGameEngine
         PlaceTroopsCommand => null,
         // Only legal during Setup; the finer-grained "is this actually
         // Phase B" condition is derived state, not a simple phase check, so
-        // it is enforced inside ExecutePlaceNeutralTroops (design D3) rather
+        // it is enforced inside ExecutePlaceNeutralTroops rather
         // than here.
         PlaceNeutralTroopsCommand => TurnPhase.Setup,
         // Trading is phase-agnostic: it can be a voluntary Reinforce-phase
         // action (bonus troops land in the current/next Reinforce pool) or a
         // mandatory overflow trade-down forced mid-Attack by an elimination
-        // (see the mandatory-trade gate in Execute and PR7's resolution of
-        // design's open gate-ordering question).
+        // (see the mandatory-trade gate in Execute).
         TradeCardsCommand => null,
         ClaimTerritoryCommand => TurnPhase.Claim,
         SelectHeadquartersCommand => TurnPhase.SelectHeadquarters,
@@ -172,8 +169,8 @@ public sealed class GameEngine : IGameEngine
     };
 
     /// <summary>
-    /// How many troops a player may place per Setup-phase command/turn
-    /// (design D1). Every mode except <see cref="GameMode.TwoPlayer"/> keeps
+    /// How many troops a player may place per Setup-phase command/turn.
+    /// Every mode except <see cref="GameMode.TwoPlayer"/> keeps
     /// the classic "exactly one troop, immediate rotation" rule (<c>1</c>);
     /// <see cref="GameMode.TwoPlayer"/>'s Phase A allows <c>2</c>, splittable
     /// across one or two commands (reglasrisk.md: "coloca dos tropas sobre
@@ -186,7 +183,7 @@ public sealed class GameEngine : IGameEngine
     /// How much of the current turn's Setup placement budget is still
     /// available, derived from <paramref name="troopsRemaining"/>'s parity
     /// against <paramref name="perTurn"/> rather than a separately tracked
-    /// counter (design D1 — avoids a stale-flag reset bug class, the same
+    /// counter (avoids a stale-flag reset bug class, the same
     /// one already documented on <c>ConqueredThisTurn</c>). A pool that is an
     /// exact multiple of <paramref name="perTurn"/> is always at a turn
     /// boundary, so the full budget is available; otherwise the remainder is
@@ -201,7 +198,7 @@ public sealed class GameEngine : IGameEngine
         troopsRemaining % perTurn is 0 ? perTurn : troopsRemaining % perTurn;
 
     /// <summary>
-    /// Design D3: whether <paramref name="state"/> is currently in
+    /// Whether <paramref name="state"/> is currently in
     /// <see cref="GameMode.TwoPlayer"/>'s Setup Phase B — derived from state,
     /// not a flag. True once both real humans have exhausted their own
     /// Setup pool (Phase A complete) while the neutral still has troops of
@@ -216,7 +213,7 @@ public sealed class GameEngine : IGameEngine
         && state.Players.Single(p => p.IsNeutral).TroopsRemaining > 0;
 
     /// <summary>
-    /// Handles <see cref="PlaceNeutralTroopsCommand"/> (design D3): a human
+    /// Handles <see cref="PlaceNeutralTroopsCommand"/>: a human
     /// chooses where one of the neutral player's troops lands during
     /// <see cref="GameMode.TwoPlayer"/>'s Setup Phase B. Mirrors
     /// <see cref="ExecutePlaceTroops"/>'s territory/pool accounting, but
@@ -385,7 +382,7 @@ public sealed class GameEngine : IGameEngine
         // trade-down that still leaves 5+ cards must keep the flag armed so
         // the gate in Execute keeps blocking non-trade commands through a
         // multi-trade overflow sequence.
-        var nextTurn = state.Turn.MandatoryTradeDown && remainingHand.Count < MandatoryTradeThreshold
+        var nextTurn = state.Turn.MandatoryTradeDown && remainingHand.Count < CardTradeBonus.MandatoryHandThreshold
             ? state.Turn with { MandatoryTradeDown = false }
             : state.Turn;
 
@@ -403,12 +400,12 @@ public sealed class GameEngine : IGameEngine
 
     /// <summary>
     /// Claims a previously unowned territory during <see cref="TurnPhase.Claim"/>.
-    /// Mirrors <see cref="ExecutePlaceTroops"/>'s troop-pool accounting
-    /// (design D3), enforces exactly one troop per claim (design D2 — closes
+    /// Mirrors <see cref="ExecutePlaceTroops"/>'s troop-pool accounting,
+    /// enforces exactly one troop per claim (closes
     /// a deadlock where a player could otherwise exhaust their entire troop
     /// pool on a single claim and be left with no legal command on their
-    /// next Claim-phase turn), and — reversing item 1.3's design D4 —
-    /// advances <c>Turn</c> via <see cref="AdvanceAfterClaim"/>: round-robin
+    /// next Claim-phase turn), and advances <c>Turn</c> via
+    /// <see cref="AdvanceAfterClaim"/>: round-robin
     /// rotation while territories remain unclaimed, or a
     /// <see cref="TurnPhase.Claim"/> → <see cref="TurnPhase.Setup"/>
     /// transition (at the rotated next player, not a reset to
@@ -463,11 +460,11 @@ public sealed class GameEngine : IGameEngine
     }
 
     /// <summary>
-    /// Rotation/transition logic for <see cref="ExecuteClaimTerritory"/>
-    /// (design D1/D3): always rotates to the next player first (plain index,
+    /// Rotation/transition logic for <see cref="ExecuteClaimTerritory"/>:
+    /// always rotates to the next player first (plain index,
     /// no <c>TroopsRemaining</c>/<c>IsEliminated</c> eligibility skip — every
-    /// player is always eligible to claim until territories run out, and D2
-    /// guarantees troops always outlast territories), then checks whether
+    /// player is always eligible to claim until territories run out, and
+    /// troops always outlast territories), then checks whether
     /// <paramref name="territories"/> still has any unowned entry. If so,
     /// the phase stays <see cref="TurnPhase.Claim"/> at the rotated player
     /// with no event. If every territory is now owned, this was the final
@@ -497,12 +494,12 @@ public sealed class GameEngine : IGameEngine
     /// <summary>
     /// Designates <see cref="SelectHeadquartersCommand.Territory"/> as the
     /// actor's headquarters during <see cref="TurnPhase.SelectHeadquarters"/>
-    /// (design D2/spec). Ownership is the only constraint — no continent or
+    /// Ownership is the only constraint — no continent or
     /// adjacency rule applies. On success, structurally removes the
     /// territory's <see cref="TerritoryCard"/> from <see cref="GameState.Deck"/>
     /// so it can never enter any player's <c>Hand</c> (spec's card-exclusion
     /// requirement), emits the territory-free <see cref="HeadquartersSelected"/>
-    /// event (design D1 — <see cref="GameState.Log"/> is public/unredacted),
+    /// event (<see cref="GameState.Log"/> is public/unredacted),
     /// and advances via <see cref="AdvanceAfterHeadquartersSelection"/>.
     /// </summary>
     private static CommandResult<GameState, GameEvent> ExecuteSelectHeadquarters(GameState state, SelectHeadquartersCommand command)
@@ -540,7 +537,7 @@ public sealed class GameEngine : IGameEngine
     /// Rotation/transition logic for <see cref="ExecuteSelectHeadquarters"/>.
     /// While at least one player has not yet selected a headquarters, rotates
     /// to the next player (plain index, mirroring <see cref="AdvanceAfterClaim"/>
-    /// — no <c>IsEliminated</c> skip needed: design D3 proves elimination is
+    /// — no <c>IsEliminated</c> skip needed: elimination is
     /// unreachable before this phase completes) and the phase stays
     /// <see cref="TurnPhase.SelectHeadquarters"/>. Once every player has
     /// selected, this was the final selection: emits
@@ -570,7 +567,7 @@ public sealed class GameEngine : IGameEngine
         var firstPlayer = players[0];
         var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
         IReadOnlyList<PlayerState> reinforcedPlayers = players
-            .Select(p => p.Id == firstPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .Select(p => p.Id == firstPlayer.Id ? p with { TroopsRemaining = p.TroopsRemaining + reinforcement } : p)
             .ToArray();
 
         events.Add(new PhaseChanged(TurnPhase.SelectHeadquarters, TurnPhase.Reinforce, firstPlayer.Id));
@@ -613,9 +610,9 @@ public sealed class GameEngine : IGameEngine
             return Reject(GameErrorCode.NotOwner, "The target territory must be owned by another player.");
         }
 
-        // Reachable in production since item 2.1: a Classic game that hasn't
+        // Reachable in production: a Classic game that hasn't
         // finished its Claim phase yet still has unclaimed (Owner: null)
-        // territories. Kept separate from the guard above (design D6) so the
+        // territories. Kept separate from the guard above so the
         // two rejection messages stay distinct, and so the `.Value` unwraps
         // below are provably unreachable-by-construction rather than a
         // latent InvalidOperationException.
@@ -663,75 +660,7 @@ public sealed class GameEngine : IGameEngine
 
         if (remainingDefenderTroops <= 0)
         {
-            updatedTerritories[command.To] = new TerritoryState(command.Actor, 0);
-            events.Add(new TerritoryConquered(command.Actor, defenderTerritory.Owner!.Value, command.To));
-            nextTurn = state.Turn with
-            {
-                ConqueredThisTurn = true,
-                PendingOccupation = new PendingOccupation(command.From, command.To, command.DiceCount)
-            };
-
-            // Design D1: scan ALL players for whoever originally declared
-            // command.To as their headquarters, not just the pre-conquest
-            // owner (defenderTerritory.Owner) — a recapture chain would
-            // otherwise report the intermediate holder instead of the
-            // original declarer. SingleOrDefault is safe: HeadquartersId is
-            // write-once (5.1-D1) and a territory has exactly one owner, so
-            // two players sharing one HeadquartersId is a programmer-error
-            // signal, not a rule violation to Reject.
-            if (state.Mode == GameMode.Capital)
-            {
-                var declarer = state.Players.SingleOrDefault(p => p.HeadquartersId == command.To);
-                if (declarer is not null)
-                {
-                    events.Add(new HeadquartersCaptured(command.Actor, declarer.Id, command.To));
-                }
-            }
-
-            var defenderOwnsAnyTerritory = updatedTerritories.Values.Any(t => t.Owner == defenderTerritory.Owner);
-            if (!defenderOwnsAnyTerritory)
-            {
-                updatedPlayers = EliminatePlayer(state.Players, defenderTerritory.Owner!.Value, command.Actor, events);
-
-                // Arm the overflow mandatory-trade flag immediately if the
-                // transferred cards push the eliminator to 6+ (landing at
-                // exactly 5 defers to the eliminator's next Reinforce phase
-                // instead — see the invariant comment on TurnState).
-                var eliminatorHandCount = updatedPlayers.Single(p => p.Id == command.Actor).Hand.Count;
-                if (eliminatorHandCount >= MandatoryTradeThreshold + 1)
-                {
-                    nextTurn = nextTurn with { MandatoryTradeDown = true };
-                }
-            }
-
-            if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
-            {
-                // Classic (item 2.1), TwoPlayer (item 4.3), SecretMission
-                // (item 3.3) — all resolved through VictoryRules.For, not
-                // hardcoded, so the test seam (design D5) can prove this
-                // branch is actually reached.
-                var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
-                if (modeVictoryRule.CheckVictory(postConquest) is { } winner)
-                {
-                    newStatus = new GameStatus.Won(winner);
-                    events.Add(new GameWon(winner));
-                }
-            }
-            else
-            {
-                // Pre-refactor inline check, byte-identical. Unreachable in
-                // production since VictoryRules.For now resolves every
-                // GameMode (including Capital, roadmap item 5.3) to a real
-                // IVictoryRule — this branch only stays reachable via the
-                // victoryRuleFor test-injection seam supplying an override
-                // that returns null.
-                var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
-                if (attackerOwnsEveryTerritory)
-                {
-                    newStatus = new GameStatus.Won(command.Actor);
-                    events.Add(new GameWon(command.Actor));
-                }
-            }
+            (updatedPlayers, nextTurn, newStatus) = HandleConquest(state, command, defenderTerritory, updatedTerritories, events);
         }
         else
         {
@@ -748,6 +677,104 @@ public sealed class GameEngine : IGameEngine
         };
 
         return new CommandResult<GameState, GameEvent>.Ok(newState, events);
+    }
+
+    /// <summary>
+    /// Conquest aftermath for <see cref="ExecuteAttack"/>, run once the
+    /// defender's territory has been reduced to 0 troops: flips ownership of
+    /// <c>command.To</c> to the attacker (mutating <paramref name="updatedTerritories"/>
+    /// in place — it is the same dictionary <see cref="ExecuteAttack"/> folds
+    /// into its final <c>GameState</c>), emits <see cref="TerritoryConquered"/>
+    /// and arms <see cref="TurnState.PendingOccupation"/>, emits
+    /// <see cref="HeadquartersCaptured"/> when <paramref name="state"/> is
+    /// <see cref="GameMode.Capital"/> and the conquered territory was ever
+    /// declared as a headquarters, eliminates the defender via
+    /// <see cref="EliminatePlayer"/> when this was their last territory
+    /// (arming the overflow mandatory-trade-down flag if the transferred hand
+    /// pushes the eliminator to 6+ cards), and finally runs the mode-resolved
+    /// victory check (or the legacy inline fallback). Appends every event to
+    /// <paramref name="events"/> in the same order <see cref="ExecuteAttack"/>
+    /// previously did inline.
+    /// </summary>
+    private (IReadOnlyList<PlayerState> Players, TurnState Turn, GameStatus Status) HandleConquest(
+        GameState state,
+        AttackCommand command,
+        TerritoryState defenderTerritory,
+        Dictionary<TerritoryId, TerritoryState> updatedTerritories,
+        List<GameEvent> events)
+    {
+        updatedTerritories[command.To] = new TerritoryState(command.Actor, 0);
+        events.Add(new TerritoryConquered(command.Actor, defenderTerritory.Owner!.Value, command.To));
+        var nextTurn = state.Turn with
+        {
+            ConqueredThisTurn = true,
+            PendingOccupation = new PendingOccupation(command.From, command.To, command.DiceCount)
+        };
+
+        // Scan ALL players for whoever originally declared
+        // command.To as their headquarters, not just the pre-conquest
+        // owner (defenderTerritory.Owner) — a recapture chain would
+        // otherwise report the intermediate holder instead of the
+        // original declarer. SingleOrDefault is safe: HeadquartersId is
+        // write-once and a territory has exactly one owner, so
+        // two players sharing one HeadquartersId is a programmer-error
+        // signal, not a rule violation to Reject.
+        if (state.Mode == GameMode.Capital)
+        {
+            var declarer = state.Players.SingleOrDefault(p => p.HeadquartersId == command.To);
+            if (declarer is not null)
+            {
+                events.Add(new HeadquartersCaptured(command.Actor, declarer.Id, command.To));
+            }
+        }
+
+        var updatedPlayers = state.Players;
+        var defenderOwnsAnyTerritory = updatedTerritories.Values.Any(t => t.Owner == defenderTerritory.Owner);
+        if (!defenderOwnsAnyTerritory)
+        {
+            updatedPlayers = EliminatePlayer(state.Players, defenderTerritory.Owner!.Value, command.Actor, events);
+
+            // Arm the overflow mandatory-trade flag immediately if the
+            // transferred cards push the eliminator to 6+ (landing at
+            // exactly 5 defers to the eliminator's next Reinforce phase
+            // instead — see the invariant comment on TurnState).
+            var eliminatorHandCount = updatedPlayers.Single(p => p.Id == command.Actor).Hand.Count;
+            if (eliminatorHandCount >= CardTradeBonus.MandatoryHandThreshold + 1)
+            {
+                nextTurn = nextTurn with { MandatoryTradeDown = true };
+            }
+        }
+
+        var newStatus = state.Status;
+        if (victoryRuleFor(state.Mode) is { } modeVictoryRule)
+        {
+            // Classic, TwoPlayer, SecretMission — all resolved through
+            // VictoryRules.For, not hardcoded, so the test seam can prove
+            // this branch is actually reached.
+            var postConquest = state with { Territories = updatedTerritories, Players = updatedPlayers, Turn = nextTurn };
+            if (modeVictoryRule.CheckVictory(postConquest) is { } winner)
+            {
+                newStatus = new GameStatus.Won(winner);
+                events.Add(new GameWon(winner));
+            }
+        }
+        else
+        {
+            // Pre-refactor inline check, byte-identical. Unreachable in
+            // production since VictoryRules.For now resolves every
+            // GameMode (including Capital) to a real
+            // IVictoryRule — this branch only stays reachable via the
+            // victoryRuleFor test-injection seam supplying an override
+            // that returns null.
+            var attackerOwnsEveryTerritory = updatedTerritories.Values.Count(t => t.Owner == command.Actor) == WorldMap.Territories.Count;
+            if (attackerOwnsEveryTerritory)
+            {
+                newStatus = new GameStatus.Won(command.Actor);
+                events.Add(new GameWon(command.Actor));
+            }
+        }
+
+        return (updatedPlayers, nextTurn, newStatus);
     }
 
     /// <summary>
@@ -806,7 +833,7 @@ public sealed class GameEngine : IGameEngine
         var updatedTurn = state.Turn with { PendingOccupation = null };
         var postOccupation = state with { Territories = updatedTerritories, Turn = updatedTurn };
 
-        // Second victory call site (design 3.3-D7). ExecuteAttack checks after
+        // Second victory call site. ExecuteAttack checks after
         // ownership flips, when the conquered territory still holds 0 troops;
         // troop-gated missions (every OccupyTerritories card) can only be
         // satisfied once THIS method sets that territory's troop count. Without
@@ -967,7 +994,7 @@ public sealed class GameEngine : IGameEngine
 
         var reinforcement = Reinforcement.Calculate(state.Territories, nextPlayer.Id);
         IReadOnlyList<PlayerState> updatedPlayers = state.Players
-            .Select(p => p.Id == nextPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .Select(p => p.Id == nextPlayer.Id ? p with { TroopsRemaining = p.TroopsRemaining + reinforcement } : p)
             .ToArray();
 
         var events = new List<GameEvent> { new PhaseChanged(TurnPhase.Fortify, TurnPhase.Reinforce, nextPlayer.Id) };
@@ -986,9 +1013,9 @@ public sealed class GameEngine : IGameEngine
     /// The next non-eliminated, non-neutral player after <paramref name="fromIndex"/>,
     /// wrapping around the player list. Eliminated players are skipped so
     /// the turn cycle never lands on someone with no territories left.
-    /// Neutral players (<see cref="PlayerState.IsNeutral"/>, item 4.1's
-    /// <see cref="GameMode.TwoPlayer"/> third army) are skipped too (item
-    /// 4.2/D1): the neutral is a board object, not an agent, and must never
+    /// Neutral players (<see cref="PlayerState.IsNeutral"/>,
+    /// <see cref="GameMode.TwoPlayer"/>'s third army) are skipped too:
+    /// the neutral is a board object, not an agent, and must never
     /// become <see cref="TurnState.CurrentPlayer"/> nor receive reinforcement
     /// via <see cref="AdvanceToNextPlayer"/>'s unconditional
     /// <see cref="Reinforcement.Calculate"/> call.
@@ -1008,9 +1035,9 @@ public sealed class GameEngine : IGameEngine
     }
 
     /// <summary>
-    /// Rotation for Setup-phase placement (design D1/D4). Only ever hands the
+    /// Rotation for Setup-phase placement. Only ever hands the
     /// turn to a non-neutral player — a neutral
-    /// (<see cref="PlayerState.IsNeutral"/>, item 4.1's <see cref="GameMode.TwoPlayer"/>
+    /// (<see cref="PlayerState.IsNeutral"/>, <see cref="GameMode.TwoPlayer"/>'s
     /// third army) never becomes <see cref="TurnState.CurrentPlayer"/>: it is
     /// a board object, not an agent, and only <c>PlaceNeutralTroopsCommand</c>
     /// spends its pool. Three cases, checked in order:
@@ -1069,7 +1096,7 @@ public sealed class GameEngine : IGameEngine
         var firstPlayer = players[0];
         var reinforcement = Reinforcement.Calculate(territories, firstPlayer.Id);
         IReadOnlyList<PlayerState> reinforcedPlayers = players
-            .Select(p => p.Id == firstPlayer.Id ? p with { TroopsRemaining = reinforcement } : p)
+            .Select(p => p.Id == firstPlayer.Id ? p with { TroopsRemaining = p.TroopsRemaining + reinforcement } : p)
             .ToArray();
 
         events.Add(new PhaseChanged(TurnPhase.Setup, TurnPhase.Reinforce, firstPlayer.Id));

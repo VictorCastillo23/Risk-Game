@@ -2,6 +2,7 @@ using Risk.AI.Decisions;
 using Risk.AI.Scoring;
 using Risk.Domain.Players;
 using Risk.Engine.Commands;
+using Risk.Engine.Rules;
 using Risk.Engine.State;
 using Risk.Engine.Views;
 
@@ -45,10 +46,6 @@ namespace Risk.AI;
 /// </remarks>
 public sealed class BotPlayer : IBotPlayer
 {
-    // Mirrors GameEngine.Execute's private MandatoryTradeThreshold; kept
-    // local since that constant is private to GameEngine.
-    private const int MandatoryTradeHandThreshold = 5;
-
     public BotPlayer(PlayerId id) => Id = id;
 
     public PlayerId Id { get; }
@@ -93,5 +90,5 @@ public sealed class BotPlayer : IBotPlayer
     /// </summary>
     private static bool IsMandatoryTradeDue(PlayerView view) =>
         (view.Turn.MandatoryTradeDown || view.Turn.Phase == TurnPhase.Reinforce)
-        && view.OwnHand.Count >= MandatoryTradeHandThreshold;
+        && view.OwnHand.Count >= CardTradeBonus.MandatoryHandThreshold;
 }

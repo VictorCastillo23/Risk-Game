@@ -6,6 +6,7 @@ using Risk.Engine;
 using Risk.Engine.Commands;
 using Risk.Engine.Events;
 using Risk.Engine.Results;
+using Risk.Engine.Rules;
 using Risk.Engine.Setup;
 using Risk.Engine.State;
 using Risk.Tests.Fakes;
@@ -17,7 +18,7 @@ namespace Risk.Tests.Engine;
 /// <see cref="TurnPhase.SelectHeadquarters"/> states and call
 /// <see cref="GameEngine.Execute"/> directly, mirroring
 /// <c>ClaimTerritoryCommandTests</c>'s hand-built-state pattern. Ownership is
-/// the only constraint (design D2/spec) — no continent or adjacency rule
+/// the only constraint — no continent or adjacency rule
 /// applies.
 /// </summary>
 public class SelectHeadquartersCommandTests
@@ -38,7 +39,7 @@ public class SelectHeadquartersCommandTests
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
         Assert.Equal(Alaska, ok.State.Players.Single(p => p.Id == actor).HeadquartersId);
 
-        // Design D1: the per-selection event is territory-free — GameState.Log
+        // The per-selection event is territory-free — GameState.Log
         // is public/unredacted, so the territory must not appear here.
         var selectedEvent = Assert.IsType<HeadquartersSelected>(Assert.Single(ok.Events));
         Assert.Equal(actor, selectedEvent.Player);
@@ -129,7 +130,7 @@ public class SelectHeadquartersCommandTests
     [Fact]
     public void AttackCommand_during_SelectHeadquarters_is_rejected_with_WrongPhase()
     {
-        // Pins design D3's unreachability proof: elimination cannot occur
+        // Pins the unreachability proof: elimination cannot occur
         // before SelectHeadquarters completes because Attack requires
         // TurnPhase.Attack, which this phase gate refuses to reach —
         // exercised here directly, not merely asserted about the reveal
@@ -148,7 +149,7 @@ public class SelectHeadquartersCommandTests
     [Fact]
     public void Execute_rejects_a_repeated_selection_from_the_same_player_with_NotYourTurn_then_WrongPhase_after_completion()
     {
-        // Design D2: no dedicated double-selection guard exists — a
+        // No dedicated double-selection guard exists — a
         // re-selection before the actor's next turn hits the ordinary
         // NotYourTurn gate (proven unreachable-otherwise by construction:
         // the handler rotates the turn on every accepted selection).
@@ -180,6 +181,61 @@ public class SelectHeadquartersCommandTests
         var afterCompletion = engine.Execute(state, new SelectHeadquartersCommand(actor, Alaska));
         var afterCompletionRejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(afterCompletion);
         Assert.Equal(GameErrorCode.WrongPhase, afterCompletionRejection.Error.Code);
+    }
+
+    /// <summary>
+    /// Regression test for the bug where <c>AdvanceAfterHeadquartersSelection</c>
+    /// absolutely overwrote the first player's <c>TroopsRemaining</c> instead
+    /// of adding to it. <c>TradeCardsCommand</c> is phase-agnostic (see
+    /// <c>GameEngine.RequiredPhaseFor</c>), so a player can bank a trade
+    /// bonus while still in <see cref="TurnPhase.SelectHeadquarters"/> —
+    /// that banked bonus must still be there, ADDED to the freshly computed
+    /// reinforcement, once the final selection transitions everyone to
+    /// <see cref="TurnPhase.Reinforce"/> at <c>players[0]</c>.
+    /// </summary>
+    [Fact]
+    public void Execute_adds_a_banked_out_of_phase_trade_bonus_to_players_zeros_first_reinforcement()
+    {
+        var actor = new PlayerId(0);
+        var other = new PlayerId(1);
+        IReadOnlyList<Card> hand =
+        [
+            new TerritoryCard(new TerritoryId("Ontario"), CardSymbol.Infantry),
+            new TerritoryCard(new TerritoryId("Quebec"), CardSymbol.Infantry),
+            new TerritoryCard(new TerritoryId("Manitoba"), CardSymbol.Infantry)
+        ];
+        var state = BuildSelectHeadquartersPhaseState(actor, other) with
+        {
+            Players =
+            [
+                new PlayerState(actor, hand, false, 0),
+                new PlayerState(other, [], false, 0)
+            ]
+        };
+        var engine = new GameEngine(new QueuedDiceRoller());
+
+        // actor is players[0] and current player: bank a trade bonus before
+        // selecting a headquarters. None of the traded cards name Alaska or
+        // NorthwestTerritory, so no bonus-territory choice is needed.
+        var traded = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(state, new TradeCardsCommand(actor, hand)));
+        state = traded.State;
+        var bankedBonus = state.Players.Single(p => p.Id == actor).TroopsRemaining;
+        Assert.Equal(4, bankedBonus); // first trade this game
+
+        state = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(
+            engine.Execute(state, new SelectHeadquartersCommand(actor, Alaska))).State;
+
+        var expectedReinforcement = Reinforcement.Calculate(state.Territories, actor);
+
+        var result = engine.Execute(state, new SelectHeadquartersCommand(other, NorthwestTerritory));
+
+        var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
+        Assert.Equal(TurnPhase.Reinforce, ok.State.Turn.Phase);
+        Assert.Equal(actor, ok.State.Turn.CurrentPlayer);
+        Assert.Equal(
+            bankedBonus + expectedReinforcement,
+            ok.State.Players.Single(p => p.Id == actor).TroopsRemaining);
     }
 
     /// <summary>

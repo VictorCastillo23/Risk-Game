@@ -5,6 +5,7 @@ using Risk.Domain.Map;
 using Risk.Domain.Missions;
 using Risk.Domain.Players;
 using Risk.Engine.Commands;
+using Risk.Engine.Events;
 using Risk.Engine.Rules;
 using Risk.Engine.State;
 
@@ -73,7 +74,7 @@ public class ReinforceDecisionTests
     [Fact]
     public void Decide_adds_the_base_allotment_to_an_unseeded_pool_that_already_holds_an_early_banked_bonus()
     {
-        // Regression for the Phase 4 seeding contract: a mandatory trade-at-turn-start can
+        // Regression for the seeding contract: a mandatory trade-at-turn-start can
         // bank a CardsTraded bonus into ReinforcePool via Fold BEFORE ReinforceDecision ever
         // runs this visit (ReinforcePoolSeeded stays false). Seeding must ADD the base
         // allotment to that pre-banked value, never overwrite/coalesce it away.
@@ -91,6 +92,41 @@ public class ReinforceDecisionTests
         Assert.True(resultMemory.ReinforcePoolSeeded);
         var placement = Assert.IsType<PlaceTroopsCommand>(command);
         Assert.Equal(6 + baseAllotment, placement.Troops);
+    }
+
+    [Fact]
+    public void Decide_places_the_full_pool_when_a_prior_attack_phase_trade_bonus_flows_into_this_reinforce_visit()
+    {
+        // End-to-end composition proof: BotMemory.Fold banks an Attack-phase
+        // mandatory trade-down bonus (pool becomes non-null but unseeded —
+        // GameEngine now genuinely preserves this bonus across the turn
+        // boundary), then this LATER Reinforce visit's SeedPool must ADD the
+        // base allotment to it rather than overwrite/coalesce it away. Chains
+        // the two mechanisms directly instead of trusting they compose.
+        var attackView = PlayerViewBuilder.For(Self)
+            .Owns(Self, 3, "Alaska")
+            .Phase(TurnPhase.Attack)
+            .Build();
+        var tradeEvents = new GameEvent[]
+        {
+            new CardsTraded(Self, new Card[] { AlaskaInfantry, AlbertaInfantry, OntarioInfantry }, 8)
+        };
+        var memoryAfterTrade = BotMemory.Fold(BotMemory.Empty, Self, attackView, tradeEvents);
+        Assert.Equal(8, memoryAfterTrade.ReinforcePool);
+        Assert.False(memoryAfterTrade.ReinforcePoolSeeded);
+
+        var reinforceView = PlayerViewBuilder.For(Self)
+            .Owns(Self, 3, "Alaska")
+            .Phase(TurnPhase.Reinforce)
+            .Build();
+        var baseAllotment = Reinforcement.Calculate(reinforceView.Territories, Self);
+
+        var (command, resultMemory) = ReinforceDecision.Decide(reinforceView, Self, memoryAfterTrade);
+
+        Assert.Equal(8 + baseAllotment, resultMemory.ReinforcePool);
+        Assert.True(resultMemory.ReinforcePoolSeeded);
+        var placement = Assert.IsType<PlaceTroopsCommand>(command);
+        Assert.Equal(8 + baseAllotment, placement.Troops);
     }
 
     [Fact]

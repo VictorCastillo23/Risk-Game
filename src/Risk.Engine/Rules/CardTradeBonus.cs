@@ -7,6 +7,15 @@ namespace Risk.Engine.Rules;
 /// </summary>
 public static class CardTradeBonus
 {
+    /// <summary>
+    /// A hand at or above this size forces a trade before any other command
+    /// (see <see cref="GameEngine"/>'s mandatory-trade gate). The single
+    /// owner of this rule value — <c>Risk.AI.BotPlayer</c> and
+    /// <c>CardPanel.razor</c> both reference this instead of keeping their
+    /// own copy.
+    /// </summary>
+    public const int MandatoryHandThreshold = 5;
+
     private static readonly int[] FixedScale = [4, 6, 8, 10, 12, 15];
     private const int EscalationStep = 5;
 
