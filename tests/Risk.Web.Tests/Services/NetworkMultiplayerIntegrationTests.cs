@@ -12,7 +12,7 @@ namespace Risk.Web.Tests.Services;
 /// <summary>
 /// Three seats share one <see cref="NetworkGameSession"/> through the real
 /// <see cref="GameEngine"/>: lobby claims, host start, then one claim per
-/// seat in engine turn order — the Phase 3 proof that multi-device play
+/// seat in engine turn order — proof that multi-device play
 /// composes through the authoritative session.
 /// </summary>
 public class NetworkMultiplayerIntegrationTests

@@ -78,7 +78,7 @@ public class MissionDisplayTests
     [InlineData("Conquista ")]
     public void Label_NeverProducesTuteoForms(string tuteoForm)
     {
-        // Design 3.4-D6: mission text is voseo, matching CardPanel's "Tenés…
+        // Mission text is voseo, matching CardPanel's "Tenés…
         // debés…". reglasrisk.md prints these missions in tuteo, but it is
         // not the source of truth for UI copy — this guards against a future
         // contributor "restoring" that wording.

@@ -8,7 +8,7 @@ namespace Risk.Web.Models;
 /// <summary>
 /// Pure, phase-aware click-selection state for the board (design's
 /// "click-to-select interaction pattern"). One shared shape drives all
-/// three phases so PR5 (Attack) and PR7 (Fortify) can reuse it unchanged
+/// three phases so Attack and Fortify can reuse it unchanged
 /// once wired: Reinforce is a single-step pick, Attack and Fortify are
 /// two-step (own origin, then a phase-specific valid destination).
 /// </summary>

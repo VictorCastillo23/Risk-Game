@@ -7,15 +7,15 @@ namespace Risk.Web.Services;
 /// <summary>
 /// Surfaces an AI seat's turn that could not be resolved to completion by
 /// <see cref="GameSessionService.AdvanceAiTurns"/> — either the engine
-/// rejected a command the bot issued (<see cref="Rejected"/>, design D1/D2:
+/// rejected a command the bot issued (<see cref="Rejected"/>:
 /// a bot defect, never retried or masked), or the per-drain command budget
 /// (<see cref="Risk.AI.Scoring.BotWeights.MaxCommandsPerGame"/>) ran out
-/// first (<see cref="BudgetExhausted"/>, design D3: a tuning signal, not a
+/// first (<see cref="BudgetExhausted"/>: a tuning signal, not a
 /// rule violation). Deliberately its own <c>Risk.Web</c>-only record, not a
 /// third <see cref="Risk.Engine.Results.CommandResult{TState,TEvent}"/> case
 /// or a reuse of <see cref="GameErrorCode"/>: an AI failure is for an actor
 /// and command the caller never issued, so folding it into the caller's own
-/// dispatch result would break "one dispatch, one result" (design D1).
+/// dispatch result would break "one dispatch, one result".
 /// </summary>
 /// <param name="Player">The AI seat whose turn could not be resolved.</param>
 /// <param name="Command">

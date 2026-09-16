@@ -10,10 +10,10 @@ namespace Risk.Web.Models;
 /// UI copy is Spanish, identifiers stay English). Called with whatever
 /// <c>PlayerView.OwnEffectiveMission</c> already contains — this type never
 /// re-derives the self-target substitution (that lives in
-/// <c>Risk.Engine.Rules.MissionResolution</c>, design 3.4-D1).
+/// <c>Risk.Engine.Rules.MissionResolution</c>).
 /// </summary>
 /// <remarks>
-/// Register: VOSEO (design 3.4-D6), consistent with CardPanel's
+/// Register: VOSEO, consistent with CardPanel's
 /// "Tenés… debés…". reglasrisk.md prints these missions in tuteo, but it is
 /// the source of truth for mission SEMANTICS, not for UI copy — do not
 /// "restore" the tuteo wording here.
@@ -26,7 +26,7 @@ public static class MissionDisplay
     /// target to a display name — confirmed against
     /// <c>SecretMissionVictoryRule.cs</c>: an army's <see cref="ArmyId.Value"/>
     /// equals the seated <see cref="PlayerId.Value"/> it was dealt to. An
-    /// unseated/unknown id (impossible after roadmap 3.2's seated-pool
+    /// unseated/unknown id (impossible after the seated-pool
     /// filter) falls back to "Ejército {n}" rather than throwing — a
     /// formatter must never throw while rendering.
     /// </summary>

@@ -20,7 +20,7 @@
 
     /// <summary>
     /// Whether <see cref="Phase"/> is <see cref="GameMode.TwoPlayer"/>'s
-    /// Setup Phase B (design D3) — drives both <see cref="Hint"/>'s third
+    /// Setup Phase B — drives both <see cref="Hint"/>'s third
     /// case and <see cref="ErrorMessageOverride"/>. Computed by
     /// <c>Game.razor</c> via <c>TwoPlayerSetupPhase.IsPhaseB</c> and passed
     /// in, so this panel stays pure/parameter-driven.
@@ -44,7 +44,7 @@
         _ => "Hacé click en un territorio propio para colocar una tropa."
     };
 
-    // Design D3: the shared NotOwner copy ("No sos dueño de ese
+    // The shared NotOwner copy ("No sos dueño de ese
     // territorio.") is misleading during Phase B — the most likely misclick
     // is the player's OWN territory, out of Phase-A habit, and that copy is
     // flatly false there. Scoped to Phase B only; every other NotOwner

@@ -50,11 +50,11 @@
     [Parameter, EditorRequired]
     public PlayerId CurrentPlayer { get; set; }
 
-    /// <summary>The state to read source-territory troops and <c>FortifyUsed</c> from (design D5: read straight off <c>GameState</c>).</summary>
+    /// <summary>The state to read source-territory troops and <c>FortifyUsed</c> from (read straight off <c>GameState</c>).</summary>
     [Parameter, EditorRequired]
     public GameState State { get; set; } = null!;
 
-    /// <summary>The source territory, if selected — owned by the host page's <c>BoardSelection</c> (already Fortify-aware since PR4).</summary>
+    /// <summary>The source territory, if selected — owned by the host page's <c>BoardSelection</c> (already Fortify-aware).</summary>
     [Parameter]
     public TerritoryId? Origin { get; set; }
 

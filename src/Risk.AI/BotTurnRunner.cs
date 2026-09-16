@@ -10,7 +10,7 @@ namespace Risk.AI;
 /// The production Observe/Decide/Execute orchestrator (design's data flow
 /// diagram) that finally connects <see cref="IBotPlayer"/> to a real
 /// <see cref="IGameEngine"/>. Contains no <c>catch</c>, no retry, and no
-/// fallback/substitute command (design D5): any <c>Rejected</c> result from
+/// fallback/substitute command: any <c>Rejected</c> result from
 /// <see cref="IGameEngine.Execute"/> is a defect, surfaced as a terminal
 /// <see cref="BotRunResult.Rejected"/> carrying the exact offending command
 /// and <see cref="Risk.Domain.Errors.GameError"/> — the spec's "Zero-Rejected
@@ -24,11 +24,11 @@ namespace Risk.AI;
 /// <remarks>
 /// <see cref="BotTurnRunner"/>, <see cref="BotRunResult"/>, and the shared
 /// <see cref="BotTurnStep"/> stepping primitive are the only three
-/// <c>Risk.AI</c> types allowed to name <see cref="GameState"/> (design D1;
-/// <see cref="BotTurnStep"/> was extracted post-Phase-8 so this class'
+/// <c>Risk.AI</c> types allowed to name <see cref="GameState"/>
+/// (<see cref="BotTurnStep"/> was extracted so this class'
 /// stepping sequence and <c>Risk.AI.Tests</c>' <c>GameHarness</c> fixture
 /// never drift apart, but it is pure orchestration plumbing with the exact
-/// same D1 posture as this class) — and even across all three, only
+/// same posture as this class) — and even across all three, only
 /// <see cref="GameState.Status"/> and <see cref="GameState.Turn"/>.<see cref="TurnState.CurrentPlayer"/>
 /// are ever read directly (both are also present on <see cref="Views.PlayerView"/>);
 /// the rest of <see cref="GameState"/> is passed through opaquely to

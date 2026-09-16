@@ -6,7 +6,7 @@ namespace Risk.AI.Scoring;
 /// numeric literals other than structural ones (0, 1, array indices).
 /// Values below are the initial, deliberately conservative estimates called
 /// for by the design; several are explicitly flagged in the design's Open
-/// Questions as subject to tuning once the Phase 9 full-game integration
+/// Questions as subject to tuning once full-game integration
 /// tests expose actual termination/aggression behavior. Centralizing them
 /// here (rather than scattering literals across six files) is what makes
 /// that later tuning pass, or a future difficulty tier, a one-file change.
@@ -72,7 +72,7 @@ internal static class BotWeights
     // once lost must always outrank hunting any enemy headquarters, regardless of tuning.
     public const double RecaptureOwnHqWeight = 10.0;
 
-    // BotTurnRunner safety valves (design D5 / Open Questions).
+    // BotTurnRunner safety valves (Open Questions).
     public const int MaxCommandsPerTurn = 1_000;
     public const int MaxCommandsPerGame = 250_000;
 }

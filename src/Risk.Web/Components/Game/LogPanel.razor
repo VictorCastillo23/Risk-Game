@@ -24,7 +24,7 @@
 </div>
 
 @code {
-    /// <summary>The full accumulated event log to render, oldest first (design D5: read straight off <c>GameState.Log</c>).</summary>
+    /// <summary>The full accumulated event log to render, oldest first (read straight off <c>GameState.Log</c>).</summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<GameEvent> Log { get; set; } = [];
 

@@ -14,14 +14,14 @@ using Risk.Web.Tests.Fakes;
 namespace Risk.Web.Tests.Services;
 
 /// <summary>
-/// Phase 2/3 of <c>sdd/risk-web-ai-seats</c>: proves
+/// Proves
 /// <see cref="GameSessionService.AdvanceAiTurns"/> (private — exercised only
 /// through <see cref="GameSessionService.Start"/>/<see cref="GameSessionService.Execute"/>/
 /// <see cref="GameSessionService.LoadFrom"/>, exactly like every other
 /// caller) resolves AI-controlled seats before control returns to the
 /// caller, never masks a bot's illegal command, and keeps
 /// <see cref="GameSessionService.LastEvents"/> scoped to the caller's own
-/// command (spec's "LastEvents scope excludes AI-turn events", design D6).
+/// command (spec's "LastEvents scope excludes AI-turn events").
 ///
 /// Every scenario below drives real engine rules through a real
 /// <see cref="GameEngine"/> (or, for the hard-fail scenario, a thin
@@ -77,7 +77,7 @@ public class GameSessionServiceAiIntegrationTests
     /// hands off to exactly one AI seat, and that seat's own turn is fully
     /// resolved before <c>Execute</c> returns — control never comes back to
     /// the caller sitting on an AI-controlled <c>Turn.CurrentPlayer</c>.
-    /// Also doubles as the D6 "LastEvents scope excludes AI-turn events"
+    /// Also doubles as the "LastEvents scope excludes AI-turn events"
     /// proof: both seats emit the exact same event TYPE
     /// (<see cref="TroopsPlaced"/>) in this one call, so asserting
     /// <c>LastEvents</c> contains only the human's own is a precise,
@@ -116,13 +116,13 @@ public class GameSessionServiceAiIntegrationTests
         Assert.False(session.Players[session.State!.Turn.CurrentPlayer].IsAi);
         Assert.Null(session.AiFailure);
 
-        // D6: LastEvents is the human's OWN command's delta only.
+        // LastEvents is the human's OWN command's delta only.
         var placed = Assert.Single(session.LastEvents);
         var troopsPlaced = Assert.IsType<TroopsPlaced>(placed);
         Assert.Equal(Seat0, troopsPlaced.Player);
 
         // The bot's own placement genuinely happened (not skipped) — it's
-        // just excluded from LastEvents, per D6. The full Log has both.
+        // just excluded from LastEvents. The full Log has both.
         var loggedPlacements = session.State!.Log.OfType<TroopsPlaced>().ToList();
         Assert.Contains(loggedPlacements, e => e.Player == Seat0);
         Assert.Contains(loggedPlacements, e => e.Player == Seat1);
@@ -177,7 +177,7 @@ public class GameSessionServiceAiIntegrationTests
     /// Scenario (d): <see cref="GameSessionService.LoadFrom"/> onto a
     /// hand-built <see cref="GameSnapshot"/> whose <c>Turn.CurrentPlayer</c>
     /// is configured AI resolves it rather than sitting stuck on that seat —
-    /// design D4's <c>BotMemory.Empty</c> path (a resumed AI seat always
+    /// the <c>BotMemory.Empty</c> path (a resumed AI seat always
     /// starts a fresh turn, so <c>Empty</c> is correct by construction).
     /// </summary>
     [Fact]
@@ -362,7 +362,7 @@ public class GameSessionServiceAiIntegrationTests
         // full game, not just a handful of Setup commands.
         Assert.Equal(Seat1, won.Winner);
 
-        // Setup Phase B genuinely ran for BOTH seats (design D8's
+        // Setup Phase B genuinely ran for BOTH seats (the
         // Phase A/B boundary) — the exact fact Gap 1's fix makes possible:
         // without it, the bot's own IsTwoPlayerPhaseB check would never
         // trip, and this event would never appear.

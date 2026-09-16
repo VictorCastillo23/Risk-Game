@@ -13,7 +13,7 @@ namespace Risk.Web.Tests.Persistence;
 /// <c>IReadOnlyDictionary</c>/<c>IReadOnlyList</c> members (design's
 /// documented gotcha, see <c>GameSnapshotSerializerTests</c>), so that
 /// comparison would be false even on a perfect round-trip. Kept alongside
-/// the serializer tests so PR5's future save/resume integration test can
+/// the serializer tests so a future save/resume integration test can
 /// reuse this instead of duplicating assertion logic.
 /// </summary>
 internal static class GameStateAssertions

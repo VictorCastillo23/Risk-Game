@@ -37,7 +37,7 @@
     [Parameter, EditorRequired]
     public PlayerId CurrentPlayer { get; set; }
 
-    /// <summary>The state to read the live troop pool from (design D5: read straight off <c>GameState</c>).</summary>
+    /// <summary>The state to read the live troop pool from (read straight off <c>GameState</c>).</summary>
     [Parameter, EditorRequired]
     public GameState State { get; set; } = null!;
 

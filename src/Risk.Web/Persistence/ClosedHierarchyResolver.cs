@@ -13,7 +13,7 @@ namespace Risk.Web.Persistence;
 /// (<see cref="Card"/>: 2 variants, <see cref="GameStatus"/>: 2 variants,
 /// <see cref="MissionCard"/>: 3 variants, <see cref="GameEvent"/>: 16
 /// variants), via a <see cref="System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver"/>
-/// modifier instead of <c>[JsonDerivedType]</c> attributes (design D3) —
+/// modifier instead of <c>[JsonDerivedType]</c> attributes —
 /// attributes on the base records would require touching
 /// <c>Risk.Domain</c>/<c>Risk.Engine</c>, which this change must not do.
 /// <see cref="MissionCard"/>'s <c>private protected</c> constructor is not

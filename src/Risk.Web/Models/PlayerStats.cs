@@ -9,7 +9,7 @@ public readonly record struct PlayerStatsRow(PlayerId Player, int TerritoryCount
 /// <summary>
 /// Pure derivation of per-player totals (territories owned, troops summed
 /// across those territories) from a live <see cref="GameState"/>, backing
-/// the always-visible stats bar. Design's read convention (D5): board/player
+/// the always-visible stats bar. Board/player
 /// counts are PUBLIC state, already visible on the board itself — read
 /// straight off <see cref="GameState"/>, never through <c>PlayerView</c>.
 /// Eliminated players are omitted (by the time <c>PlayerEliminated</c>

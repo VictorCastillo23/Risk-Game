@@ -11,14 +11,14 @@ namespace Risk.Tests.Engine;
 
 /// <summary>
 /// Covers the additive <see cref="HeadquartersCaptured"/> guard in
-/// <c>GameEngine.ExecuteAttack</c> (roadmap 5.2). Starts every scenario from
+/// <c>GameEngine.ExecuteAttack</c>. Starts every scenario from
 /// <see cref="GameStateBuilder.CompleteSetup"/> (real Claim/Setup/
 /// SelectHeadquarters flow, so <c>PlayerState.HeadquartersId</c> is
 /// genuinely set), then reshapes specific territory entries directly via
 /// <c>state with { Territories = ... }</c> plus a hand-set <see cref="TurnState"/>
 /// to drive conquest, rather than replaying full attack/occupy sequences —
 /// the only practical way to reach a second recapture hop without also
-/// resolving <c>PendingOccupation</c> and rotating turns (design D6).
+/// resolving <c>PendingOccupation</c> and rotating turns.
 /// </summary>
 public class HeadquartersCaptureTests
 {
@@ -61,7 +61,7 @@ public class HeadquartersCaptureTests
     [Fact]
     public void Execute_recapture_chain_keeps_OriginalOwner_as_the_first_declarer_not_the_intermediate_holder()
     {
-        // CRUX (design D1): a naive implementation reading
+        // CRUX: a naive implementation reading
         // `defenderTerritory.Owner` instead of scanning all players'
         // HeadquartersId would pass every other test but fail this one,
         // reporting B as OriginalOwner on the second hop instead of A.
@@ -100,8 +100,8 @@ public class HeadquartersCaptureTests
         Assert.Equal(a, firstCaptured.OriginalOwner);
         Assert.True(firstResult.State.Players.Single(p => p.Id == a).IsEliminated);
 
-        // Hop 2: C recaptures the same HQ from B. Reshape directly (design
-        // D6) instead of replaying OccupyCommand.
+        // Hop 2: C recaptures the same HQ from B. Reshape directly
+        // instead of replaying OccupyCommand.
         var secondTerritories = new Dictionary<TerritoryId, TerritoryState>(firstResult.State.Territories)
         {
             [hq] = new TerritoryState(b, 1),

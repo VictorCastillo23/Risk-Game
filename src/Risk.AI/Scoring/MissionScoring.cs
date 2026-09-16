@@ -7,7 +7,7 @@ namespace Risk.AI.Scoring;
 
 /// <summary>
 /// Mission-aware strategic weighting, reading ONLY <see cref="PlayerView.OwnEffectiveMission"/>
-/// (design D2/bot-objective-awareness). Returns <c>0.0</c> whenever the viewer holds no
+/// Returns <c>0.0</c> whenever the viewer holds no
 /// mission (Classic and every other non-<see cref="Risk.Engine.State.GameMode.SecretMission"/>
 /// mode), so generic scoring is unaffected there — this is the "weighting plug-in" tier's
 /// whole point: Classic falls through for free.

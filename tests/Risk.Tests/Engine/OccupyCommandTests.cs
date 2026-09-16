@@ -13,7 +13,7 @@ using Risk.Tests.Fakes;
 namespace Risk.Tests.Engine;
 
 /// <summary>
-/// Design 3.3-D7: a second <see cref="IVictoryRule.CheckVictory"/> call site
+/// A second <see cref="IVictoryRule.CheckVictory"/> call site
 /// at the end of <c>GameEngine.ExecuteOccupy</c>, added because troop-gated
 /// missions (every <see cref="OccupyTerritories"/> card) cannot be satisfied
 /// by <c>ExecuteAttack</c>'s call site alone — the conquered territory still
@@ -173,8 +173,8 @@ public class OccupyCommandTests
 
     /// <summary>
     /// Capital: <see cref="VictoryRules.For"/> returns <see langword="null"/>
-    /// for <see cref="GameMode.Capital"/> (its real rule is roadmap item
-    /// 5.3), so <c>ExecuteOccupy</c>'s <c>is {} modeVictoryRule</c> pattern
+    /// for <see cref="GameMode.Capital"/> (its real rule lives elsewhere),
+    /// so <c>ExecuteOccupy</c>'s <c>is {} modeVictoryRule</c> pattern
     /// must fail and skip the block entirely. Proven with a
     /// <see cref="RecordingVictoryRule"/> "trap" mapped to every OTHER mode:
     /// if <c>ExecuteOccupy</c> ever ignored <see cref="GameState.Mode"/> and

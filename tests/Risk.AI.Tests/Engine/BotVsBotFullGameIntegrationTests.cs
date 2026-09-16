@@ -13,10 +13,9 @@ namespace Risk.AI.Tests.Engine;
 
 /// <summary>
 /// The first full-game, bot-vs-bot proof of the entire production
-/// <see cref="BotPlayer"/>/<c>Decisions.*</c> stack (Phase 9a, per
-/// <c>sdd/risk-ai-bots/design</c>'s D9 and the spec's "All four GameMode
-/// bot-vs-bot integration tests are blocking" requirement) — Classic mode
-/// specifically. Unlike <c>BotTurnRunnerTests</c> and <c>GameHarnessTests</c>,
+/// <see cref="BotPlayer"/>/<c>Decisions.*</c> stack (per the spec's "All four
+/// GameMode bot-vs-bot integration tests are blocking" requirement) —
+/// Classic mode specifically. Unlike <c>BotTurnRunnerTests</c> and <c>GameHarnessTests</c>,
 /// which fast-forward Claim/Setup via the trivial <see cref="FirstLegalBot"/>
 /// fixture and only exercise the REAL <see cref="BotPlayer"/> for a handful
 /// of phases/commands, this test drives EVERY seat with the real
@@ -90,7 +89,7 @@ public class BotVsBotFullGameIntegrationTests
     /// Reaching <see cref="BotRunResult.Completed"/> (rather than
     /// <see cref="BotRunResult.Rejected"/>) is itself the proof of the
     /// spec's "Zero-Rejected invariant across full games": <see cref="BotTurnRunner"/>'s
-    /// <c>Drive</c> loop (design D5) has exactly three exits —
+    /// <c>Drive</c> loop has exactly three exits —
     /// <c>Completed</c> when <see cref="GameStatus.Won"/> is reached,
     /// <c>Rejected</c> the very first time <see cref="IGameEngine.Execute"/>
     /// returns a rejection (terminal, no retry, no fallback), or
@@ -143,7 +142,7 @@ public class BotVsBotFullGameIntegrationTests
     /// (3-5, per <see cref="Risk.Engine.Setup.GameSetup.PlayerCountRange"/>)
     /// and the three dice-sequence variants — mirrors <see cref="ClassicScenarios"/>
     /// exactly. Missions here come from <see cref="Risk.Engine.Modes.SecretMissionSetupStrategy"/>'s
-    /// own <c>Random.Shared</c> deal (design D9's random-board invariant
+    /// own <c>Random.Shared</c> deal (random-board invariant
     /// testing), not forced — this is the "does the real deal terminate"
     /// proof; <see cref="SecretMissionForcedArchetypeScenarios"/> below is the
     /// "every archetype genuinely works" proof.
@@ -406,7 +405,7 @@ public class BotVsBotFullGameIntegrationTests
     /// exploratory search confirmed drives a genuine "the eventual winner's
     /// own headquarters gets captured by someone else, and that same winner
     /// later recaptures it" sequence during the real bot-vs-bot game — the
-    /// exact path <see cref="BotWeights.RecaptureOwnHqWeight"/> (Phase 5's
+    /// exact path <see cref="BotWeights.RecaptureOwnHqWeight"/> (a
     /// post-review fix) exists to prioritize. Length 17, prime, consistent
     /// with <see cref="DiceSequenceVariants"/>'s own convention.
     /// </summary>
@@ -414,7 +413,7 @@ public class BotVsBotFullGameIntegrationTests
         [4, 6, 2, 2, 5, 6, 6, 6, 4, 5, 3, 5, 6, 5, 4, 5, 6];
 
     /// <summary>
-    /// Dedicated proof of Phase 5's post-review fix
+    /// Dedicated proof of the post-review fix
     /// (<see cref="BotWeights.RecaptureOwnHqWeight"/>): this specific,
     /// deterministic replay must contain a genuine
     /// <see cref="HeadquartersCaptured"/> event where the eventual winner
@@ -496,13 +495,13 @@ public class BotVsBotFullGameIntegrationTests
     }
 
     /// <summary>
-    /// The fourth and final blocking DoD test (design D9, spec's "All four
+    /// The fourth and final blocking DoD test (spec's "All four
     /// GameMode bot-vs-bot integration tests are blocking" requirement) — and
     /// the mode every prior phase's risk notes have flagged as the most
     /// fragile: it is the only mode with a synthetic third "neutral" army
     /// (<see cref="PlayerState.IsNeutral"/>) that never takes a real turn but
     /// must still be correctly identified by both real bots
-    /// (<see cref="BotMemory.FindTwoPlayerNeutral"/>, design D8) so its
+    /// (<see cref="BotMemory.FindTwoPlayerNeutral"/>) so its
     /// territories are treated as attackable-but-passive rather than
     /// confused with the real opponent, and it has a unique two-phase Setup
     /// (Phase A: both humans place their own remaining troops; Phase B:
@@ -550,8 +549,8 @@ public class BotVsBotFullGameIntegrationTests
         var loser = completed.State.Players.Single(p => !p.IsNeutral && p.Id != won.Winner);
         Assert.True(loser.IsEliminated);
 
-        // --- Setup Phase A/B boundary (design D8), exercised across a FULL
-        // game, not just Phase 8's short synthetic sequence. Every
+        // --- Setup Phase A/B boundary, exercised across a FULL
+        // game, not just a short synthetic sequence. Every
         // PlaceNeutralTroopsCommand SetupDecision emits places exactly 1
         // troop, so the neutral's own Setup budget (40 starting - 14 dealt =
         // 26, TwoPlayerSetupStrategy/GameSetup) must drain to EXACTLY 26
@@ -563,7 +562,7 @@ public class BotVsBotFullGameIntegrationTests
         Assert.Equal(26, neutralPlacements.Sum(e => e.Troops));
         Assert.All(bots, bot => Assert.Contains(neutralPlacements, e => e.Placer == bot.Id));
 
-        // --- Neutral-by-elimination detection (design D8), proven to hold
+        // --- Neutral-by-elimination detection, proven to hold
         // for a full game's worth of turns: re-derive BOTH real bots'
         // inferred neutral identity directly from their OWN final
         // BotMemory (SeenActors accumulated over the entire game) using the

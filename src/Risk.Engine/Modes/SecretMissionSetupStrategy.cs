@@ -58,7 +58,7 @@ public sealed class SecretMissionSetupStrategy : ISetupStrategy
     /// shuffling. Positional binding: ArmyId(i) is seat PlayerId(i).
     /// A card naming the holder's OWN army is a legal deal outcome and is dealt
     /// as-is — its printed fallback (reglasrisk.md:84-85) is resolved at
-    /// completion-check time (roadmap 3.3), never substituted here.
+    /// completion-check time, never substituted here.
     /// </summary>
     internal static IReadOnlyList<MissionCard> SeatedPool(int playerCount) =>
         MissionDeck.CreateStandard()

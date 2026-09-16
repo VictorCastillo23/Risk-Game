@@ -1,7 +1,7 @@
 namespace Risk.Web.Models;
 
 /// <summary>
-/// Fixed 6-swatch color palette for the setup screen (design D4). UI-level
+/// Fixed 6-swatch color palette for the setup screen. UI-level
 /// duplicate prevention: a swatch already picked by another row is
 /// unavailable, but a row's own current pick stays available to itself.
 /// </summary>

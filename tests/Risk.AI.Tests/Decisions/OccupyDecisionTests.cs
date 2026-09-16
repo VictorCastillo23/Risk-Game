@@ -14,7 +14,7 @@ public class OccupyDecisionTests
     [Fact]
     public void Decide_clamps_to_the_minimum_when_the_source_has_exactly_one_troop_above_the_minimum()
     {
-        // D7 boundary: fromTroops - 1 == MinimumTroops, so min == max regardless of share.
+        // Boundary: fromTroops - 1 == MinimumTroops, so min == max regardless of share.
         var view = PlayerViewBuilder.For(Self)
             .Owns(Self, 3, "Alaska") // fromTroops - 1 = 2 == MinimumTroops.
             .Owns(Self, 0, "Alberta") // Conquered, per the engine's post-conquest state.

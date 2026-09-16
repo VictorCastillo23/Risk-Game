@@ -11,7 +11,7 @@ namespace Risk.AI;
 /// The single observe → decide → execute step shared by <see cref="BotTurnRunner"/>'s
 /// production loop and <c>Risk.AI.Tests</c>' <c>GameHarness</c> fixture — both
 /// need the IDENTICAL sequence (thread every tracked bot's memory through
-/// <see cref="BotMemory.WithSeenActor"/> first, design D8; then
+/// <see cref="BotMemory.WithSeenActor"/> first; then
 /// <see cref="IGameEngine.Observe"/>; then <see cref="IBotPlayer.DecideNextCommand"/>;
 /// then <see cref="IGameEngine.Execute"/>; then <see cref="BotMemory.Fold"/> on
 /// success), so this extraction is what keeps them from silently drifting

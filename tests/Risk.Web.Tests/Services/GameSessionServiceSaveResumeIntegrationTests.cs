@@ -16,7 +16,7 @@ namespace Risk.Web.Tests.Services;
 
 /// <summary>
 /// Task 5.6: proves the session layer (<see cref="GameSessionService"/>) and
-/// PR3/4's serializer (<see cref="GameSnapshotSerializer"/>, exercised here
+/// the serializer (<see cref="GameSnapshotSerializer"/>, exercised here
 /// only indirectly through <see cref="FakeGameStore"/>'s real round-trip —
 /// see that fake's own doc comment) genuinely compose. Plays a real game
 /// partway through <see cref="GameSessionService.Execute"/> (same
@@ -29,7 +29,7 @@ namespace Risk.Web.Tests.Services;
 /// itself (this codebase's documented reference-equality gotcha, per
 /// <c>Persistence/GameStateAssertions.cs</c>). Reuses
 /// <see cref="GameStateAssertions.AssertStructurallyEqual"/> rather than a
-/// local reimplementation (readability fix, PR5 fix pass): <see langword="internal"/>
+/// local reimplementation (readability fix): <see langword="internal"/>
 /// in C# is assembly-scoped, not namespace-scoped, and this test class lives
 /// in the same <c>Risk.Web.Tests</c> assembly, so there was never a
 /// visibility reason to duplicate it — the duplicate was also strictly less
@@ -88,7 +88,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
         Assert.Equal(ResumeOutcome.Resumed, resumed);
         Assert.Equal(UserId, freshSession.OwnerUserId);
         GameStateAssertions.AssertStructurallyEqual(stateBeforeSave, freshSession.State!);
-        // TwoPlayer mode's engine-created neutral army (design D2's own
+        // TwoPlayer mode's engine-created neutral army (its own
         // PlayerConfig, synthesized in Start) is a 3rd PlayerConfig on top
         // of the 2 human rows.
         Assert.Equal(3, freshSession.Players.Count);
@@ -116,7 +116,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
         var stateBeforeSave = session.State!;
         await session.SaveAsync();
 
-        // Reset() now raises Changed (PR5) — proving that firing it doesn't
+        // Reset() now raises Changed — proving that firing it doesn't
         // corrupt the already-persisted row the next ResumeAsync call reads.
         session.Reset();
         Assert.False(session.IsStarted);
@@ -130,7 +130,7 @@ public class GameSessionServiceSaveResumeIntegrationTests
 
     /// <summary>
     /// Task 6.6: exercises the FULL anonymous-save-then-login flow
-    /// (design D2) end-to-end at the level just below the actual
+    /// end-to-end at the level just below the actual
     /// <c>ProtectedSessionStorage</c> call (see <see cref="PendingSave"/>'s
     /// own doc comment for why that boundary needs a browser/JS interop and
     /// can't be driven from here): anonymous session plays a bit and takes a

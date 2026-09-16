@@ -22,9 +22,9 @@ namespace Risk.Web.Services;
 /// resolved to: no signed-in user (the caller must authenticate first —
 /// user-accounts' "Save triggers authentication"), a brand-new row, or an
 /// existing row that was overwritten (game-persistence's "second save
-/// overwrites the first"). PR6 uses <see cref="Overwritten"/> to decide
+/// overwrites the first"). <see cref="Overwritten"/> lets a caller decide
 /// whether a confirm-before-overwrite prompt was warranted in hindsight, or
-/// (in a future pre-check flow) combines this with <c>GetSummaryAsync</c> to
+/// (in a future pre-check flow) combine this with <c>GetSummaryAsync</c> to
 /// ask before saving.
 /// </summary>
 public enum SaveOutcome
@@ -35,7 +35,7 @@ public enum SaveOutcome
 
     /// <summary>
     /// <see cref="IGameStore.SaveAsync"/> threw (DB down/timeout/pool
-    /// exhaustion, etc.) — PR5 fix pass, BLOCKER finding. The in-progress,
+    /// exhaustion, etc.). The in-progress,
     /// unsaved game is left completely untouched: <see cref="GameSessionService.State"/>
     /// and <see cref="GameSessionService.OwnerUserId"/> keep whatever value
     /// they held immediately before the failed save attempt.
@@ -48,9 +48,9 @@ public enum SaveOutcome
 /// resolved to. Mirrors <see cref="SaveOutcome"/>'s shape: no signed-in user,
 /// a signed-in user with nothing saved, an unhandled store failure, or a
 /// successful resume. Introduced alongside <see cref="SaveOutcome.Failed"/>
-/// (PR5 fix pass, BLOCKER finding) so a caller gets a distinct signal for
+/// so a caller gets a distinct signal for
 /// "the store errored" instead of that being indistinguishable from "there
-/// was nothing to resume" — no UI consumes this yet (PR6), so this is the
+/// was nothing to resume" — no UI consumes this yet, so this is the
 /// right time to give it its own shape rather than reusing a bare
 /// <see langword="bool"/>.
 /// </summary>
@@ -70,12 +70,12 @@ public enum ResumeOutcome
 /// success, and leaves both untouched on rejection so components can
 /// pattern-match one dispatch idiom throughout the UI.
 ///
-/// Persistence (PR5) is entirely optional/nullable-by-default (spec's
+/// Persistence is entirely optional/nullable-by-default (spec's
 /// "anonymous play unaffected"): <see cref="OwnerUserId"/> stays
 /// <see langword="null"/>, and no <see cref="IGameStore"/> call is ever made,
 /// unless a save/resume is actually invoked via <see cref="SaveAsync"/>/
 /// <see cref="ResumeAsync"/>. The signed-in user's id is resolved from
-/// <paramref name="authStateProvider"/>'s server-side principal (design D4)
+/// <paramref name="authStateProvider"/>'s server-side principal
 /// — no component ever passes an id in directly.
 ///
 /// Networked proxy (openspec risk-web-multiplayer): when this circuit
@@ -224,13 +224,13 @@ public sealed class GameSessionService(
     /// The table's bot failure (main's hot-seat doc below, extended): in a
     /// networked game this surfaces the shared session's failure instead —
     /// see the unified member above. Once set, it is never automatically
-    /// retried — surfacing an AI defect is the whole point (design D2).
+    /// retried — surfacing an AI defect is the whole point.
     /// </summary>
     /// <remarks>
     /// Set by <see cref="AdvanceAiTurns"/> when an AI seat's turn could not
     /// be resolved to completion — either the engine rejected a command the
-    /// bot issued, or the per-drain command budget ran out first (design
-    /// D1/D2). <see langword="null"/> at the start of every mutator
+    /// bot issued, or the per-drain command budget ran out first.
+    /// <see langword="null"/> at the start of every mutator
     /// (<see cref="Start"/>, <see cref="Execute"/>, <see cref="LoadFrom"/>)
     /// before <see cref="AdvanceAiTurns"/> runs, and cleared by
     /// <see cref="Reset"/>.
@@ -249,7 +249,7 @@ public sealed class GameSessionService(
     /// Each registered bot's own causally-derived memory, threaded across
     /// <see cref="AdvanceAiTurns"/> calls for as long as the seat keeps its
     /// registry entry. Reset to <see cref="BotMemory.Empty"/> whenever
-    /// <see cref="RebuildBotRegistry"/> runs (design D4: a resumed AI seat
+    /// <see cref="RebuildBotRegistry"/> runs (a resumed AI seat
     /// via <see cref="LoadFrom"/> is always starting a fresh turn, so
     /// <c>Empty</c> is correct by construction — see that method's own
     /// remarks).
@@ -283,14 +283,14 @@ public sealed class GameSessionService(
     /// until either a human (or the <see cref="GameMode.TwoPlayer"/> neutral,
     /// which never becomes <c>CurrentPlayer</c>) seat is reached,
     /// <see cref="GameStatus.Won"/> is reached, or the outer per-drain
-    /// command budget (<see cref="BotWeights.MaxCommandsPerGame"/>, design
-    /// D3) is exhausted. Called from <see cref="Start"/>, <see cref="Execute"/>
+    /// command budget (<see cref="BotWeights.MaxCommandsPerGame"/>)
+    /// is exhausted. Called from <see cref="Start"/>, <see cref="Execute"/>
     /// (on <c>Ok</c>), and <see cref="LoadFrom"/>, always immediately before
     /// their own <see cref="Changed"/> invocation, so
     /// <c>Turn.CurrentPlayer</c> is guaranteed human-or-game-over by the time
     /// any component renders.
     ///
-    /// The budget is counted PER CALL (per drain), not per game (design D3):
+    /// The budget is counted PER CALL (per drain), not per game:
     /// an all-AI game resolved entirely from <see cref="Start"/> is one
     /// drain and correctly gets the full per-game bound, while a later
     /// <see cref="Execute"/> call's own drain starts its count back at zero —
@@ -305,7 +305,7 @@ public sealed class GameSessionService(
     /// <c>rejected.State</c> — reassigning it would be a no-op at best and
     /// an easy-to-regress footgun at worst if that invariant ever
     /// changed. Never retried, never masked — a bot's illegal command is a
-    /// defect (design D2), the same hard-fail posture <see cref="BotTurnRunner"/>
+    /// defect, the same hard-fail posture <see cref="BotTurnRunner"/>
     /// itself has one layer down.
     ///
     /// <para>
@@ -314,7 +314,7 @@ public sealed class GameSessionService(
     /// because <c>RunTurn</c> builds its OWN single-entry <c>{ [bot.Id] = memory }</c>
     /// dictionary internally (it only ever drives one seat's turn), so
     /// <c>BotTurnStep.Advance</c>'s "every tracked bot observes the current
-    /// actor" step (design D8, upstream in <c>Risk.AI</c>) can only ever mark
+    /// actor" step (upstream in <c>Risk.AI</c>) can only ever mark
     /// a bot as having seen ITSELF when driven this way — unlike
     /// <see cref="BotTurnRunner.RunGame"/>, which keeps every registered
     /// bot's memory in ONE shared dictionary for the whole game. Without this
@@ -332,7 +332,7 @@ public sealed class GameSessionService(
     /// <summary>
     /// The actual implementation behind the no-arg <see cref="AdvanceAiTurns()"/>
     /// above, with the per-drain budget exposed as an <see langword="internal"/>
-    /// parameter purely as a test seam (fresh-context review, post-Phase-3):
+    /// parameter purely as a test seam:
     /// the real budget, <see cref="BotWeights.MaxCommandsPerGame"/>
     /// (250,000), makes <see cref="AiTurnFailure.BudgetExhausted"/> and the
     /// <see cref="BotRunResult.Exhausted"/> switch arm effectively
@@ -414,7 +414,7 @@ public sealed class GameSessionService(
     /// <param name="mode">
     /// Which <see cref="GameMode"/> to start. Defaults to
     /// <see cref="GameMode.Classic"/>, matching <c>Setup.razor</c>'s mode
-    /// dropdown default (roadmap item 2.2).
+    /// dropdown default.
     /// </param>
     public CommandResult<GameState, GameEvent> Start(IReadOnlyList<PlayerSetupRow> rows, GameMode mode = GameMode.Classic) =>
         Start(rows, mode, BotWeights.MaxCommandsPerGame);
@@ -445,7 +445,7 @@ public sealed class GameSessionService(
                 .Select((row, index) => new PlayerConfig(new PlayerId(index), row.Name, row.ColorHex, row.IsAi))
                 .ToDictionary(config => config.Id);
 
-            // Design D2: GameMode.TwoPlayer's neutral third army is
+            // GameMode.TwoPlayer's neutral third army is
             // GameSetup.Create's own player, not one of the setup screen's
             // rows — it never gets a PlayerSetupRow, so it needs its own
             // synthesized PlayerConfig here or BoardSvg/PhaseIndicator would
@@ -548,7 +548,7 @@ public sealed class GameSessionService(
     /// mission was ever dealt, and reports the resolved (not the dealt)
     /// mission via <see cref="IGameEngine.Observe"/>, exactly like
     /// <see cref="ObserveCurrentPlayer"/> — never reads
-    /// <c>GameState.Players[x].Mission</c> directly (design 3.4-D4).
+    /// <c>GameState.Players[x].Mission</c> directly.
     /// </summary>
     public MissionCard? WinnerMission() =>
         State is { Status: GameStatus.Won won } state
@@ -565,7 +565,7 @@ public sealed class GameSessionService(
     /// safe against <c>Game.razor</c>'s <c>OnSessionChanged</c> handler,
     /// which is entirely null-safe against a just-reset session (reads
     /// <c>Session.State?.</c> and <c>Session.LastEvents</c>'s now-empty
-    /// list) — see PR5's apply-progress for the full trace.
+    /// list).
     /// </summary>
     public void Reset()
     {
@@ -584,7 +584,7 @@ public sealed class GameSessionService(
             net.Seat = null;
         }
 
-        // Design D7: a reset session must not retain seat->bot bindings, nor
+        // A reset session must not retain seat->bot bindings, nor
         // a stale failure, from whatever game was previously loaded here.
         AiFailure = null;
         _bots.Clear();
@@ -607,7 +607,7 @@ public sealed class GameSessionService(
     /// Builds a <see cref="GameSnapshot"/> from the current <see cref="State"/>
     /// and <see cref="Players"/>, for <see cref="SaveAsync"/> or a caller
     /// that needs to stash it (e.g. <c>ProtectedSessionStorage</c> for the
-    /// anonymous-save flow, design D2). Throws if called before <see cref="Start"/> —
+    /// anonymous-save flow). Throws if called before <see cref="Start"/> —
     /// a programmer error, matching <see cref="ObserveCurrentPlayer"/>'s
     /// precondition style.
     /// </summary>
@@ -625,7 +625,7 @@ public sealed class GameSessionService(
     /// Restores a previously-built <see cref="GameSnapshot"/> directly,
     /// bypassing <see cref="GameSetup.Create"/> entirely — used by
     /// <see cref="ResumeAsync"/> and by the anonymous pending-save
-    /// rehydration flow (design D2). Raises <see cref="Changed"/> like
+    /// rehydration flow. Raises <see cref="Changed"/> like
     /// <see cref="Start"/>/<see cref="Execute"/> do on success.
     /// </summary>
     public void LoadFrom(GameSnapshot snapshot)
@@ -648,7 +648,7 @@ public sealed class GameSessionService(
     /// server-side principal; returns <see cref="SaveOutcome.NotAuthenticated"/>
     /// without touching <see cref="store"/> at all if nobody is signed in.
     ///
-    /// BLOCKER fix (PR5 fresh-context review): <see cref="store"/>'s call is
+    /// BLOCKER fix: <see cref="store"/>'s call is
     /// wrapped in a try/catch. An unhandled exception from a Blazor Server
     /// event handler faults the entire circuit, which would destroy the
     /// caller's in-progress, unsaved game outright — strictly worse than
@@ -658,8 +658,8 @@ public sealed class GameSessionService(
     /// <see cref="OwnerUserId"/> below only ever runs after the store call
     /// has already succeeded). Catches <see cref="Exception"/> broadly
     /// rather than a store-specific type like <c>DbUpdateException</c>: this
-    /// service only knows <see cref="IGameStore"/>'s abstract contract (design
-    /// D4), never that today's implementation happens to be EF Core, so the
+    /// service only knows <see cref="IGameStore"/>'s abstract contract,
+    /// never that today's implementation happens to be EF Core, so the
     /// failure boundary has to be equally opaque. <see cref="OperationCanceledException"/>
     /// (e.g. the caller's own <paramref name="ct"/> firing) is deliberately
     /// NOT treated as a save failure — it is allowed to propagate as
@@ -693,9 +693,9 @@ public sealed class GameSessionService(
     /// no saved game") without mutating <see cref="State"/> if nobody is
     /// signed in or no save exists (this also covers an incompatible/stale
     /// schema version — <see cref="IGameStore.LoadAsync"/> reports that the
-    /// same way, per CRITICAL #2 of the PR5 fresh-context review).
+    /// same way).
     ///
-    /// BLOCKER fix (PR5 fresh-context review): same try/catch rationale as
+    /// BLOCKER fix: same try/catch rationale as
     /// <see cref="SaveAsync"/> — an unhandled store exception here would
     /// otherwise fault the circuit instead of leaving the caller with a
     /// clean "resume didn't work" signal.
@@ -735,7 +735,7 @@ public sealed class GameSessionService(
     /// any other case (including anonymous play, where <see cref="OwnerUserId"/>
     /// is always <see langword="null"/>).
     ///
-    /// CRITICAL #1 fix (PR5 fresh-context review): this is cosmetic
+    /// This is cosmetic
     /// housekeeping (deleting a now-stale save row after a win) riding on
     /// the most important terminal-state UI a player sees. It must never be
     /// able to disrupt that experience, so any failure from <see cref="store"/>
@@ -807,12 +807,12 @@ public sealed class GameSessionService(
     /// Deliberately loads <paramref name="snapshot"/> even if the
     /// subsequent save fails: the caller just authenticated specifically to
     /// finish saving a game they were actively playing seconds earlier
-    /// (design D2's stash-then-redirect flow) — silently discarding that
+    /// (the stash-then-redirect flow) — silently discarding that
     /// game locally because of an infra hiccup on the save would be
     /// strictly worse than a failed save alone (mirrors <see cref="SaveAsync"/>'s
     /// own "still playable" guarantee on failure).
     ///
-    /// CRITICAL fix (PR6 fresh-context review): also cleans up a just-saved
+    /// This also cleans up a just-saved
     /// row when <paramref name="snapshot"/> is already <see cref="GameStatus.Won"/>
     /// (e.g. an anonymous player won, then clicked "Guardar partida" and
     /// completed the login redirect). This can't be left to <c>Game.razor</c>'s

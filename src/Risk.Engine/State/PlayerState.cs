@@ -11,7 +11,7 @@ namespace Risk.Engine.State;
 /// current turn's reinforcement during Reinforce). <see cref="HeadquartersId"/>
 /// is write-once, set during <see cref="TurnPhase.SelectHeadquarters"/>
 /// (<see cref="GameMode.Capital"/> only) and never cleared — it designates a
-/// territory, not who currently controls it (design D4: capture of the
+/// territory, not who currently controls it (capture of the
 /// territory is derivable from <c>Territories[HeadquartersId].Owner</c>, so
 /// it is deliberately not stored here). <see cref="Mission"/> is write-once,
 /// dealt during setup (<see cref="GameMode.SecretMission"/> only) and never

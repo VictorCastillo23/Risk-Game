@@ -18,7 +18,7 @@ public class GameEngineValidationTests
         var state = GameStateBuilder.CompleteSetup(2);
         var engine = new GameEngine(new QueuedDiceRoller());
         // Exclude the neutral third party (GameSetup.Create's default mode,
-        // GameMode.TwoPlayer, deals a neutral army per item 4.1) — this test
+        // GameMode.TwoPlayer, deals a neutral army) — this test
         // only cares about the other human, not the board-object neutral.
         var inactivePlayer = state.Players.Single(p => !p.IsNeutral && p.Id != state.Turn.CurrentPlayer).Id;
         var territory = state.Territories.First(kv => kv.Value.Owner == inactivePlayer).Key;

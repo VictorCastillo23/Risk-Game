@@ -3,7 +3,7 @@ namespace Risk.Engine.State;
 /// <summary>
 /// The four Risk variants this engine supports, each with its own legal
 /// player-count range (enforced by <see cref="Setup.GameSetup.Create"/>) and,
-/// in later roadmap items, its own setup strategy, victory rule, and turn
+/// in later versions, its own setup strategy, victory rule, and turn
 /// order.
 /// </summary>
 /// <remarks>

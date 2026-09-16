@@ -26,7 +26,7 @@
     }
 }
 
-/* PR6 fix pass (warning): Blazor's per-component CSS isolation means
+/* Blazor's per-component CSS isolation means
    RejectionMessage.razor.css's .game-error rule doesn't apply here — this
    class is used directly in Game.razor's own markup (the post-login
    save-outcome banner), not inside <RejectionMessage>, so it needs its own

@@ -5,7 +5,7 @@ namespace Risk.Engine.Modes;
 /// <summary>
 /// Resolves the <see cref="IVictoryRule"/> a <see cref="GameMode"/> should be
 /// checked through. Every <see cref="GameMode"/> now resolves to a real rule
-/// (roadmap item 5.3 gave <see cref="GameMode.Capital"/> its own
+/// (<see cref="GameMode.Capital"/> has its own
 /// <see cref="CapitalVictoryRule"/>) — the nullable return type and
 /// <c>GameEngine.ExecuteAttack</c>'s pre-refactor inline "actor owns every
 /// territory" fallback remain only as the test-injection seam for

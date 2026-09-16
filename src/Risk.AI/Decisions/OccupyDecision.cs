@@ -6,9 +6,9 @@ using Risk.Engine.Views;
 namespace Risk.AI.Decisions;
 
 /// <summary>
-/// Occupy-phase troop sizing (design's Decision Algorithms / Occupy, D7).
+/// Occupy-phase troop sizing.
 /// <c>min</c>/<c>max</c> bounds always satisfy <c>min &lt;= max</c> by
-/// construction (D7's proof: a conquering battle round always has
+/// construction (a conquering battle round always has
 /// <c>attackerLosses == 0</c>), so the clamp below can never collapse to an
 /// invalid range.
 /// </summary>

@@ -34,7 +34,7 @@ public class MissionRevealTests
     [Fact]
     public void Toggle_RevealedForOnePlayer_IsNotRevealedForAnother()
     {
-        // The reset-on-player-change property (design 3.4-D3), as a value
+        // The reset-on-player-change property, as a value
         // invariant rather than a lifecycle hook: revealing for A never
         // reveals for B, so a fresh render for B is hidden without any
         // explicit reset step being required.

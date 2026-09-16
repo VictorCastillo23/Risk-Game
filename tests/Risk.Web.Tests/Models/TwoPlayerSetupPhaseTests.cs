@@ -6,7 +6,7 @@ using Risk.Web.Models;
 namespace Risk.Web.Tests.Models;
 
 /// <summary>
-/// Truth table for <see cref="TwoPlayerSetupPhase.IsPhaseB"/> (design D1/D4),
+/// Truth table for <see cref="TwoPlayerSetupPhase.IsPhaseB"/>,
 /// the Web-side mirror of <c>GameEngine.IsPhaseB</c>
 /// (<c>src/Risk.Engine/GameEngine.cs:200-204</c>). Every case here is also
 /// exercised end-to-end against the real engine by

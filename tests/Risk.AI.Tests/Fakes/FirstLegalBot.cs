@@ -22,11 +22,11 @@ namespace Risk.AI.Tests.Fakes;
 internal sealed class FirstLegalBot : IBotPlayer
 {
     // Mirrors Decisions.SetupDecision's independently-verified TwoPlayer
-    // Phase A/B boundary (design D8): 40 starting troops - 14 dealt at setup
+    // Phase A/B boundary: 40 starting troops - 14 dealt at setup
     // (42 territories / 3 parties) = 26 remaining own-placement troops.
     // Duplicated here (not reused directly from SetupDecision) so this
     // fixture's own correctness never depends on the exact production
-    // decision code a Phase 8 test might be trying to exercise.
+    // decision code a test might be trying to exercise.
     private const int TwoPlayerPartyCount = 3;
     private const int TwoPlayerSeenActorsAtBoundary = 2;
     private const int TwoPlayerOwnSetupBudget = 26;

@@ -7,7 +7,7 @@ using Risk.Web.Models;
 namespace Risk.Web.Tests.Models;
 
 /// <summary>
-/// Pure-model coverage for <see cref="HeadquartersTray"/> (design D2), built
+/// Pure-model coverage for <see cref="HeadquartersTray"/>, built
 /// from hand-constructed <see cref="PlayerView"/> records — no engine needed.
 /// The "anti-leak" scenarios here are the ones the whole change is built
 /// around (per the critical constraint): <see cref="IsRevealed"/> MUST stay
@@ -47,7 +47,7 @@ public class HeadquartersTrayTests
     /// <summary>
     /// Critical anti-leak scenario: the viewer has already picked their own
     /// HQ (<c>OwnHeadquarters</c> is set), but not every player has picked
-    /// yet (<c>RevealedHeadquarters</c> stays empty per design D1's
+    /// yet (<c>RevealedHeadquarters</c> stays empty per its
     /// monotonic derivation) — <see cref="HeadquartersTray.IsRevealed"/> MUST
     /// still be false. This is the exact intermediate step a mode-only or
     /// "picker sees their own" gate would get wrong.
@@ -69,7 +69,7 @@ public class HeadquartersTrayTests
         // Classic/SecretMission/TwoPlayer views always carry a null
         // OwnHeadquarters and an empty RevealedHeadquarters — indistinguishable
         // at this seam from "Capital, pre-reveal", which is exactly the point
-        // (design D1: Count > 0 alone encodes "Capital AND revealed").
+        // (Count > 0 alone encodes "Capital AND revealed").
         var view = BuildView(new Dictionary<TerritoryId, TerritoryState> { [Alaska] = new(PlayerA, 3) });
 
         Assert.False(HeadquartersTray.IsRevealed(view));

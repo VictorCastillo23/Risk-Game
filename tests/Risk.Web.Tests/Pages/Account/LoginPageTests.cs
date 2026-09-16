@@ -11,7 +11,7 @@ namespace Risk.Web.Tests.Pages.Account;
 
 /// <summary>
 /// Covers spec `user-accounts` requirement "Login establishes a session"
-/// plus the `returnUrl` open-redirect guard from design's task 2.2, against
+/// plus the `returnUrl` open-redirect guard, against
 /// the real Razor Page over HTTP.
 /// </summary>
 public sealed class LoginPageTests : IClassFixture<AccountPagesTestFixture>

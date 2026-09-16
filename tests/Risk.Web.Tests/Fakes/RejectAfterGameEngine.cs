@@ -14,7 +14,7 @@ namespace Risk.Web.Tests.Fakes;
 /// issued while it is <paramref name="rejectFor"/>'s turn to be rejected,
 /// while every other seat's command passes straight through to
 /// <paramref name="inner"/> unchanged. Used to prove
-/// <c>GameSessionService.AdvanceAiTurns</c>'s hard-fail contract (design D2):
+/// <c>GameSessionService.AdvanceAiTurns</c>'s hard-fail contract:
 /// a bot's illegal command must surface as <c>AiTurnFailure</c>, never be
 /// retried or masked.
 ///

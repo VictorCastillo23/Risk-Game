@@ -13,14 +13,14 @@ public readonly record struct HeadquartersRow(PlayerId Declarer, TerritoryId Ter
 
 /// <summary>
 /// Pure derivations over <see cref="PlayerView"/> backing the Capital-mode
-/// sections of <c>CardPanel</c> and the pick-phase secrecy guarantee (design
-/// D2). Kept out of any <c>.razor</c> file because this repo has no bUnit —
+/// sections of <c>CardPanel</c> and the pick-phase secrecy guarantee. Kept
+/// out of any <c>.razor</c> file because this repo has no bUnit —
 /// this is the only layer that can be unit-tested for these rules.
 /// </summary>
 public static class HeadquartersTray
 {
     /// <summary>
-    /// Design D1's monotonic proxy for "<c>HeadquartersRevealed</c> has
+    /// A monotonic proxy for "<c>HeadquartersRevealed</c> has
     /// fired": <see cref="PlayerView.RevealedHeadquarters"/> is built by
     /// <c>GameEngine.Observe</c> as empty until every player has picked, then
     /// non-empty forever after — and always empty outside Capital mode (no

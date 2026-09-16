@@ -72,7 +72,7 @@ else
 
         @if (isHost)
         {
-            // Host-only save (Phase 4): the scoped service snapshots the
+            // Host-only save: the scoped service snapshots the
             // shared network state, so this is the same SaveAsync path as
             // hot-seat, gated here by lobby role instead of a new API.
             <button type="button" disabled="@_saving" @onclick="OnSave">Guardar partida</button>
@@ -141,7 +141,7 @@ else
     }
 
     /// <summary>
-    /// Seat bookmarking (Phase 4): persist (code, seat) once interop is
+    /// Seat bookmarking: persist (code, seat) once interop is
     /// safe, and rebind it on a fresh circuit (reload/reopened tab) for
     /// this same code. Best-effort throughout — storage failures degrade
     /// to "join again manually", never to a broken circuit.

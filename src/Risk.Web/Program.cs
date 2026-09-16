@@ -21,13 +21,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Login/Register/Logout land as Razor Pages (design D1), deliberately
+// Login/Register/Logout land as Razor Pages, deliberately
 // outside the Blazor router and MapRazorComponents<App>() below, so they
 // stay plain HTTP endpoints free to issue real redirects + auth cookies
 // without touching the app's single interactive circuit.
 builder.Services.AddRazorPages();
 
-// Composition root (design D1/D2/D3): engine and dice roller are stateless,
+// Composition root: engine and dice roller are stateless,
 // so they are shared singletons; the session is scoped to one Blazor
 // Server circuit, i.e. one hot-seat game per browser tab.
 builder.Services.AddSingleton<IDiceRoller, RandomDiceRoller>();
@@ -48,11 +48,11 @@ builder.Services.AddSingleton<NetworkGameRegistry>();
 builder.Services.AddScoped<NetworkedSeatContext>();
 builder.Services.AddScoped<CircuitHandler, NetworkCircuitHandler>();
 
-// Accounts (design D1/D4): Identity gates only /saved and the future
+// Accounts: Identity gates only /saved and the future
 // save/resume actions — anonymous hot-seat play through Setup.razor/
 // Game.razor never touches any of this. Login/Register/Logout land as
-// Razor Pages in PR2, kept deliberately outside the interactive Blazor
-// router (D1) so App.razor's global InteractiveServer render mode never
+// Razor Pages, kept deliberately outside the interactive Blazor
+// router so App.razor's global InteractiveServer render mode never
 // has to change.
 // EnableRetryOnFailure (fix pass, BLOCKER finding): Azure SQL is prone to
 // brief transient faults (throttling, failover) that a bare connection

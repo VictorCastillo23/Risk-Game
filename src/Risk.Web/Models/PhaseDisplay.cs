@@ -4,7 +4,7 @@ namespace Risk.Web.Models;
 
 /// <summary>
 /// Spanish display labels for <see cref="TurnPhase"/>, used by
-/// <c>PhaseIndicator</c> (design D8 — UI copy is Spanish, identifiers stay
+/// <c>PhaseIndicator</c> (UI copy is Spanish, identifiers stay
 /// English). Mirrors <c>GameErrorPresenter</c>'s exhaustive-enum-mapping
 /// pattern.
 /// </summary>

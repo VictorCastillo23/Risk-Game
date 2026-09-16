@@ -16,7 +16,7 @@ using Risk.Web.Tests.Fakes;
 namespace Risk.Web.Tests.Services;
 
 /// <summary>
-/// D1's load-bearing parity oracle: at every Setup step of a real TwoPlayer
+/// A load-bearing parity oracle: at every Setup step of a real TwoPlayer
 /// game, <see cref="TwoPlayerSetupPhase.IsPhaseB"/>'s verdict must agree with
 /// whether the real engine actually accepts a
 /// <see cref="PlaceNeutralTroopsCommand"/> — bidirectional, so any future

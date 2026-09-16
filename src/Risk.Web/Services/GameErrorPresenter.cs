@@ -4,7 +4,7 @@ namespace Risk.Web.Services;
 
 /// <summary>
 /// Maps every <see cref="GameErrorCode"/> to a short Spanish, user-facing
-/// message (design D8) so panels never render the engine's raw
+/// message so panels never render the engine's raw
 /// <see cref="GameError.Message"/> text. Falls back to
 /// <see cref="GameError.Message"/> for any code without an explicit
 /// mapping, so a future engine error code degrades gracefully instead of

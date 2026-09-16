@@ -26,7 +26,7 @@ internal static class GameStateBuilder
             state = CompleteClaimPhase(state, engine);
         }
 
-        // Excludes the neutral third party (item 4.1) from the loop's own
+        // Excludes the neutral third party from the loop's own
         // completion condition — the neutral never becomes CurrentPlayer, so
         // watching its pool here would spin forever once it's the only pool
         // left. This still drains Setup for every non-neutral player AND
@@ -34,7 +34,7 @@ internal static class GameStateBuilder
         // past the Setup->Reinforce transition since Phase's own guard
         // doesn't gate this loop), matching this helper's existing contract.
         //
-        // TwoPlayer-aware (item 4.1 PR3): the loop must also keep running
+        // TwoPlayer-aware: the loop must also keep running
         // for as long as Setup itself is still active (`Phase == Setup`),
         // not just while a non-neutral pool is nonzero — otherwise it stops
         // dead the instant both humans hit 0 (Phase A's end), which is

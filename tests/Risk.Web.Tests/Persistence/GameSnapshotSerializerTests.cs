@@ -192,7 +192,7 @@ public class GameSnapshotSerializerTests
     }
 
     /// <summary>
-    /// Task 4.1 (mandatory follow-up from PR3's review): <see cref="GameMode.Capital"/>
+    /// Task 4.1: <see cref="GameMode.Capital"/>
     /// round-trip that actually reaches <see cref="TurnPhase.SelectHeadquarters"/>
     /// and fires <see cref="HeadquartersRevealed"/> — the ONLY place in this
     /// codebase <see cref="PlayerId"/> is used as a <c>Dictionary</c> key

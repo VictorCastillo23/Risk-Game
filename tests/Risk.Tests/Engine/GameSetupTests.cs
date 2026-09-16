@@ -106,7 +106,7 @@ public class GameSetupTests
     /// The carve-out for <see cref="Create_marks_no_player_as_neutral"/>:
     /// that test is Classic-4p-only, not parameterized across modes, so it
     /// needs no exemption. <see cref="GameMode.TwoPlayer"/> instead asserts
-    /// exactly one neutral among its three parties (roadmap 4.1).
+    /// exactly one neutral among its three parties.
     /// </summary>
     [Fact]
     public void Create_marks_exactly_one_player_as_neutral_in_TwoPlayer_mode()
@@ -224,8 +224,8 @@ public class GameSetupTests
         Assert.Equal(expectedMax, max);
     }
 
-    // NOTE (PR3, roadmap 4.1): this test predates the neutral third party
-    // (PR1) and PR2/PR3's Setup generalization. It drives a bare
+    // NOTE: this test predates the neutral third party
+    // and the later Setup generalization. It drives a bare
     // Troops:1-per-command loop through Phase A (legal — 1 is always within
     // the 1..2 budget), then a PlaceNeutralTroopsCommand-per-turn loop
     // through Phase B, and finally keeps draining with the same 1-troop

@@ -4,7 +4,7 @@ namespace Risk.Web.Persistence;
 
 /// <summary>
 /// Persists/loads at most one <see cref="GameSnapshot"/> per owning account.
-/// <see cref="GameSessionService"/> is the only caller (design D4) — every
+/// <see cref="GameSessionService"/> is the only caller — every
 /// method takes an explicit <paramref name="userId"/> resolved server-side
 /// from <c>AuthenticationStateProvider</c>, never one supplied by a
 /// component, and every implementation MUST scope its query by that id (see
@@ -45,10 +45,10 @@ public interface IGameStore
 }
 
 /// <summary>
-/// Denormalized summary of a saved game, for a resume list (PR6) to render
+/// Denormalized summary of a saved game, for a resume list to render
 /// without paying the cost of deserializing <see cref="GameSnapshot.State"/>.
 /// <see cref="IsCompatible"/> compares the saved row's schema version against
-/// <see cref="GameSnapshot.CurrentSchemaVersion"/> (design D5) — also derived
+/// <see cref="GameSnapshot.CurrentSchemaVersion"/> — also derived
 /// from a denormalized column, so checking compatibility never requires a
 /// full deserialize either.
 /// </summary>

@@ -8,7 +8,7 @@ namespace Risk.Engine.Modes;
 /// <see cref="GameMode.Classic"/>'s victory rule: reports the first
 /// non-eliminated player who owns every territory on the board. Follows the
 /// same "check all active players, not just the actor" precedent established
-/// by <see cref="SecretMissionVictoryRule"/> in item 1.2, applied to
+/// by <see cref="SecretMissionVictoryRule"/>, applied to
 /// classic conquest ("own the whole map") rather than mission cards.
 /// </summary>
 public sealed class ConquestVictoryRule : IVictoryRule

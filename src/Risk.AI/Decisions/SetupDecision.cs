@@ -8,12 +8,12 @@ using Risk.Engine.Views;
 namespace Risk.AI.Decisions;
 
 /// <summary>
-/// Setup-phase placement (design's Decision Algorithms / Setup, design D8).
+/// Setup-phase placement.
 /// Always places exactly 1 troop — legal in every mode's Setup budget and
 /// never exceeds <c>TroopsRemaining</c>, since the engine only grants a
 /// Phase-A Setup turn while it is positive. Switches to
 /// <see cref="PlaceNeutralTroopsCommand"/> once <see cref="BotMemory"/>
-/// confirms the TwoPlayer Phase A→B boundary (design D8): <c>partyCount == 3</c>,
+/// confirms the TwoPlayer Phase A→B boundary: <c>partyCount == 3</c>,
 /// no effective mission (rules out 3-player SecretMission), exactly 2 seen
 /// actors (rules out 3-player Classic/Capital, where 3 parties rotate), and
 /// the bot's own cumulative Setup placements reaching 26 — TwoPlayer's own

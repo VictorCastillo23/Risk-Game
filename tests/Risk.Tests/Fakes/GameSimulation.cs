@@ -20,7 +20,7 @@ internal static class GameSimulation
 {
     /// <summary>
     /// Places one starting troop for whoever is currently <c>CurrentPlayer</c>
-    /// during <see cref="TurnPhase.Setup"/>. TwoPlayer-aware (item 4.1): if
+    /// during <see cref="TurnPhase.Setup"/>. TwoPlayer-aware: if
     /// the acting human's own Setup pool is already drained while Setup is
     /// still active, that means Phase B is open (only <see cref="GameMode.TwoPlayer"/>
     /// ever leaves a human as <c>CurrentPlayer</c> with an empty pool during
@@ -81,7 +81,7 @@ internal static class GameSimulation
         {
             // Any owned-territory match is an acceptable pick here: callers
             // only care that the mandatory trade-in succeeds, not which
-            // territory receives the occupied-territory bonus (item 0.2).
+            // territory receives the occupied-territory bonus.
             // The engine requires an explicit choice once 2+ cards in the
             // set name territories the actor owns.
             var matches = TerritoryTradeBonus.ResolveMatches(set, state.Territories, actor);

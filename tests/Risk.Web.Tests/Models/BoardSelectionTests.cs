@@ -126,14 +126,14 @@ public class BoardSelectionTests
     }
 
     /// <summary>
-    /// Regression/approval test for a near-miss caught during PR4 TDD: an
+    /// Regression/approval test for a near-miss caught during TDD: an
     /// earlier draft of Attack's <c>isValidDestination</c> checked only
     /// <c>WorldMap.AreAdjacent</c> without an explicit <c>!isOwn</c> guard,
     /// which would have let an adjacent *own* territory silently complete as
-    /// a bogus attack pair. The PR4 fixture (Alaska/Ontario) happened to be
+    /// a bogus attack pair. The original fixture (Alaska/Ontario) happened to be
     /// non-adjacent, so it could not have caught that bug — this uses
     /// Alaska/Alberta, which ARE adjacent, to close that gap. Currently
-    /// passing because the fix already shipped in PR4; kept as a standing
+    /// passing because the fix already shipped; kept as a standing
     /// guard against the bug being reintroduced.
     /// </summary>
     [Fact]

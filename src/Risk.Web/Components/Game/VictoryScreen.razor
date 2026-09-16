@@ -35,7 +35,7 @@
     /// <summary>
     /// "Nueva partida" (scenario "Restart clears session"): clears the
     /// circuit-scoped session via <see cref="GameSessionService.Reset"/>
-    /// (already TDD-covered since PR1's <c>Reset_ClearsState</c>) and
+    /// (already TDD-covered by <c>Reset_ClearsState</c>) and
     /// navigates back to <c>/</c>, which renders the setup screen empty
     /// because <c>Reset</c> clears both <c>State</c> and <c>Players</c>.
     /// </summary>

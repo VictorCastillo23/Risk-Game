@@ -8,7 +8,7 @@ namespace Risk.Web.Tests.Fakes;
 /// opted in via its mutable <c>ThrowOn*</c> flags, simulating an infra
 /// failure (DB down/timeout/pool exhaustion) for
 /// <c>GameSessionService</c>'s failure-safe save/resume/delete contract
-/// (PR5 fix pass, BLOCKER finding). Flags are mutable rather than
+/// Flags are mutable rather than
 /// constructor-only so a single test can prove "first save succeeds, second
 /// save fails" without needing a second store instance or losing the first
 /// save's effect on the wrapped <paramref name="inner"/> store.

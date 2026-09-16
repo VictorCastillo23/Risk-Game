@@ -6,11 +6,11 @@ namespace Risk.Web.Services;
 
 /// <summary>
 /// Maps every concrete <see cref="GameEvent"/> subtype to a short,
-/// human-readable Spanish sentence (design D8) for <c>LogPanel</c>. Mirrors
+/// human-readable Spanish sentence for <c>LogPanel</c>. Mirrors
 /// <see cref="GameErrorPresenter"/>'s exhaustive-mapping pattern.
 /// </summary>
 /// <remarks>
-/// Design D5's binding-redaction convention exists because <c>Observe()</c>
+/// The binding-redaction convention exists because <c>Observe()</c>
 /// is the one seam that hides another player's hand. <see cref="CardDrawn"/>
 /// is the one <see cref="GameEvent"/> that would otherwise defeat that seam
 /// by name — it carries the exact <c>Card</c> a player drew, which is
@@ -46,7 +46,7 @@ public static class GameEventPresenter
             CardDrawn e => $"{Label(e.Actor)} robó una carta.",
             PhaseChanged e => $"Cambio de fase: {PhaseDisplay.Label(e.To)} ({Label(e.CurrentPlayer)}).",
             GameWon e => $"¡{Label(e.Winner)} ganó la partida!",
-            // Design D6: HeadquartersSelected carries no territory by design
+            // HeadquartersSelected carries no territory by design
             // (its own doc comment — GameState.Log is public/unredacted), so
             // this case physically cannot name one.
             HeadquartersSelected e => $"{Label(e.Player)} eligió su Cuartel General.",

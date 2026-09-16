@@ -3,10 +3,10 @@ using System.Reflection;
 namespace Risk.AI.Tests.Bot;
 
 /// <summary>
-/// Design D1's structural, test-enforced boundary: <c>Risk.AI</c> is allowed
+/// A structural, test-enforced boundary: <c>Risk.AI</c> is allowed
 /// to name <see cref="Risk.Engine.State.GameState"/>/<see cref="Risk.Engine.State.PlayerState"/>
 /// in exactly three types — <c>BotTurnRunner</c>, <c>BotRunResult</c>, and
-/// <c>BotTurnStep</c> (all Phase 8). <c>BotTurnStep</c> was added post-Phase-8
+/// <c>BotTurnStep</c>. <c>BotTurnStep</c> was added later
 /// (a resilience-review follow-up) as a shared observe/decide/execute/fold
 /// primitive extracted so <c>BotTurnRunner</c>'s production loop and
 /// <c>Risk.AI.Tests</c>' <c>GameHarness</c> fixture never silently drift

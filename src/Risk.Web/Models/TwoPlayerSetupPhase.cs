@@ -3,8 +3,8 @@ using Risk.Engine.State;
 namespace Risk.Web.Models;
 
 /// <summary>
-/// Web-side detection of <see cref="GameMode.TwoPlayer"/>'s Setup Phase B
-/// (design D1/D4) — deliberately kept to detection only, never to legality
+/// Web-side detection of <see cref="GameMode.TwoPlayer"/>'s Setup Phase B —
+/// deliberately kept to detection only, never to legality
 /// (see <see cref="IsPhaseB"/>).
 /// </summary>
 public static class TwoPlayerSetupPhase
@@ -18,8 +18,8 @@ public static class TwoPlayerSetupPhase
     /// (<see cref="Risk.Engine.Commands.PlaceNeutralTroopsCommand"/> vs
     /// <see cref="Risk.Engine.Commands.PlaceTroopsCommand"/>); the engine
     /// re-validates independently regardless of the verdict here, so a wrong
-    /// answer degrades to a confusing rejection, never an illegal state
-    /// (design D1). Guarded against drift by
+    /// answer degrades to a confusing rejection, never an illegal state.
+    /// Guarded against drift by
     /// <c>Risk.Web.Tests.Services.TwoPlayerSetupPhaseParityTests</c>, a
     /// bidirectional oracle against the real engine.
     /// </summary>

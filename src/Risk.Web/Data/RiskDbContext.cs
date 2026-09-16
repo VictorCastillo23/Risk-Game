@@ -5,7 +5,7 @@ namespace Risk.Web.Data;
 
 /// <summary>
 /// The app's only <see cref="DbContext"/>. Wires up Identity's stock tables
-/// (<c>AspNetUsers</c> etc.) plus the <c>SavedGames</c> table (PR5, design's
+/// (<c>AspNetUsers</c> etc.) plus the <c>SavedGames</c> table (design's
 /// save/resume schema).
 /// </summary>
 public sealed class RiskDbContext(DbContextOptions<RiskDbContext> options)

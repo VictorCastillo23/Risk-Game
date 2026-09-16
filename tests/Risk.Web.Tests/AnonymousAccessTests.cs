@@ -8,7 +8,7 @@ namespace Risk.Web.Tests;
 
 /// <summary>
 /// Proves — at the HTTP-pipeline level, not by manual claim — that the
-/// Identity/EF Core wiring added for PR1 (Program.cs's
+/// Identity/EF Core wiring added (Program.cs's
 /// AddDbContext/AddIdentityCore/AddAuthentication/AddAuthorization plus
 /// Routes.razor's AuthorizeRouteView) never gates anonymous hot-seat play.
 /// Uses a real in-memory <see cref="WebApplicationFactory{TEntryPoint}"/>
@@ -16,7 +16,7 @@ namespace Risk.Web.Tests;
 /// included) actually runs, unlike a unit test against isolated services.
 ///
 /// No live database is required: <c>RiskDbContext</c> is only resolved
-/// lazily per-scope (confirmed in PR1's manual verification), so a
+/// lazily per-scope (confirmed in manual verification), so a
 /// syntactically valid but unreachable connection string is enough to build
 /// the host without ever opening a socket.
 /// </summary>
@@ -47,8 +47,8 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
     }
 
     /// <summary>
-    /// PR2 note: this originally asserted the body contained no
-    /// "Account/Login" text at all. PR2's task 2.5 deliberately adds a
+    /// This originally asserted the body contained no
+    /// "Account/Login" text at all. A later change deliberately adds a
     /// global, always-visible login/register nav to
     /// <c>MainLayout.razor</c>'s anonymous branch, so that substring now
     /// legitimately appears on every page, including this one — that is
@@ -94,7 +94,7 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
     }
 
     /// <summary>
-    /// PR6 regression guard for the original crash mode: an earlier attempt
+    /// Regression guard for the original crash mode: an earlier attempt
     /// placed the pending-save check in <c>OnInitializedAsync</c> behind a
     /// page-level <c>@rendermode @(new InteractiveServerRenderMode(prerender: false))</c>
     /// override, which still threw an unhandled <c>InvalidOperationException</c>
@@ -108,14 +108,14 @@ public sealed class AnonymousAccessTests : IClassFixture<AnonymousAccessTests.Ri
     /// that static pass) is what's shipped today — see <c>Game.razor</c>'s
     /// own comments on <c>OnInitialized</c>/<c>OnAfterRenderAsync</c>.
     ///
-    /// Honest scope note (PR6 fix pass, reliability review): a plain
+    /// Honest scope note: a plain
     /// <see cref="WebApplicationFactory{TEntryPoint}"/> HTTP GET never
     /// establishes a live Blazor circuit, so this test does NOT exercise
     /// <c>OnAfterRenderAsync</c>'s rehydration logic at all — it only proves
     /// the page doesn't 500 at the HTTP/prerender level. That is still a
     /// real and valuable regression guard for the crash mode described
     /// above, just not a complete proof that the rehydration code path
-    /// (including its own try/catch guards, PR6 fix pass) behaves correctly
+    /// (including its own try/catch guards) behaves correctly
     /// under a real circuit — that needs either bUnit or manual browser
     /// verification, neither of which this test suite has today.
     /// </summary>

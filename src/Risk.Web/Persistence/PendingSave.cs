@@ -5,7 +5,7 @@ namespace Risk.Web.Persistence;
 /// <summary>
 /// Plain-string wrapper around a <see cref="GameSnapshot"/>'s two serialized
 /// halves, for stashing into <c>ProtectedSessionStorage</c> across the
-/// anonymous-save-then-login redirect (design D2, <c>SavePanel</c>'s
+/// anonymous-save-then-login redirect (<c>SavePanel</c>'s
 /// anonymous branch / <c>Game.razor</c>'s pending-save rehydration).
 ///
 /// <b>Why this exists instead of stashing a raw <see cref="GameSnapshot"/>
@@ -22,9 +22,9 @@ namespace Risk.Web.Persistence;
 /// <c>NotSupportedException</c> for an unsupported dictionary key type), and
 /// <c>GameEvent</c>/<c>Card</c>/<c>MissionCard</c>/<c>GameStatus</c> are
 /// polymorphic hierarchies the default options know nothing about. This was
-/// a genuine gap in design D2 as originally written (which assumed
+/// a genuine gap in the original design (which assumed
 /// <c>ProtectedSessionStorage.SetAsync("pending-save", Session.Snapshot())</c>
-/// would just work) — caught during PR6 apply, before it could break the
+/// would just work) — caught before it could break the
 /// anonymous-save flow in production.
 ///
 /// Stashing the two ALREADY-serialized JSON strings (produced by

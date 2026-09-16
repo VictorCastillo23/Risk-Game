@@ -4,7 +4,7 @@ namespace Risk.AI.Scoring;
 
 /// <summary>
 /// A precomputed expected-value table over the engine's own
-/// <see cref="BattleResolver"/> dice-comparison rule (design decision D6):
+/// <see cref="BattleResolver"/> dice-comparison rule:
 /// every one of the 6 possible (attackerDice 1..3, defenderDice 1..2)
 /// combinations is enumerated exhaustively — at most 6^5 = 7776 roll
 /// tuples — once, in this static initializer, so <see cref="ExpectedNetTroopChange"/>

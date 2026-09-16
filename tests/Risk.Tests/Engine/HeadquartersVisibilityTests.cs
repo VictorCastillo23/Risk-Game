@@ -13,7 +13,7 @@ using Risk.Tests.Fakes;
 namespace Risk.Tests.Engine;
 
 /// <summary>
-/// Unit-level coverage of design D1: <see cref="GameEngine.Observe"/>'s
+/// Unit-level coverage of <see cref="GameEngine.Observe"/>'s
 /// derived headquarters-reveal predicate
 /// (<c>Players.All(p =&gt; p.HeadquartersId is not null)</c>). Hand-builds
 /// <see cref="TurnPhase.SelectHeadquarters"/>-shaped states directly (no
@@ -89,7 +89,7 @@ public class HeadquartersVisibilityTests
     [Fact]
     public void HeadquartersSelected_event_carries_no_territory_field()
     {
-        // Guards the PR2 secrecy fix (design D1): GameState.Log is public and
+        // Guards the secrecy fix: GameState.Log is public and
         // unredacted, so HeadquartersSelected must never carry a TerritoryId
         // or any other territory-shaped payload. This test would FAIL if
         // someone regressed the event back to (PlayerId Player, TerritoryId

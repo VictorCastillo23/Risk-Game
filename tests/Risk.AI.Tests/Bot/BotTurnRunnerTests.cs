@@ -214,7 +214,7 @@ public class BotTurnRunnerTests
         Assert.Equal(0, completed.CommandsIssued);
     }
 
-    // --- Binding contract: WithSeenActor wired for every actor, every iteration (design D8) ---
+    // --- Binding contract: WithSeenActor wired for every actor, every iteration ---
 
     [Fact]
     public void RunGame_wires_WithSeenActor_for_every_actor_so_the_TwoPlayer_neutral_is_deduced_by_elimination()

@@ -11,10 +11,10 @@ using Risk.Tests.Fakes;
 namespace Risk.Tests.Engine;
 
 /// <summary>
-/// PR1 of roadmap item 4.1: <see cref="GameMode.TwoPlayer"/>'s 3-way
+/// <see cref="GameMode.TwoPlayer"/>'s 3-way
 /// territory deal (P1 / P2 / Neutral) via <c>TwoPlayerSetupStrategy</c>,
 /// wired through <see cref="GameSetup.Create"/>. Setup completion (Phase A
-/// budget generalization, Phase B neutral placement) is PR2/PR3's scope —
+/// budget generalization, Phase B neutral placement) is covered separately —
 /// these tests only cover the initial dealt <see cref="GameState"/>.
 /// </summary>
 public class TwoPlayerSetupTests
@@ -69,7 +69,7 @@ public class TwoPlayerSetupTests
         Assert.Equal(3 * 40, totalRemaining + territoriesPlaced);
     }
 
-    // PR2 (design D1): Phase A's per-turn budget is derived from
+    // Phase A's per-turn budget is derived from
     // TroopsRemaining's parity, not a new counter — see
     // GameEngine.SetupTroopsPerTurn/SetupBudgetRemaining.
 
@@ -157,7 +157,7 @@ public class TwoPlayerSetupTests
         // A 3-card hand is required for CardSet.IsValid, but Setup-phase
         // players start with an empty hand, so any trade attempt during
         // Setup is rejected before it could ever touch TroopsRemaining —
-        // pinning design D1's "pool cannot grow during Setup" invariant.
+        // pinning the "pool cannot grow during Setup" invariant.
         var result = engine.Execute(state, new TradeCardsCommand(actor, actorBefore.Hand));
 
         var rejection = Assert.IsType<CommandResult<GameState, GameEvent>.Rejected>(result);
@@ -176,7 +176,7 @@ public class TwoPlayerSetupTests
         Assert.Equal(GameErrorCode.WrongPhase, rejection.Error.Code);
     }
 
-    // PR3 (design D3/D4): Phase B opens only once both humans' Setup pools
+    // Phase B opens only once both humans' Setup pools
     // hit 0 (derived, no flag — GameEngine.IsPhaseB). Drains Phase A with the
     // 2-on-one budget so every Phase B test starts from a real Phase B state.
     private static (GameState State, GameEngine Engine) StartPhaseB()
@@ -287,7 +287,7 @@ public class TwoPlayerSetupTests
     }
 
     /// <summary>
-    /// Design D3: <c>GameCommand</c> is a plain <c>abstract record</c>, not a
+    /// <c>GameCommand</c> is a plain <c>abstract record</c>, not a
     /// closed hierarchy — both of <c>GameEngine</c>'s switches fall back to
     /// <c>_ =&gt; throw</c>. Nothing forces <c>PlaceNeutralTroopsCommand</c> to
     /// actually be wired into <c>Execute</c>'s dispatch switch or

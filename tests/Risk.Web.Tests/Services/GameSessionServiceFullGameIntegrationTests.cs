@@ -132,7 +132,7 @@ public class GameSessionServiceFullGameIntegrationTests
     }
 
     /// <summary>
-    /// TwoPlayer-aware (item 4.1) — mirrors
+    /// TwoPlayer-aware — mirrors
     /// <c>Risk.Tests.Fakes.GameSimulation.PlaceOneStartingTroop</c>: once the
     /// acting human's own Setup pool is drained while Setup is still active,
     /// Phase B is open and they instead choose where one of the neutral's

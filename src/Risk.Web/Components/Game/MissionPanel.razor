@@ -5,7 +5,7 @@
 
 <div class="mission-panel panel-frame">
     @{
-        // Design's read convention (D5/D7): the ONE place a player's secret
+        // The ONE place a player's secret
         // mission is read comes from Observe(), never from raw
         // GameState.Players[x].Mission, so this panel structurally cannot
         // leak another player's mission.
@@ -29,7 +29,7 @@
 
 @code {
     /// <summary>
-    /// The panel's reset key (design 3.4-D3): reveal state is stored as
+    /// The panel's reset key: reveal state is stored as
     /// "which player revealed it", so no explicit reset step is needed when
     /// the acting player changes — <c>_reveal.IsRevealedFor(CurrentPlayer)</c>
     /// is simply false for the new player. Matches <c>CardPanel.razor</c>'s

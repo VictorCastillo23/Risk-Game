@@ -99,7 +99,7 @@ public class GameHarnessTests
     [Fact]
     public void FastForwardToFirstReinforce_reaches_the_reinforce_phase_for_TwoPlayer_after_draining_the_neutral_pool()
     {
-        // TwoPlayer's Setup Phase B (design D8) requires both real players to
+        // TwoPlayer's Setup Phase B requires both real players to
         // fully drain their own 26-troop pool before either can place on the
         // neutral's territories; this exercises that whole sequence via a
         // real engine, not a fixture shortcut.

@@ -10,7 +10,7 @@ namespace Risk.Web.Pages.Account;
 
 /// <summary>
 /// Spec `user-accounts` — "Login establishes a session". <c>returnUrl</c>
-/// exists today so PR6's anonymous-save flow can redirect here with
+/// exists today so the anonymous-save flow can redirect here with
 /// <c>?returnUrl=/game</c> after a stashed save; it is validated with
 /// <see cref="UrlHelperExtensions.IsLocalUrl"/> before every redirect to
 /// avoid an open-redirect vulnerability, defaulting to <c>/</c> when absent

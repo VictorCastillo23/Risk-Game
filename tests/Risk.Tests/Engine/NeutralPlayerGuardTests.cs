@@ -12,10 +12,10 @@ using Risk.Tests.Fakes;
 namespace Risk.Tests.Engine;
 
 /// <summary>
-/// Roadmap item 4.2: the <see cref="GameMode.TwoPlayer"/> neutral army
+/// The <see cref="GameMode.TwoPlayer"/> neutral army
 /// (<see cref="PlayerState.IsNeutral"/>) never holds a turn and never acts.
 /// Mirrors <see cref="EliminationTests"/>'s hand-built-<see cref="GameState"/>
-/// style (design D4).
+/// style.
 /// </summary>
 public class NeutralPlayerGuardTests
 {

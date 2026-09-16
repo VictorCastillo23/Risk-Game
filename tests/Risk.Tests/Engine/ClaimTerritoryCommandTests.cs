@@ -15,8 +15,7 @@ namespace Risk.Tests.Engine;
 /// <summary>
 /// <see cref="ClaimTerritoryCommand"/> unit tests hand-build minimal
 /// <see cref="TurnPhase.Claim"/> states and call <see cref="GameEngine.Execute"/>
-/// directly. Item 2.1/PR3 reverses design decision D4 ("claiming never
-/// advances the turn or phase", pinned in item 1.3): claiming now rotates to
+/// directly. Claiming now rotates to
 /// the next player and, on the final claim, transitions
 /// <see cref="TurnPhase.Claim"/> → <see cref="TurnPhase.Setup"/> — see
 /// <see cref="Execute_claims_an_unowned_territory_and_rotates_to_the_next_player_while_territories_remain"/>
@@ -63,7 +62,7 @@ public class ClaimTerritoryCommandTests
 
         var ok = Assert.IsType<CommandResult<GameState, GameEvent>.Ok>(result);
 
-        // D4 reversal (item 2.1/PR3): claiming now rotates to the next
+        // Claiming now rotates to the next
         // player while territories remain unclaimed (Kamchatka is still
         // unowned here); the phase stays Claim. Only the final claim
         // transitions to Setup — see the completion test below.
@@ -261,7 +260,7 @@ public class ClaimTerritoryCommandTests
 /// Integration-style tests that drive a real <see cref="GameSetup.Create"/>
 /// Classic-mode game through the full Claim phase (round-robin, via
 /// <see cref="GameStateBuilder.CompleteClaimPhase"/>) and beyond — proving
-/// the rotation/transition logic wired in item 2.1/PR3 against the real
+/// the rotation/transition logic against the real
 /// 42-territory map instead of the hand-built minimal fixtures above.
 /// </summary>
 public class ClaimPhaseRoundRobinTests
@@ -323,7 +322,7 @@ public class ClaimPhaseRoundRobinTests
         Assert.Equal(TurnPhase.Setup, claimedState.Turn.Phase);
         Assert.All(claimedState.Territories.Values, t => Assert.NotNull(t.Owner));
 
-        // Troop conservation (design D6/Q4): every troop placed during Claim
+        // Troop conservation: every troop placed during Claim
         // plus every troop still in a player's pool must equal the official
         // starting pool — no double-counting, no leak.
         var troopsOnBoard = claimedState.Territories.Values.Sum(t => t.Troops);
@@ -338,7 +337,7 @@ public class ClaimPhaseRoundRobinTests
 }
 
 /// <summary>
-/// The single most important test in item 2.1/PR3: proves there is no dead
+/// The single most important test: proves there is no dead
 /// end anywhere in the Classic-mode lifecycle by driving a real 3-player
 /// game — via the public <see cref="IGameEngine.Execute"/> command pipeline
 /// only — from <see cref="GameSetup.Create"/>'s Claim-phase start, through
@@ -346,7 +345,7 @@ public class ClaimPhaseRoundRobinTests
 /// loop, into the normal Reinforce/Attack/Fortify turn cycle, to a
 /// <see cref="GameStatus.Won"/> state resolved by
 /// <see cref="Risk.Engine.Modes.ConquestVictoryRule"/>. Mirrors
-/// <c>FullGameIntegrationTests</c>' 2-player script (item 1.7/PR8), adapted
+/// <c>FullGameIntegrationTests</c>' 2-player script, adapted
 /// for a 3-player Classic game and duplicated here — rather than reusing
 /// that class's private helpers — to keep this PR's diff scoped to
 /// <c>ClaimTerritoryCommandTests.cs</c>/<c>GameStateBuilder.cs</c>/<c>GameEngine.cs</c>.

@@ -26,7 +26,7 @@ internal sealed class FakeGameEngine : IGameEngine
     /// <c>GameSessionService.WinnerMission</c>) can assert both that
     /// <see cref="Observe"/> was called with the correct player AND, by
     /// staying <see langword="null"/>, that it was never called at all
-    /// (design 3.4-D4's "structurally incapable of leaking mid-game").
+    /// ("structurally incapable of leaking mid-game").
     /// </summary>
     public PlayerId? LastObserveViewer { get; private set; }
 

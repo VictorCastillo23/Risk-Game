@@ -18,7 +18,7 @@ using Risk.Web.Tests.Fakes;
 namespace Risk.Web.Tests.Services;
 
 /// <summary>
-/// End-to-end coverage of the Capital-mode web surfaces (roadmap 5.4)
+/// End-to-end coverage of the Capital-mode web surfaces
 /// through <see cref="GameSessionService"/>, mirroring
 /// <see cref="GameSessionServiceFullGameIntegrationTests"/>'s dispatch-only
 /// style. Covers the critical constraint of this change: <see cref="HeadquartersTray.IsRevealed"/>

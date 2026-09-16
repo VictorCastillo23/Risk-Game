@@ -7,7 +7,7 @@ namespace Risk.Engine.Rules;
 /// Resolves a DEALT MissionCard to the one that actually governs the holder
 /// (reglasrisk.md:83-85). A dealt EliminateArmy naming the holder's own seat
 /// resolves to its printed fallback, OccupyTerritories(24, 1);
-/// PlayerState.Mission is never rewritten (roadmap 3.2 deferral).
+/// PlayerState.Mission is never rewritten.
 /// Deliberately `internal`: the two legitimate consumers are
 /// SecretMissionVictoryRule (what completion means) and GameEngine.Observe
 /// (what the holder is told), both inside Risk.Engine. Risk.Web/Risk.AI must

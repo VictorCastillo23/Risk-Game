@@ -67,8 +67,8 @@ public class ClosedHierarchyCoverageTests
         Assert.Equal("$kind", polymorphism.TypeDiscriminatorPropertyName);
 
         // Must stay false: an unregistered/future variant must throw loudly
-        // on serialize/deserialize (confirmed empirically in PR3's fresh-
-        // context review), never silently drop data.
+        // on serialize/deserialize (confirmed empirically), never silently
+        // drop data.
         Assert.False(polymorphism.IgnoreUnrecognizedTypeDiscriminators);
     }
 

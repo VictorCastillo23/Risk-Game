@@ -163,7 +163,7 @@ public sealed class EfGameStoreTests : IDisposable
     }
 
     /// <summary>
-    /// CRITICAL #2 (PR5 fix pass): a saved row written by an incompatible
+    /// A saved row written by an incompatible
     /// schema version must never reach the deserializer — seeds a row with
     /// a mismatched <see cref="GameSnapshot.CurrentSchemaVersion"/> AND
     /// deliberately invalid JSON payloads, so a passing assertion here is

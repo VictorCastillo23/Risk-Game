@@ -38,7 +38,7 @@ internal static class ReinforceDecision
     /// <summary>
     /// Adds the base allotment (<see cref="Reinforcement.Calculate"/>) to
     /// <see cref="BotMemory.ReinforcePool"/> exactly once per visit (binding seeding
-    /// contract on <see cref="BotMemory.ReinforcePoolSeeded"/>, Phase 4). Never coalesces
+    /// contract on <see cref="BotMemory.ReinforcePoolSeeded"/>). Never coalesces
     /// with <c>??</c>: a non-null, not-yet-seeded pool may be nothing but an early-banked
     /// trade bonus from a mandatory turn-start trade-down, and that value must be ADDED to,
     /// not replaced.

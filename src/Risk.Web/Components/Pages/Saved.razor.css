@@ -1,4 +1,4 @@
-/* PR6 fix pass (warning): Blazor's per-component CSS isolation means these
+/* Blazor's per-component CSS isolation means these
    classes — used directly in Saved.razor's own markup — need their own
    scoped rules. .saved-error/.saved-incompatible mirror SavePanel.razor.css's
    .save-panel-error styling for visual consistency across the app's

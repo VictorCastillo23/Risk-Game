@@ -8,9 +8,9 @@ namespace Risk.Web.Persistence;
 /// <see cref="GameState"/> plus the UI-only <see cref="PlayerConfig"/> values
 /// (display name/color/AI flag) that live in <c>Risk.Web</c>, not the engine.
 /// <see cref="CurrentSchemaVersion"/> travels alongside every persisted
-/// snapshot (see <c>Data.SavedGame.SchemaVersion</c>, PR5) so a saved row
+/// snapshot (see <c>Data.SavedGame.SchemaVersion</c>) so a saved row
 /// written by an older/newer version of this shape can be recognized as
-/// incompatible on load instead of crashing (design D5).
+/// incompatible on load instead of crashing.
 /// </summary>
 public sealed record GameSnapshot(GameState State, IReadOnlyList<PlayerConfig> Players)
 {

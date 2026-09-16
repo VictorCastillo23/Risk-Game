@@ -8,7 +8,7 @@ namespace Risk.Web.Tests.Pages.Account;
 
 /// <summary>
 /// The Register/Login/Logout Razor Pages sit behind
-/// <c>app.UseAntiforgery()</c> (already wired in PR1's <c>Program.cs</c>),
+/// <c>app.UseAntiforgery()</c> (already wired in <c>Program.cs</c>),
 /// so a real POST test needs a real, matching antiforgery token. This
 /// mirrors what a browser does automatically: GET the page and read the
 /// hidden <c>__RequestVerificationToken</c> field the form tag helper

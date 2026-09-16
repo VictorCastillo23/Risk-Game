@@ -28,7 +28,7 @@ namespace Risk.Tests.Engine;
 /// troop) to attack from, letting the army effectively walk the whole
 /// connected map turn by turn until nothing is left to conquer.
 ///
-/// Card handling (PR8): the attacker draws a card at the end of any turn
+/// Card handling: the attacker draws a card at the end of any turn
 /// in which they conquered a territory, so before placing reinforcement
 /// each turn they opportunistically trade in any valid 3-card set found in
 /// their hand, keeping it below the mandatory-trade-in threshold.
@@ -65,8 +65,8 @@ public class FullGameIntegrationTests
                 if (actor == attacker)
                 {
                     // The attacker is the only player who ever conquers, so
-                    // only their hand grows via the end-of-turn card draw
-                    // (PR8). Trade down any valid set before placing, both
+                    // only their hand grows via the end-of-turn card draw.
+                    // Trade down any valid set before placing, both
                     // to stay realistic and to avoid ever tripping the
                     // mandatory-trade-in gate (>=5 cards) at the top of the
                     // Reinforce phase.

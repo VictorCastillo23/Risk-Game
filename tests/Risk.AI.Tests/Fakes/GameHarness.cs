@@ -115,7 +115,7 @@ internal sealed class GameHarness
     /// <summary>
     /// Drives every phase before <see cref="TurnPhase.Reinforce"/> to
     /// completion — Claim (if applicable), Setup (including TwoPlayer's
-    /// Phase A/B, design D8), and SelectHeadquarters (Capital only) — for
+    /// Phase A/B), and SelectHeadquarters (Capital only) — for
     /// every <see cref="GameMode"/>.
     /// </summary>
     public GameHarness FastForwardToFirstReinforce()
@@ -151,7 +151,7 @@ internal sealed class GameHarness
     /// Overrides the dealt <see cref="PlayerState.Mission"/> for the given seats — used
     /// by SecretMission tests that need guaranteed per-archetype coverage rather than
     /// whatever <see cref="Risk.Engine.Modes.SecretMissionSetupStrategy"/>'s <c>Random.Shared</c>
-    /// deal happens to produce (design D9's random-board invariant testing still applies to
+    /// deal happens to produce (random-board invariant testing still applies to
     /// territory dealing and dice — only the mission assignment is forced here). Only
     /// <see cref="PlayerState.Mission"/> changes; every other field (including the
     /// randomly-dealt territories/troops) is untouched. Safe to call any time before the
@@ -200,7 +200,7 @@ internal sealed class GameHarness
     /// turn it currently is. Delegates the actual observe/decide/execute/fold
     /// sequence to <see cref="BotTurnStep.Advance"/> — the same step
     /// <see cref="BotTurnRunner"/> uses, including its <see cref="BotMemory.WithSeenActor"/>
-    /// threading (design D8) — so this fixture's driving loop and the
+    /// threading — so this fixture's driving loop and the
     /// production runner can never silently drift apart.
     /// </summary>
     private void DriveOneCommand()

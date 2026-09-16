@@ -16,7 +16,7 @@ namespace Risk.Web.Tests.Fakes;
 /// <see cref="GameSnapshot"/> object by reference — "in-memory" describes
 /// where the JSON lives (a dictionary, not a database), not that
 /// serialization is skipped. This is what lets task 5.6's integration test
-/// prove the session layer and PR3/4's serializer genuinely compose,
+/// prove the session layer and the serializer genuinely compose,
 /// without needing a real database.
 /// </summary>
 internal sealed class FakeGameStore : IGameStore
@@ -45,7 +45,7 @@ internal sealed class FakeGameStore : IGameStore
         {
             // Matches EfGameStore.GetSummaryAsync: the denormalized
             // SchemaVersion column alone drives IsCompatible, never a full
-            // deserialize (PR5 fix pass).
+            // deserialize.
             return Task.FromResult<SavedGameSummary?>(new SavedGameSummary(
                 default,
                 0,
@@ -79,8 +79,7 @@ internal sealed class FakeGameStore : IGameStore
         {
             // Matches EfGameStore.LoadAsync: an incompatible/stale schema
             // version is reported as "no save found" rather than attempting
-            // a doomed deserialize of a shape that may not parse at all
-            // (PR5 fix pass, CRITICAL #2).
+            // a doomed deserialize of a shape that may not parse at all.
             return Task.FromResult<GameSnapshot?>(null);
         }
 
@@ -109,7 +108,7 @@ internal sealed class FakeGameStore : IGameStore
     /// <see cref="GameSnapshot.CurrentSchemaVersion"/> and deliberately
     /// invalid JSON payloads, so a test can prove <see cref="LoadAsync"/>/
     /// <see cref="GetSummaryAsync"/> never attempt to deserialize an
-    /// incompatible row (PR5 fix pass, CRITICAL #2) — if either method tried
+    /// incompatible row — if either method tried
     /// to deserialize "not-valid-json" it would throw, so a passing test
     /// here is proof the schema-version guard runs first.
     /// </summary>

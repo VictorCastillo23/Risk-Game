@@ -8,7 +8,7 @@ namespace Risk.AI;
 /// <summary>
 /// The outcome of driving one or more turns through <see cref="BotTurnRunner"/>
 /// — mirrors <see cref="Risk.Engine.Results.CommandResult{TState,TEvent}"/>'s
-/// exact closed shape (design D5). <see cref="Rejected"/> is a TERMINAL exit
+/// exact closed shape. <see cref="Rejected"/> is a TERMINAL exit
 /// carrying the offending command and the engine's own
 /// <see cref="GameError"/>: the spec's hard-fail requirement means a
 /// <c>Rejected</c> is a defect, never something <see cref="BotTurnRunner"/>
@@ -37,7 +37,7 @@ public abstract record BotRunResult
 
     /// <summary>
     /// The engine rejected a command a bot issued — the hard-fail terminal
-    /// case (spec's "Zero-Rejected invariant", design D5). <see cref="State"/>
+    /// case (spec's "Zero-Rejected invariant"). <see cref="State"/>
     /// is the state immediately BEFORE the rejected command (the engine
     /// leaves state unchanged on <c>Rejected</c>), never a substitute or
     /// rescued state.

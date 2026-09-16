@@ -18,7 +18,7 @@ namespace Risk.Engine.Views;
 /// </param>
 /// <param name="RevealedHeadquarters">
 /// Every player's headquarters territory, including the viewer's own, once
-/// every player has selected one (design D1: derived from
+/// every player has selected one (derived from
 /// <c>Players.All(p =&gt; p.HeadquartersId is not null)</c>, never un-reveals).
 /// Empty before that point and always empty outside Capital mode.
 /// </param>

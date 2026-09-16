@@ -32,7 +32,7 @@ public sealed class SavedGame
 
     /// <summary>
     /// Matches <see cref="Persistence.GameSnapshot.CurrentSchemaVersion"/> at
-    /// the time this row was written (design D5) — lets a load recognize an
+    /// the time this row was written — lets a load recognize an
     /// incompatible older/newer shape instead of crashing on deserialize.
     /// </summary>
     public required int SchemaVersion { get; set; }

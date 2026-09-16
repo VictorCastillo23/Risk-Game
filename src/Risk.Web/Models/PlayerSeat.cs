@@ -5,7 +5,7 @@ namespace Risk.Web.Models;
 /// connection binding that tells the server which circuit owns it.
 /// <see cref="ConnectionId"/> is the Blazor circuit id (null = AI seat or
 /// not yet connected). No behavior — identity data only, exercised through
-/// the session/hub tests in Phase 1.
+/// the session/hub tests.
 /// </summary>
 public sealed record PlayerSeat(
     PlayerConfig Config,

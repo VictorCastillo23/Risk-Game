@@ -20,15 +20,15 @@ public static class GameSetup
 {
     /// <summary>
     /// <see cref="GameMode.SecretMission"/>'s <see cref="ISetupStrategy"/>.
-    /// Static, not constructor-injected, per design D3 — a full mode
+    /// Static, not constructor-injected — a full mode
     /// resolver is deferred until a second mode is wired.
     /// </summary>
     private static readonly ISetupStrategy SecretMissionSetup = new SecretMissionSetupStrategy();
 
     /// <summary>
     /// <see cref="GameMode.TwoPlayer"/>'s <see cref="ISetupStrategy"/>. Same
-    /// static-instance convention as <see cref="SecretMissionSetup"/> (design
-    /// D3 — no mode resolver until a third strategy needs one).
+    /// static-instance convention as <see cref="SecretMissionSetup"/>
+    /// (no mode resolver until a third strategy needs one).
     /// </summary>
     private static readonly ISetupStrategy TwoPlayerSetup = new TwoPlayerSetupStrategy();
 

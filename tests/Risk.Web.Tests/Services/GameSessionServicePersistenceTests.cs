@@ -166,7 +166,7 @@ public class GameSessionServicePersistenceTests
     }
 
     /// <summary>
-    /// CRITICAL #2 (PR5 fix pass): a schema-version-incompatible row must
+    /// A schema-version-incompatible row must
     /// resolve to the same caller-facing outcome as "no save exists" —
     /// never a thrown exception from a doomed deserialize.
     /// </summary>
@@ -184,7 +184,7 @@ public class GameSessionServicePersistenceTests
     }
 
     /// <summary>
-    /// BLOCKER finding (PR5 fresh-context review): an unhandled infra
+    /// An unhandled infra
     /// exception (DB down/timeout) from <see cref="IGameStore.LoadAsync"/>
     /// must never propagate out of <see cref="GameSessionService.ResumeAsync"/>
     /// — that would fault the entire Blazor Server circuit. Resolves to a
@@ -262,7 +262,7 @@ public class GameSessionServicePersistenceTests
     }
 
     /// <summary>
-    /// CRITICAL #1 (PR5 fresh-context review): a DB hiccup while deleting a
+    /// A DB hiccup while deleting a
     /// now-stale save row after a win must never throw — this is cosmetic
     /// housekeeping riding on the most important terminal-state UI (the
     /// victory screen), and must be strictly best-effort.
@@ -461,7 +461,7 @@ public class GameSessionServicePersistenceTests
 
     /// <summary>
     /// The rehydrated game must stay playable even if the completing save
-    /// fails (BLOCKER-fix parity, PR5): the player just logged in to save a
+    /// fails: the player just logged in to save a
     /// game they were actively playing — losing it locally on a save
     /// failure would be strictly worse than a failed save alone.
     /// </summary>
@@ -483,7 +483,7 @@ public class GameSessionServicePersistenceTests
     }
 
     /// <summary>
-    /// PR6 fix pass, CRITICAL finding: an anonymous player who wins, then
+    /// An anonymous player who wins, then
     /// clicks "Guardar partida" and completes the post-login redirect, would
     /// otherwise have their already-Won game persisted and NEVER cleaned up
     /// — <c>Game.razor</c>'s <c>OnSessionChanged</c> (the only place that

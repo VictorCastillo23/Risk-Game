@@ -137,7 +137,7 @@ public class SecretMissionVictoryRuleTests
         Assert.Null(Rule.CheckVictory(state));
     }
 
-    // ---- Own-army substitution (design D4) ----
+    // ---- Own-army substitution ----
 
     [Fact]
     public void CheckVictory_evaluates_a_self_targeting_EliminateArmy_as_OccupyTerritories_24_1_and_wins()

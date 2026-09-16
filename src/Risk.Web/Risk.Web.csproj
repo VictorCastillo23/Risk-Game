@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- The Blazor Web App template only compiles .razor Components by
-         default; Login/Register/Logout (design D1) are classic Razor Pages
+         default; Login/Register/Logout are classic Razor Pages
          (.cshtml/.cshtml.cs) living outside the Blazor router, which needs
          this switch to enable the MVC/Razor Pages view-compilation pipeline
          (tag helpers, PageModel binding, etc.) alongside it. -->
@@ -23,8 +23,7 @@
 
   <ItemGroup>
     <!--
-      risk-web-ai-seats (Phase 2/3 fresh-context review fix): GameSessionService
-      exposes internal test-only overloads (AdvanceAiTurns(int), Start(..., int))
+      GameSessionService exposes internal test-only overloads (AdvanceAiTurns(int), Start(..., int))
       so GameSessionServiceAiIntegrationTests can force AiTurnFailure.BudgetExhausted
       deterministically with a tiny budget instead of driving the real
       250,000-command BotWeights.MaxCommandsPerGame budget.

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 namespace Risk.Web.Tests.Fakes;
 
 /// <summary>
-/// Test double for <see cref="AuthenticationStateProvider"/> (design D4:
+/// Test double for <see cref="AuthenticationStateProvider"/> (
 /// <c>GameSessionService</c> depends on this abstract framework type, never
 /// <c>UserManager&lt;T&gt;</c>, precisely so it stays this trivially
 /// fakeable). <see cref="Anonymous"/>/<see cref="SignedIn"/> factory methods

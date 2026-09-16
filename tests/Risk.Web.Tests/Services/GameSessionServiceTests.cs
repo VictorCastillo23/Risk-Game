@@ -275,7 +275,7 @@ public class GameSessionServiceTests
     /// (whether/who it calls <c>Observe</c> for), not <c>Observe</c>'s own
     /// mission-resolution correctness — that is covered end-to-end by
     /// <c>Risk.Tests.Rules.MissionResolutionTests</c> and
-    /// <c>Risk.Tests.Engine.GameEngineObserveTests</c> (design 3.4-D1/D2).
+    /// <c>Risk.Tests.Engine.GameEngineObserveTests</c>.
     /// </summary>
     private static PlayerView ViewWithMission(GameState state, MissionCard? mission) => new(
         state.Territories,
@@ -296,7 +296,7 @@ public class GameSessionServiceTests
         var result = session.WinnerMission();
 
         Assert.Null(result);
-        // Design 3.4-D4: WinnerMission must be structurally incapable of
+        // WinnerMission must be structurally incapable of
         // leaking a live player's mission — it must never even call Observe
         // while the game is InProgress.
         Assert.Null(engine.LastObserveViewer);
@@ -310,7 +310,7 @@ public class GameSessionServiceTests
         session.Start(ThreeValidRows, GameMode.SecretMission);
         var winner = session.State!.Turn.CurrentPlayer;
         var wonState = session.State! with { Status = new GameStatus.Won(winner) };
-        // The self-target EliminateArmy substitution (design 3.4-D1) is what
+        // The self-target EliminateArmy substitution is what
         // Observe would have already resolved by the time WinnerMission sees
         // it — asserted here as the OwnEffectiveMission the fake hands back,
         // proving WinnerMission passes it through unmodified rather than

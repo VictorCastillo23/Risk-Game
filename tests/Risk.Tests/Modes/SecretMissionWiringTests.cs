@@ -58,7 +58,7 @@ public class SecretMissionWiringTests
     /// <summary>
     /// Mission-driven replacement for the pre-3.3 "owns all 42 territories"
     /// characterization test (which built players with <c>Mission: null</c>
-    /// and is no longer a valid SecretMission win — design D5/D6). The
+    /// and is no longer a valid SecretMission win). The
     /// attacker's own dealt <c>EliminateArmy(defender)</c> completes in the
     /// same <c>Execute</c> call that eliminates the defender.
     /// </summary>
@@ -111,7 +111,7 @@ public class SecretMissionWiringTests
 
     /// <summary>
     /// Positive routing proof for <see cref="GameMode.SecretMission"/>
-    /// (design D5/D7 — unlocked once <c>GameEngine.cs</c>'s hardcoded field
+    /// (unlocked once <c>GameEngine.cs</c>'s hardcoded field
     /// and dedicated branch are deleted), mirroring
     /// <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>
     /// and <see cref="TwoPlayer_victory_is_routed_through_TwoPlayerVictoryRule"/>:
@@ -143,8 +143,8 @@ public class SecretMissionWiringTests
     }
 
     /// <summary>
-    /// Positive routing proof for <see cref="GameMode.Capital"/> (roadmap item
-    /// 5.3), mirroring <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>
+    /// Positive routing proof for <see cref="GameMode.Capital"/>, mirroring
+    /// <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>
     /// / <see cref="TwoPlayer_victory_is_routed_through_TwoPlayerVictoryRule"/>:
     /// a Capital win alone is NOT sufficient evidence that
     /// <see cref="CapitalVictoryRule"/> is actually wired, since a state where
@@ -181,7 +181,7 @@ public class SecretMissionWiringTests
     }
 
     /// <summary>
-    /// Positive routing proof (hard requirement, design D5): a Classic win
+    /// Positive routing proof (hard requirement): a Classic win
     /// alone is NOT sufficient evidence that <see cref="ConquestVictoryRule"/>
     /// is actually wired, because its logic is byte-identical to the inline
     /// fallback it replaces — a Classic win test could pass by coincidence
@@ -210,7 +210,7 @@ public class SecretMissionWiringTests
     }
 
     /// <summary>
-    /// Positive routing proof for <see cref="GameMode.TwoPlayer"/> (item 4.3),
+    /// Positive routing proof for <see cref="GameMode.TwoPlayer"/>,
     /// mirroring <see cref="Classic_victory_is_routed_through_ConquestVictoryRule"/>:
     /// a TwoPlayer win alone is not sufficient evidence that
     /// <see cref="TwoPlayerVictoryRule"/> is actually wired, because a
@@ -319,7 +319,7 @@ public class SecretMissionWiringTests
 
     /// <summary>
     /// TwoPlayer-shaped variant of <see cref="BuildOneTerritoryFromVictoryState"/>
-    /// (design D4): 2 humans + 1 <see cref="PlayerState.IsNeutral"/> player.
+    /// 2 humans + 1 <see cref="PlayerState.IsNeutral"/> player.
     /// <paramref name="attacker"/> owns every territory except
     /// <see cref="NorthwestTerritory"/> (the defender's sole remaining
     /// territory) and <see cref="Kamchatka"/> (owned by the neutral, who

@@ -12,7 +12,7 @@ using Risk.Web.Tests.Fakes;
 namespace Risk.Web.Tests.Persistence;
 
 /// <summary>
-/// PR6, task 6.6: <see cref="PendingSave"/> exists specifically because
+/// <see cref="PendingSave"/> exists specifically because
 /// <c>ProtectedSessionStorage</c> cannot serialize a raw <see cref="GameSnapshot"/>
 /// under its default (non-<see cref="GameJson.Options"/>) <see cref="System.Text.Json.JsonSerializerOptions"/>
 /// — see <see cref="PendingSave"/>'s own doc comment for the reflection-confirmed

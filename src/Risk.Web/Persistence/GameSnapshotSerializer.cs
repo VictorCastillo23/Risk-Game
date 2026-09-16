@@ -7,7 +7,7 @@ namespace Risk.Web.Persistence;
 /// <summary>
 /// Serializes/deserializes a <see cref="GameState"/> and its accompanying
 /// <see cref="PlayerConfig"/> list independently, using the shared
-/// <see cref="GameJson.Options"/>. <c>Data.SavedGame</c> (PR5) stores them in
+/// <see cref="GameJson.Options"/>. <c>Data.SavedGame</c> stores them in
 /// two separate columns (<c>StateJson</c>/<c>PlayersJson</c>) so the
 /// denormalized summary columns can be read without deserializing the full
 /// game state.

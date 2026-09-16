@@ -7,7 +7,7 @@ namespace Risk.Web.Persistence;
 /// The single shared <see cref="JsonSerializerOptions"/> instance for
 /// persisting/loading <see cref="GameSnapshot"/> data. Attaches
 /// <see cref="ClosedHierarchyResolver"/> as a type-info-resolver modifier
-/// (design D3) plus the <see cref="TerritoryIdJsonConverter"/>/
+/// plus the <see cref="TerritoryIdJsonConverter"/>/
 /// <see cref="PlayerIdJsonConverter"/> value converters. Reused by every
 /// <see cref="GameSnapshotSerializer"/> call so options (and their internal
 /// metadata cache) are built exactly once per process.

@@ -48,7 +48,7 @@ public sealed class EfGameStore(RiskDbContext db) : IGameStore
 
         if (row.SchemaVersion != GameSnapshot.CurrentSchemaVersion)
         {
-            // CRITICAL #2 (PR5 fix pass): SchemaVersion/IsCompatible existed
+            // SchemaVersion/IsCompatible existed
             // to let a caller detect an incompatible/stale row BEFORE
             // deserializing, but this check was never wired up — an old or
             // corrupted StateJson/PlayersJson blob would throw a bare

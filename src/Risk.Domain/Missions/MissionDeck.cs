@@ -6,7 +6,7 @@ namespace Risk.Domain.Missions;
 /// Builds the standard 14-card secret mission deck: 1 occupy-18, 1
 /// occupy-24, 6 eliminate-army (one per <see cref="ArmyId"/> 0..5), and 6
 /// conquer-continents cards (4 fixed pairs, 2 with one wildcard slot).
-/// Fixed, deterministic order — shuffling/dealing is roadmap 3.2's concern.
+/// Fixed, deterministic order — shuffling/dealing is a separate concern.
 /// </summary>
 public static class MissionDeck
 {
