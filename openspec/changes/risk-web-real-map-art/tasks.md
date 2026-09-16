@@ -49,10 +49,10 @@ accept as `size:exception` inside the chain.
 - [x] 3.4 Delete `src/Risk.Web/Models/HexGrid.cs` + `tests/Risk.Web.Tests/Models/HexGridTests.cs`. `dotnet test Risk.sln` green.
 
 ## Phase 4: `BoardSvg` rewrite
-- [ ] 4.1 Rewrite `src/Risk.Web/Components/Game/BoardSvg.razor` per design's layer-order block: `<image>` base layer, label-only continents `<g>`, sea-route-filtered edges `<g>`, 3-circle territory markers. `EventCallback<TerritoryId>`/`Locked` wiring unchanged.
-- [ ] 4.2 Update `src/Risk.Web/Components/Game/BoardSvg.razor.css` per D8: drop `.board-continent-halo`; new ring classes (widths only, colors from C#); retarget selected/hover at `.board-marker-ring-outer` ONLY; `max-width:1340px` on `.board-svg`; resolve gradient per 1.3.
+- [x] 4.1 Rewrite `src/Risk.Web/Components/Game/BoardSvg.razor` per design's layer-order block: `<image>` base layer, label-only continents `<g>`, sea-route-filtered edges `<g>`, 3-circle territory markers. `EventCallback<TerritoryId>`/`Locked` wiring unchanged.
+- [x] 4.2 Update `src/Risk.Web/Components/Game/BoardSvg.razor.css` per D8: drop `.board-continent-halo`; new ring classes (widths only, colors from C#); retarget selected/hover at `.board-marker-ring-outer` ONLY; `max-width:1340px` on `.board-svg`; resolve gradient per 1.3.
 
 ## Phase 5: Docs & verification
-- [ ] 5.1 `CLAUDE.md`: replace the hex-grid sentence with design's artwork-based replacement text (design File Changes section, verbatim).
-- [ ] 5.2 `dotnet test Risk.sln` green, zero new warnings.
-- [ ] 5.3 Manual `dotnet run --project src/Risk.Web`: all 42 markers inside painted territory + legible; spot-check outer ink ring vs art at all 42 positions for backgrounds darker than mid-gray.
+- [x] 5.1 `CLAUDE.md`: replace the hex-grid sentence with design's artwork-based replacement text (design File Changes section, verbatim).
+- [x] 5.2 `dotnet test Risk.sln` green, zero new warnings.
+- [x] 5.3 Manual `dotnet run --project src/Risk.Web`: all 42 markers inside painted territory + legible; spot-check outer ink ring vs art at all 42 positions for backgrounds darker than mid-gray.
