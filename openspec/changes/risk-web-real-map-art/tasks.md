@@ -34,13 +34,13 @@ PR2 alone exceeds 400 lines (42-point table is one indivisible unit) —
 accept as `size:exception` inside the chain.
 
 ## Phase 1: Asset verification & move
-- [ ] 1.1 Verify `mapa_risk_simplificado_v4_transparente.png` real pixel size + alpha min/max: throwaway PowerShell `System.Drawing` script, `LockBits` over the alpha plane (no PIL available).
-- [ ] 1.2 `git mv mapa_risk_simplificado_v4_transparente.png src/Risk.Web/wwwroot/images/world-map.png`.
-- [ ] 1.3 If size ≠ 1340x876, use real values in Phase 3; if min alpha == 255, flag Phase 4's `.board-svg` gradient for removal.
+- [x] 1.1 Verify `mapa_risk_simplificado_v4_transparente.png` real pixel size + alpha min/max: throwaway PowerShell `System.Drawing` script, `LockBits` over the alpha plane (no PIL available).
+- [x] 1.2 `git mv mapa_risk_simplificado_v4_transparente.png src/Risk.Web/wwwroot/images/world-map.png`.
+- [x] 1.3 If size ≠ 1340x876, use real values in Phase 3; if min alpha == 255, flag Phase 4's `.board-svg` gradient for removal.
 
 ## Phase 2: `MarkerInk` (TDD)
-- [ ] 2.1 RED `tests/Risk.Web.Tests/Models/MarkerInkTests.cs`: Theory over `PlayerPalette.Swatches` (read-only) and `BoardColors` (read-only) constants asserting `ContrastRatio(fill, InnerRingFor(fill)) >= 3.0`; plus a test reading `src/Risk.Web/wwwroot/app.css` (read-only) for `--ink`/`--parchment-light`. Confirm compile-red.
-- [ ] 2.2 GREEN `src/Risk.Web/Models/MarkerInk.cs` per design D8: `Outer`, `InnerOnDark`/`InnerOnLight`, threshold `0.18`, `RelativeLuminance`, `ContrastRatio`, `InnerRingFor`. Verify design's hand-computed worst cases empirically.
+- [x] 2.1 RED `tests/Risk.Web.Tests/Models/MarkerInkTests.cs`: Theory over `PlayerPalette.Swatches` (read-only) and `BoardColors` (read-only) constants asserting `ContrastRatio(fill, InnerRingFor(fill)) >= 3.0`; plus a test reading `src/Risk.Web/wwwroot/app.css` (read-only) for `--ink`/`--parchment-light`. Confirm compile-red.
+- [x] 2.2 GREEN `src/Risk.Web/Models/MarkerInk.cs` per design D8: `Outer`, `InnerOnDark`/`InnerOnLight`, threshold `0.18`, `RelativeLuminance`, `ContrastRatio`, `InnerRingFor`. Verify design's hand-computed worst cases empirically.
 
 ## Phase 3: `TerritoryLayout` rewrite
 - [ ] 3.1 RED rewrite `tests/Risk.Web.Tests/Models/TerritoryLayoutTests.cs` per design's Testing Strategy: keep the 6 `Coordinates_*`/`ContinentOf_*` facts, delete `Polygons_*`(2)/`PolygonPointsAttr_*`/`ContinentBounds_*`(2), remove `Coordinates_AllFallWithinTheDeclaredCanvasBounds` (→3.2). Confirm red.
