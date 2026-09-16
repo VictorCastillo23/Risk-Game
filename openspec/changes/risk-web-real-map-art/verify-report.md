@@ -1,34 +1,36 @@
 ```yaml
 schema: gentle-ai.verify-result/v1
-evidence_revision: sha256:39b079acd4dbd10b71bdc1105acbb7edeee24955d7b8132893042684c619a89f
-verdict: fail
-blockers: 1
-critical_findings: 2
-requirements: 9/10
-scenarios: 12/13
+evidence_revision: sha256:ed9a7df2a130b7f46bb95c68bb796cbd60cae954002af49aa5195c429e086c8f
+verdict: pass_with_warnings
+blockers: 0
+critical_findings: 0
+requirements: 10/10
+scenarios: 13/13
 test_command: dotnet test Risk.sln
 test_exit_code: 0
-test_output_hash: sha256:9550221839acb4782ca14a7b732c8faa374e36079979e5edfadffc5d603be634
+test_output_hash: sha256:77c12233ebd7c3ae44f789a7890173c1a9b1b6bfaf6c4bbd96a00d3b9806d776
 build_command: dotnet build Risk.sln --no-incremental
 build_exit_code: 0
-build_output_hash: sha256:8d7697848406e538d4cb5ca38f0aff97ee896a7991b57da3cce80c6f6a7024de
+build_output_hash: sha256:df24acd3e4fc85f6de6ef2537572035e5ff288e27af19031167762c4fa7c5a26
 ```
 
 ## Verification Report
 
 **Change**: risk-web-real-map-art
 **Version**: N/A (no openspec/specs/ prior baseline; new capability)
-**Mode**: Strict TDD (repo-wide), Standard Mode for the markup-reconciliation unit (PR3, disclosed in apply-progress)
+**Mode**: Strict TDD (repo-wide), Standard Mode for the markup-reconciliation unit (disclosed in apply-progress)
 
-This report verifies the cumulative final state of the whole change (PR1 6a68487 to PR2 faf1d83 to PR3 6fedf84) on feature/risk-web-real-map-art-pr3-boardsvg, against main. All evidence below was independently re-derived from source and from fresh command runs in this session, not copied from prior sdd-apply reports.
+This is a RE-verification after remediation commit 0f5295e on feature/risk-web-real-map-art-pr3-boardsvg (PR1 6a68487 to PR2 faf1d83 to PR3 6fedf84 to remediation 0f5295e), fixing the two CRITICAL findings from the prior verify pass (Engram sdd/risk-web-real-map-art/verify-report id 776; openspec/changes/risk-web-real-map-art/verify-report.md, previously FAIL). All evidence below was independently re-derived from source and fresh command execution in this session, not copied from the apply-progress or the prior report.
 
 ### Completeness
 | Metric | Value |
 |--------|-------|
 | Tasks total | 14 |
 | Tasks complete (checkbox) | 14 |
-| Tasks genuinely verified complete | 13 |
-| Tasks incomplete/unsubstantiated | 1 (5.3, second manual-QA item, see CRITICAL-2) |
+| Tasks genuinely verified complete | 14 |
+| Tasks incomplete/unsubstantiated | 0 |
+
+Task 5.3's second manual-QA item (previously CRITICAL-2: checked complete with no evidence it was performed) now carries a remediation note in tasks.md naming the exact evidence (this verify lineage's own pixel-sampling, cross-checked by the orchestrator's independent second measurement) and the before/after contrast numbers. Independently confirmed genuine: the note's claimed final numbers (Kamchatka 10.81, Japan 4.62, Indonesia 6.38, NewGuinea 5.18, Madagascar 4.61) match my own independent re-measurement below within expected sampling variance.
 
 ### Build and Tests Execution
 **Build**: PASSED (clean rebuild, --no-incremental)
@@ -40,119 +42,129 @@ Exactly 4 warnings (CS8524, non-exhaustive switch), all pre-existing, none in fi
   src/Risk.Engine/Modes/VictoryRules.cs(26,60)
   src/Risk.Web/Models/PhaseDisplay.cs(20,58)
   src/Risk.Web/Models/GameModeDisplay.cs(21,55)
-Zero new warnings introduced by this change. Confirms apply-progress claim.
+Zero new warnings.
 ```
 
-**Tests**: 932 passed / 0 failed / 0 skipped (fresh run, this session)
+**Tests**: 945 passed / 0 failed / 0 skipped (fresh run, this session)
 ```text
 $ dotnet test Risk.sln
 Exit code: 0
 Risk.Tests:      384/384
 Risk.AI.Tests:   206/206
-Risk.Web.Tests:  342/342
-Total:           932/932, 0 failed, 0 skipped
+Risk.Web.Tests:  355/355
+Total:           945/945, 0 failed, 0 skipped
 ```
-This independently reconfirms PR3 own reported final number (932/932). The earlier PR1 count of 963 is explained and consistent: PR2 deleted HexGridTests.cs and HexAdjacencyRegressionTests.cs and trimmed TerritoryLayoutTests.cs (net -31 tests: 963 to 932), an intentional test-suite restructuring documented in design.md Testing Strategy table, not an unexplained drop. No discrepancy found across the three reported counts.
+Independently confirms apply-progress's claimed 945/945 (up from the prior pass's fresh-verified 932/932 by exactly 13 new cases: 5 OuterOnDarkArt_ReachesThreeToOneAgainstMeasuredDarkArt theory cases + 8 NeedsLightOuterRing_IsTrueOnlyForTheFiveDarkArtTerritories theory cases). No discrepancy.
 
-Focused re-run of only the tests this change added or modified, isolated from the rest of the suite:
+Focused re-run of only this remediation's touched tests:
 ```text
-$ dotnet test Risk.sln --filter "FullyQualifiedName~MarkerPlacementTests|FullyQualifiedName~MarkerInkTests|FullyQualifiedName~TerritoryLayoutTests"
-Risk.Web.Tests: 20/20 passed (6 TerritoryLayoutTests + 4 MarkerPlacementTests + 10 MarkerInkTests)
+$ dotnet test Risk.sln --filter "FullyQualifiedName~MarkerInkTests|FullyQualifiedName~TerritoryLayoutTests|FullyQualifiedName~MarkerPlacementTests"
+Risk.Web.Tests: 33/33 passed (20 pre-existing + 5 new MarkerInk theory cases + 8 new TerritoryLayout theory cases)
 ```
 
-**Coverage**: Not available, no coverage tool configured in this repo (coverlet.collector is referenced but no coverage run or threshold is wired into the build). Not a failure per the skill graceful-handling rule.
+**Coverage**: Not available, no coverage tool wired into the build (unchanged from the prior pass).
 
 ### TDD Compliance
 | Check | Result | Details |
 |-------|--------|---------|
-| TDD Evidence reported | Partial | apply-progress (Engram id 775) narrates RED/GREEN per task in prose and tasks.md itself labels each task RED or GREEN, but there is no standalone TDD Cycle Evidence table in the mandated column format (RED/GREEN/TRIANGULATE/SAFETY NET/REFACTOR). |
-| All tasks have tests | Yes | Phases 1-3 (asset, MarkerInk, TerritoryLayout) each produced a paired test file (MarkerInkTests.cs, TerritoryLayoutTests.cs rewrite, MarkerPlacementTests.cs). Phase 4 (BoardSvg.razor rewrite) has no new test file, disclosed and reasoned in apply-progress as Standard Mode: it reconciles two already-TDD-covered files with their Razor consumer with no new pure-logic unit, and this repo has no bUnit or component-render harness for any Razor component (verified: zero BoardSvg references anywhere under tests/, and Risk.Web.Tests.csproj has no bUnit package). This is a pre-existing, repo-wide test-architecture boundary, not a gap this change introduced. |
-| RED confirmed (tests exist) | Yes | MarkerInkTests.cs, TerritoryLayoutTests.cs, MarkerPlacementTests.cs all exist and were read directly. |
-| GREEN confirmed (tests pass) | Yes | All 20 focused tests plus full 932/932 suite pass on fresh execution in this session. |
-| Triangulation adequate | Yes | MarkerInkTests AllFills theory covers 9 distinct fills (6 PlayerPalette.Swatches plus UnclaimedColor plus UnknownOwnerColor plus NeutralColor) against one assertion, real variance, not single-case. MarkerPlacementTests has 4 independent facts covering 4 distinct geometric invariants. |
-| Safety Net for modified files | Yes | TerritoryLayout.cs and TerritoryLayoutTests.cs were modified together (design.md testing-strategy table shows a fact-by-fact keep/delete/move decision), not blind-rewritten. |
+| TDD Evidence reported | Yes | apply-progress (Engram id 775) includes a genuine RED/GREEN/REFACTOR table for this remediation's 2 code items + 1 markup item, an improvement over the PR1-3 apply-progress's prose-only evidence (still a carried-forward WARNING for that earlier apply-progress, see WARNING-1). |
+| All tasks have tests | Yes for the 2 code changes (MarkerInk.OuterOnDarkArt, TerritoryLayout.NeedsLightOuterRing); N/A for the 1-line BoardSvg.razor conditional stroke change, disclosed as Standard Mode (no bUnit in this repo, pre-existing gap). |
+| RED confirmed (tests exist) | Yes | MarkerInkTests.OuterOnDarkArt_ReachesThreeToOneAgainstMeasuredDarkArt and TerritoryLayoutTests.NeedsLightOuterRing_IsTrueOnlyForTheFiveDarkArtTerritories both exist and were read directly; apply-progress cites the exact CS0117 compile-red messages for both. |
+| GREEN confirmed (tests pass) | Yes | Both theories pass in this session's fresh 33/33 focused run and the full 945/945 run. |
+| Triangulation adequate | Yes | OuterOnDarkArt theory: 5 cases (one per flagged territory, distinct measured hex values). NeedsLightOuterRing theory: 8 cases with real variance (5 true + 3 false from different continents), not single-case. |
+| Safety Net for modified files | Yes (disclosed) | MarkerInk.cs/TerritoryLayout.cs extended additively (existing tests re-run, still pass); BoardSvg.razor's one-line change has no safety net beyond full-suite regression and git diff, explicitly disclosed rather than glossed over. |
 
-**TDD Compliance**: 5/6 checks fully passed, 1 partial (missing table format, substance present in prose).
+**TDD Compliance**: 6/6 checks passed.
 
 ### Assertion Quality
-Scanned MarkerInkTests.cs, TerritoryLayoutTests.cs, MarkerPlacementTests.cs (all new or modified by this change) for banned patterns (tautologies, ghost loops over possibly-empty collections, type-only assertions, smoke-test-only, mock-heavy). None found:
-- All loops iterate fixed, always-populated collections (TerritoryLayout.Coordinates, 42 entries; WorldMap.Territories, 42 entries), not possibly-empty.
-- Every assertion calls real production code (MarkerInk.ContrastRatio, TerritoryLayout.RadiusOf, distance/centroid math) and asserts a concrete numeric or structural outcome, not a type-only check.
-- Zero mocks in any of the three files.
+Scanned the 2 new test additions (MarkerInkTests.OuterOnDarkArt_ReachesThreeToOneAgainstMeasuredDarkArt, TerritoryLayoutTests.NeedsLightOuterRing_IsTrueOnlyForTheFiveDarkArtTerritories) for banned patterns. None found:
+- Both call real production code (MarkerInk.ContrastRatio/OuterOnDarkArt, TerritoryLayout.NeedsLightOuterRing) and assert concrete outcomes, not type-only checks.
+- No possibly-empty loops (fixed InlineData/MemberData case lists).
+- No mocks.
+- NeedsLightOuterRing theory has real true/false variance; OuterOnDarkArt theory asserts the same inequality direction across 5 cases with 5 distinct hex inputs, the same pattern already accepted for InnerRingFor_ReachesThreeToOneAgainstEveryFill in the original pass, consistent, not a new concern.
 
-**Assertion quality**: All assertions verify real behavior
+**Assertion quality**: All assertions verify real behavior.
 
-### Test Layer Distribution
-| Layer | Tests | Files | Tools |
-|-------|-------|-------|-------|
-| Unit | 20 | 3 | xUnit |
-| Integration | 0 | 0 | not installed (no bUnit in this repo) |
-| E2E | 0 | 0 | not installed |
-| Total | 20 | 3 | |
+### Independent Re-Measurement of Outer-Ring-vs-Artwork Contrast
 
-BoardSvg.razor own markup (image layer, click/right-click wiring, sea-route filtering, selection highlight, locked-pointer-events, continent labels) has zero direct component-render test coverage. This is true of every Razor component in this repo, before and after this change, not a regression. SUGGESTION: a future change could introduce bUnit for board-critical interaction contracts; out of scope to require here.
+Re-ran an independent pixel-sampling script against the shipped world-map.png (1340x876, confirmed unchanged), sampling at the outer ring's true adjacent radius (marker outer edge = MarkerRadius = 17 canvas units; the ring itself is centered at r-1.5=15.5 with stroke-width 3, so its outer painted edge sits at 15.5+1.5=17), opaque pixels only (alpha==255). Two passes were run: an initial single-radius pass at similar sample density to the prior verify pass's method, then a more robust 216-sample pass (3 radii x 72 angles) to reduce single-pixel noise, both against the current ink constants.
+
+**The 5 remediated territories, against the NEW ink (MarkerInk.OuterOnDarkArt = #f5ead0)**, all clear 3:1 with comfortable margin, closely matching apply-progress's own claimed final numbers:
+
+| Territory | My median (robust, 216-sample) | apply-progress claimed | Result |
+|---|---|---|---|
+| Kamchatka | 10.03:1 | 10.81:1 | PASS |
+| Japan | 4.31:1 | 4.62:1 | PASS (worst single-sample 2.21:1, see WARNING-4) |
+| Indonesia | 5.27:1 | 6.38:1 | PASS |
+| NewGuinea | 5.31:1 | 5.18:1 | PASS |
+| Madagascar | 4.77:1 | 4.61:1 | PASS |
+
+CRITICAL-1 (original) is genuinely resolved: every previously-failing territory now measures well above 3:1 by median, independently reconfirmed, not merely trusted from the apply-progress claim.
+
+**Scope check, 40+ territories spot-checked against the OLD default ink** to confirm the fix's 5-territory scope is neither under- nor over-inclusive. A full 42-territory sweep (see WARNING-4) found the territories with medians unambiguously below 3:1 in every sampling variant tried (Kamchatka 1.19-1.41, Indonesia 2.37-2.53, NewGuinea 2.48-2.54, Madagascar 2.77-2.99) are exactly 4 of the 5 fixed territories; Japan measured borderline (2.88-3.24 depending on sample count and radius) rather than unambiguously failing, but the fix does not hurt it. No sampled territory outside the fixed 5 was unambiguously below 3:1 in every run, but 3 territories (Congo, EasternAustralia, Argentina) sit within noise distance of the boundary and are flagged as a residual risk, not a proven failure. See WARNING-4 for the full data and reasoning.
 
 ### Spec Compliance Matrix
 | Requirement | Scenario | Test / Evidence | Result |
 |---|---|---|---|
-| Map background layer | Board loads with real artwork | Static: BoardSvg.razor image tag uses TerritoryLayout.CanvasWidth/Height (1340/876), svg viewBox is 0 0 1340 876; PNG measured 1340x876 via System.Drawing in this session | COMPLIANT (static evidence; no component-render test exists in this repo) |
-| Territory marker placement | All markers render inside their territory | TerritoryLayoutTests.Coordinates_ContainsEveryWorldMapTerritory_ExactlyOnce (42/42) plus MarkerPlacementTests.Coordinates_EveryMarkerFitsFullyInsideTheCanvas, both pass. Falls-within-painted-region is manual-QA only per design.md, claimed done during PR2 authoring, not independently re-verifiable by source inspection | COMPLIANT (count/bounds tested; painted-region placement is manual-QA-only by design, unverified by me) |
-| Ownership color and contrast - Owned territory marker color | Fill matches owner color AND at least 3:1 contrast vs adjacent art | MarkerInkTests.InnerRingFor_ReachesThreeToOneAgainstEveryFill passes (9/9 fills, inner-ring-vs-fill only). Independent pixel sampling of world-map.png in this session (median contrast, 24 angular samples per territory at the ink ring true adjacent radius, opaque samples only) found the outer ink ring #2b2118, the ring design D8 states is art-facing, falls below 3:1 at 5 of 42 territories: Kamchatka (median 1.33:1), Japan (2.70:1), Indonesia (2.80:1), New Guinea (2.56:1), Madagascar (2.73:1); worst single-sample as low as 1.16:1 (Kamchatka) | FAILING, see CRITICAL-1 |
-| Ownership color and contrast - Unclaimed territory marker color | Unclaimed renders in a distinct non-player color | BoardSvg.razor: territory.Owner conditional selects BoardColors.OwnerColor or BoardColors.UnclaimedColor, a distinct constant | COMPLIANT (the contrast defect above is shared by the ink ring regardless of ownership, but this scenario own literal text only requires color distinctness, which holds) |
-| Troop count and reinforcement badge | Troop count visible | troop-count text element renders territory.Troops with paint-order stroke fill black halo for legibility (CSS unchanged) | COMPLIANT (static evidence) |
-| Troop count and reinforcement badge | Pending reinforcement badge | pending-badge text element toggles display:none based on pending count, distinct green fill/class | COMPLIANT (static evidence) |
-| Marker size and density exception | Dense cluster marker | RadiusOverrides ships empty (all 42 at default MarkerRadius=17, about 26 CSS px, clears the 24px floor); MarkerPlacementTests.RadiusOverrides_AreKnownTerritoriesWithinTheAllowedBand plus Coordinates_NoTwoMarkersOverlap (861 pairs) both pass, so no territory needed the exception | COMPLIANT (exception mechanism exists and is tested; unused because unneeded, per design D9 own prediction) |
-| Click and right-click interaction contract | Left/right click raise callbacks | git diff main...HEAD on BoardSvg.razor shows the onclick/oncontextmenu InvokeAsync lines are byte-identical, confirmed by diff (no changed lines in that block) | COMPLIANT (diff-verified identical; no component-render test exists in this repo) |
-| Selection highlight | Selected territory highlighted | CSS rule targets .board-territory-selected .board-marker-ring-outer only (stroke color, width, drop-shadow), per design D8 own warning that inner ring/fill stay untouched | COMPLIANT (static evidence) |
-| Locked board during pending occupation | Board locked | pointer-events:none style on the svg root is unchanged by diff | COMPLIANT (diff-verified identical) |
-| Sea-route lines only | Only sea routes render | BoardEdges.UniqueEdges filtered by IsSeaRoute; SeaRoutes hardcoded set has exactly 5 entries (Alaska-Kamchatka, Greenland-Iceland, Brazil-NorthAfrica, WesternEurope-NorthAfrica, Siam-Indonesia); BoardEdges.cs untouched by this change | COMPLIANT (static evidence) |
-| Continent bonus labels | Continent bonus label renders | continent label group wraps a bare g element around a text element with no rect in the continents group; anchor comes from TerritoryLayout.ContinentLabelAnchors; MarkerPlacementTests.ContinentLabelAnchors_EachSitsNearItsOwnContinent passes (nearest-centroid plus spread check, 6/6) | COMPLIANT (test plus static evidence) |
+| Map background layer | Board loads with real artwork | Unchanged from prior pass; static evidence, no component-render test in this repo | COMPLIANT |
+| Territory marker placement | All markers render inside their territory | Unchanged from prior pass (count/bounds tested; painted-region placement is manual-QA-only by design) | COMPLIANT |
+| Ownership color and contrast | Owned territory marker color | MarkerInkTests.InnerRingFor_ReachesThreeToOneAgainstEveryFill (9/9, inner ring) plus OuterOnDarkArt_ReachesThreeToOneAgainstMeasuredDarkArt (5/5, outer ring at the previously-failing positions) all pass; independent re-measurement in this session confirms all 5 previously-failing territories now clear 3:1 by median with comfortable margin | COMPLIANT (previously FAILING; fix independently confirmed. Residual boundary risk at 3 other territories tracked as WARNING-4, not held against this scenario's compliance) |
+| Ownership color and contrast | Unclaimed territory marker color | Unchanged from prior pass | COMPLIANT |
+| Troop count and reinforcement badge | Troop count visible | Unchanged from prior pass | COMPLIANT |
+| Troop count and reinforcement badge | Pending reinforcement badge | Unchanged from prior pass | COMPLIANT |
+| Marker size and density exception | Dense cluster marker | Unchanged from prior pass | COMPLIANT |
+| Click and right-click interaction contract | Left click raises OnTerritoryClick | Unchanged from prior pass; git diff main...HEAD on the click/right-click block still byte-identical | COMPLIANT |
+| Click and right-click interaction contract | Right click raises OnTerritoryRightClick | Unchanged from prior pass | COMPLIANT |
+| Selection highlight | Selected territory highlighted | Unchanged from prior pass | COMPLIANT |
+| Locked board during pending occupation | Board locked | Unchanged from prior pass | COMPLIANT |
+| Sea-route lines only | Only sea routes render | Unchanged from prior pass | COMPLIANT |
+| Continent bonus labels | Continent bonus label renders | Unchanged from prior pass | COMPLIANT |
 
-**Compliance summary**: 12/13 scenarios compliant, 1 FAILING (confirmed by independent measurement, not merely untested)
+**Compliance summary**: 13/13 scenarios compliant (up from 12/13; the one previously-FAILING scenario is now independently confirmed fixed).
 
-### Correctness (Static Evidence) - design.md D1-D9
+### Correctness (Static Evidence): design.md D1-D9 plus remediation additions
 | Decision | Status | Notes |
 |---|---|---|
-| D1 (TerritoryLayout API surface) | Implemented | CanvasWidth=1340, CanvasHeight=876, MarkerRadius=17, RadiusOf, Coordinates (42), ContinentOf, ContinentLabelAnchors (6) all present; Polygons, PolygonPointsAttr, ContinentBounds, HexSize, ContinentOrigins confirmed absent repo-wide (grep, zero matches) |
-| D2 (MarkerRadius=17) | Implemented | Exact constant confirmed in TerritoryLayout.cs |
-| D3 (seed keeps ContinentId column) | Implemented | TerritorySeed is a (Name, ContinentId, X, Y) array, grouped per continent in source |
-| D4 (constant outer ink, continent color moves to label) | Implemented | MarkerInk.Outer is the constant #2b2118; continent label text fill comes from ContinentPalette.ColorOf |
-| D5 (href is root-relative /images/world-map.png) | Implemented | Exact match in BoardSvg.razor |
-| D6 (filter sea routes at call site, no new BoardEdges API) | Implemented | BoardEdges.cs has zero diff vs main; filtering done via a Where clause at the call site |
-| D7 (integral pixel literals) | Implemented | All 42 TerritorySeed plus 6 ContinentLabelSeed coordinates are integer literals |
-| D8 (three-circle marker, luminance-threshold inner ring) | Implemented but contrast guarantee empirically fails at 5/42 positions | MarkerInk.cs and MarkerInkTests.cs faithfully implement the 0.18-threshold rule and pass for the inner-ring-vs-fill pair; the outer-ring-vs-artwork pair (the one D8 own text calls the one manual check) was independently measured in this session and fails at Kamchatka, Japan, Indonesia, New Guinea, Madagascar. See CRITICAL-1. |
-| D9 (RadiusOf/RadiusOverrides, band 13 to 17) | Implemented | MinRadius=13 constant present; RadiusOverrides ships empty as specified; RadiusOverrides_AreKnownTerritoriesWithinTheAllowedBand passes |
+| D1-D7, D9 | Implemented | Unchanged from prior pass, re-confirmed present in TerritoryLayout.cs |
+| D8 (three-circle marker, luminance-threshold inner ring) | Implemented; contrast guarantee now holds at the 5 previously-failing positions | MarkerInk.OuterOnDarkArt plus TerritoryLayout.NeedsLightOuterRing extend D8/D9's own per-territory-exception pattern (a new mechanism was not invented). Independently confirmed the outer ring stroke attribute in BoardSvg.razor is genuinely conditional: TerritoryLayout.NeedsLightOuterRing(id) selects MarkerInk.OuterOnDarkArt or MarkerInk.Outer, not a no-op, not always-true/false. |
+| NeedsLightOuterRing exception set | Implemented, exactly 5 entries | LightOuterRingTerritories (private HashSet of TerritoryId) contains exactly Kamchatka, Japan, Indonesia, NewGuinea, Madagascar. Verified by full enumeration: TerritorySeed has exactly 42 entries (9 NA + 4 SA + 7 EU + 6 AF + 12 AS + 4 OC, matching classic Risk), TerritoryId is a readonly record struct(string Value) (value equality, so HashSet.Contains behaves correctly), and none of the other 37 territory names collide with the 5 literal strings in the set, so NeedsLightOuterRing returns true for exactly those 5 and false for all other 37 by construction, not by sampling. The theory test (InlineData, 5 true + 3 false cases) is a spot-check on top of this, not the only evidence. |
+| MarkerInk.OuterOnDarkArt | Implemented, real and distinct-purpose | Value #f5ead0, same literal value as InnerOnDark (documented in both files as deliberate reuse of the project's one light-ink constant, not a dead/duplicate color), used only by the new outer-ring conditional in BoardSvg.razor. Not unused/dead. |
 
 ### Coherence (Design)
 | Decision/Area | Followed? | Notes |
 |---|---|---|
-| Deviation 1 (continent label anchors, not bbox) | Yes | ContinentLabelAnchors_EachSitsNearItsOwnContinent passes; spec.md own wording already reflects this deviation, correctly |
-| Deviation 2 (fill isolated from art; ink ring is the one manual check) | Design correct, execution incomplete | The design own reasoning is sound; the manual check it calls for was apparently not actually performed (see CRITICAL-2), and when performed independently here, it fails |
-| Testing Strategy table vs code block (5th vs 4th MarkerPlacementTests fact) | Genuine minor doc inconsistency, not missed coverage | design.md table row mentions a 5th fact, ContinentLabelAnchors_ContainsAllSixContinents_InsideTheCanvas, that design own concrete code block (4 facts) and the actual implementation both omit. ContinentLabelAnchors_EachSitsNearItsOwnContinent implicitly covers contains-all-six (an indexer miss on any of the 6 continent ids would throw KeyNotFoundException and fail the test), but does not assert the anchor lies within canvas bounds, a real if low-risk coverage gap (all 6 hardcoded anchor values are comfortably in-bounds by inspection, so this is a SUGGESTION, not CRITICAL) |
-| Two disclosed apply-time deviations (RZ1023 g wrapper; empty .board-marker-fill CSS rule) | Confirmed non-functional | Both independently re-verified: the bare g wrapper is empty markup with no visual or semantic effect; .board-marker-fill carries no CSS-settable property (fill comes from the C# fill attribute only, no hover/selection target on it), and no rule is missing that any other class provides |
-| Scope discipline (proposal explicit out-of-scope list) | Yes | git diff main...HEAD --stat touches only: CLAUDE.md, openspec/changes/risk-web-real-map-art/*, BoardSvg.razor(.css), HexGrid.cs (deleted), MarkerInk.cs (new), TerritoryLayout.cs, world-map.png, and the 5 test files in tests/Risk.Web.Tests/Models/. Zero touches to Risk.Domain, Risk.Engine, Risk.AI, Risk.Tests, Game.razor, the turn-phase panels, GameSessionService.cs, BoardSelection.cs, BoardColors.cs, BoardEdges.cs, ContinentPalette.cs, ContinentDisplay.cs |
+| Deviations 1-2, scope discipline, disclosed apply-time deviations | Yes | Unchanged from prior pass. |
+| Deviation 2 (fill isolated from art; ink ring is the one manual check) | Design correct, execution now genuinely complete for the 5 previously-failing positions | The manual check the design calls for was performed and evidenced this time (CRITICAL-2 resolved); independent re-derivation with a more robust sampling method surfaces 3 additional borderline territories not covered by this remediation, see WARNING-4. |
+| Testing Strategy table vs code block (5th vs 4th MarkerPlacementTests fact) | Genuine minor doc inconsistency, not missed coverage | Unchanged from prior pass; re-confirmed still present, still low-risk (SUGGESTION-2). |
 
 ### Issues Found
 
-**CRITICAL**:
-1. Outer ink ring fails WCAG 1.4.11 (at least 3:1) against the real artwork at 5 of 42 marker positions, violating spec Requirement "Ownership color and contrast" (a MUST clause) and contradicting design D8 own stated guarantee. Independently measured in this session by sampling world-map.png pixels at the ink ring true adjacent radius (24 angular samples per territory, opaque-only, median-based to avoid single-pixel noise):
-   - Kamchatka: median 1.33:1 (worst 1.16:1)
-   - Japan: median 2.70:1 (worst 1.18:1)
-   - Indonesia: median 2.80:1 (worst 1.75:1)
-   - New Guinea: median 2.56:1 (worst 1.78:1)
-   - Madagascar: median 2.73:1 (worst 1.95:1)
-   All five are exactly the category design.md own task 5.3 anticipated as the risk case (deep-ocean or dark coastal wash) - small islands or peninsulas surrounded by dark coastal/ocean shading. This affects the constant outer ring only (shared by every marker regardless of owner), not the owner-color fill itself, so ownership stays legible; the defect is narrowly scoped to WCAG non-text-contrast at these 5 positions, not a functional or gameplay break. Recommend: either move or enlarge markers at these 5 positions away from the dark art, or extend the RadiusOverrides-style mechanism to allow a per-territory outer-ring color override, then re-run this exact contrast check.
-2. Task 5.3 second manual-QA item (spot-check outer ink ring vs art at all 42 positions for backgrounds darker than mid-gray) is marked done in tasks.md but the available evidence does not show it was actually performed. apply-progress (Engram id 775) explicitly attributes only the first manual-QA item (marker-inside-territory placement) to PR2 authoring pass (crop and overlay and re-crop against the actual artwork); it never claims the ink-ring-vs-art contrast spot-check was done, in PR2 or PR3, and explicitly disclaims visual re-verification for PR3 (no browser or screenshot capability). Independent execution of that exact check in this session (see CRITICAL-1) found real failures, which a genuine spot-check should have caught before the box was checked. This is a task-completeness misrepresentation, not merely a missing nice-to-have.
+**CRITICAL**: None. Both CRITICAL findings from the prior pass are resolved:
+1. (Resolved) Outer ink ring WCAG 1.4.11 failure at 5/42 territories, independently re-confirmed fixed above.
+2. (Resolved) Task 5.3's contrast spot-check evidence gap, tasks.md now carries a specific, falsifiable remediation note naming the evidence and the measured numbers, cross-checked here.
 
 **WARNING**:
-1. No standalone TDD Cycle Evidence table (RED/GREEN/TRIANGULATE/SAFETY NET/REFACTOR columns) exists in apply-progress, though the substance (RED-then-GREEN per task, focused-then-full test runs) is present in prose and independently confirmed by re-running the tests in this session.
-2. BoardSvg.razor markup-level requirements (image background, click/right-click wiring, selection highlight, locked pointer-events, sea-route rendering, continent labels - 8 of 13 scenarios) have zero automated runtime/component-render test coverage. This is a pre-existing, repo-wide gap (no bUnit anywhere in Risk.Web.Tests, before or after this change) rather than something this change introduced or regressed; verified correct here only via source inspection and git-diff comparison against the prior committed version, not via a passing test.
-3. design.md Testing Strategy table names a 5th MarkerPlacementTests fact (ContinentLabelAnchors_ContainsAllSixContinents_InsideTheCanvas) that design own concrete code block and the actual implementation both omit (4 facts, not 5), a genuine design-doc internal inconsistency (table vs code block), not a missed spec requirement. Real coverage gap: no test explicitly asserts continent label anchors fall within canvas bounds (values are correct by inspection, just unasserted).
+1. (Carried forward, unchanged) No standalone TDD Cycle Evidence table in the original PR1-3 apply-progress (Engram id 775's PR1-3 portion), substance present in prose, table format only introduced for this remediation's own 3 items.
+2. (Carried forward, unchanged) BoardSvg.razor markup-level requirements have zero automated component-render test coverage, pre-existing, repo-wide gap (no bUnit anywhere in this repo), not introduced or worsened by this change or its remediation.
+3. (Carried forward, unchanged) design.md's Testing Strategy table names a 5th MarkerPlacementTests fact that the design's own code block and the implementation both omit, a design-doc-internal inconsistency, not a missed requirement.
+4. (NEW) Independent broader re-sampling suggests the remediation's 5-territory scope may be marginally under-inclusive at 3 additional territories, though this is a boundary/ambiguous finding, not a proven failure like CRITICAL-1 was. Method: sampled 216 points per territory (3 radii bands x 72 angles, at the outer ring's true painted edge) against MarkerInk.Outer (#2b2118), opaque pixels only. Results for the 3 territories in question, versus the clearly-passing next tier and the clearly-failing fixed tier for context:
+
+   | Territory | Median | 25th pct | Status |
+   |---|---|---|---|
+   | Congo | 3.00:1 | 2.51:1 | Right at the boundary |
+   | EasternAustralia | 3.03:1 | 2.82:1 | Right at the boundary |
+   | Argentina | 3.05:1 | 2.80:1 | Right at the boundary |
+   | Madagascar (fixed, for context) | 2.77-2.99:1 across runs | n/a | Clearly below 3:1 in every run |
+   | Peru (clearly passing, for context) | 3.60-3.65:1 across runs | n/a | Comfortably above |
+
+   Across three different sampling parameterizations (single-radius at two different sample counts, then 216-sample/3-radii), these 3 territories' medians straddled 3:1 inconsistently (for example, Argentina ranged 2.59-3.09 across runs), unlike the 4 originally-fixed territories whose medians were below 3:1 in every variant tried (never above 2.99). This inconsistency is why this is reported as a WARNING (a genuine residual risk worth a decision) rather than a CRITICAL (a proven violation): the evidence is suggestive, not conclusive, and WCAG 1.4.11 against a hand-painted, non-uniform watercolor background is inherently a judgment call that this repo's own design.md already treats as an approximate "darker than mid-gray" walk-through rather than a rigorous statistic. Recommend a follow-up decision: either extend TerritoryLayout.NeedsLightOuterRing to include Congo, EasternAustralia, and Argentina pre-emptively, or accept the residual risk given the approximate nature of this check. Not blocking archive on its own.
+5. (NEW, minor) Even after the fix, Japan's single worst-sampled pixel against the new OuterOnDarkArt ink measured as low as 2.21:1 in the robust pass (median 4.31:1, comfortably passing), the same "worst-case single pixel below 3:1 while median passes" pattern this whole verification lineage has consistently treated as acceptable noise (per the prior pass's own median-based methodology, and design.md's own coarse acceptance rule). Noted for completeness, not elevated.
 
 **SUGGESTION**:
-1. Consider bUnit (or equivalent) for BoardSvg.razor interaction contract (click/right-click callbacks, locked state, selection class) given how central this component is to every play mode; would close WARNING-2 durably rather than relying on git-diff comparison at each future change.
-2. Consider adding the missing ContinentLabelAnchors in-canvas-bounds assertion to MarkerPlacementTests.cs to resolve the design-doc table/code-block inconsistency with an actual test rather than only a doc fix.
+1. (Carried forward) Consider bUnit for BoardSvg.razor's interaction contract.
+2. (Carried forward) Consider adding the missing ContinentLabelAnchors in-canvas-bounds assertion.
+3. (NEW) If WARNING-4 is acted on, consider whether a live-render sampling script (composing the actual SVG output, not just the base PNG) would settle the boundary cases more definitively than base-PNG pixel sampling, since the ink ring itself is drawn by the browser, not baked into the artwork.
 
 ### Verdict
-FAIL
-Reason: 932/932 tests pass, build is clean, scope discipline holds, and 8 of 9 architecture decisions (D1-D9) are implemented exactly as designed, but independent pixel-level measurement of the shipped artwork found the outer marker ring genuinely fails the spec MUST-level at-least-3:1 WCAG 1.4.11 contrast requirement at 5 of 42 territories (Kamchatka, Japan, Indonesia, New Guinea, Madagascar), and the task list own manual-QA checkbox meant to catch exactly this appears to have been marked complete without actually being performed. This blocks archive-readiness; recommend routing back to sdd-apply for a targeted fix at these 5 positions plus a genuine execution (or automation) of task 5.3 contrast spot-check, then re-verify.
+PASS WITH WARNINGS
+Reason: 945/945 tests pass fresh, clean build with only the same 4 pre-existing warnings, all 14 tasks are now genuinely complete with real evidence, and both prior CRITICAL findings are independently confirmed resolved, the previously-failing 5 territories all now clear 3:1 against the real artwork with comfortable margin. This change is archive-ready. A new WARNING-level residual finding (3 additional territories sitting within noise distance of the 3:1 boundary against the default ink, not proven to fail) is recorded for a follow-up decision but does not block archive, consistent with an ambiguous/boundary finding rather than a demonstrated spec violation.
